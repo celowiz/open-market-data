@@ -1,0 +1,23 @@
+Implement Phase 1 — Foundation from docs/IMPLEMENTATION_PLAN.md.
+
+Constraints:
+
+- Read AGENTS.md first.
+- Do not implement Phase 2.
+- Use Explore subagents where research is needed.
+- Use isolated worktrees only for independent write tasks.
+- Parent agent owns integration.
+- Run tests, Ruff and type checking before completion.
+- Update relevant documentation.
+- Review the final git diff for unrelated changes.
+- Do not commit secrets.
+- Do not deploy production infrastructure.
+
+At the end provide:
+1. what changed;
+2. tests executed;
+3. decisions made;
+4. unresolved issues;
+5. recommended next phase.
+
+Stop after Phase 1.
