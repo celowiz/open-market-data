@@ -210,3 +210,44 @@ Design object storage behind a generic interface so that an S3-compatible
 implementation can be enabled later without changing domain or ingestion code.
 
 Do not create Cloudflare R2 resources unless explicitly requested.
+
+---
+
+## Current Infrastructure Availability
+
+The following managed services have been selected for the official deployment,
+but not all production resources exist yet.
+
+### Neon
+
+- Account configured.
+- Neon MCP is authenticated and available.
+- Agents may inspect Neon through MCP.
+- Do not create production resources during planning.
+- Development database resources may be created only when required by the
+  approved implementation phase.
+
+### Railway
+
+- Account configured.
+- Railway Remote MCP is expected to be available through OAuth.
+- No Railway project currently exists.
+- Do not create Railway projects or deploy services during discovery or
+  foundation unless explicitly required by the current implementation phase.
+
+### Cloudflare
+
+- Account exists.
+- Cloudflare R2 is not currently enabled.
+- Do not require R2 or Cloudflare credentials during initial development.
+- Use the local filesystem object-storage implementation.
+
+The intended production object storage remains S3-compatible, with Cloudflare R2
+as the current preferred future provider.
+
+### General Rule
+
+Cloud infrastructure must not block local development.
+
+Agents must not create paid resources, enable billing, add payment methods,
+or provision production infrastructure without explicit user approval.
