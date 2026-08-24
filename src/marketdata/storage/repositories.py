@@ -337,6 +337,34 @@ def get_or_create_instrument_by_key(
     return instrument
 
 
+def attach_identifier(
+    session: Session,
+    *,
+    instrument_id: UUID,
+    identifier_type: IdentifierType,
+    identifier_value: str,
+    source_id: UUID,
+) -> None:
+    existing = session.scalar(
+        select(InstrumentIdentifierRow.id).where(
+            InstrumentIdentifierRow.identifier_type == identifier_type.value,
+            InstrumentIdentifierRow.identifier_value == identifier_value,
+            InstrumentIdentifierRow.source_id == source_id,
+        )
+    )
+    if existing is not None:
+        return
+    session.add(
+        InstrumentIdentifierRow(
+            id=uuid4(),
+            instrument_id=instrument_id,
+            identifier_type=identifier_type.value,
+            identifier_value=identifier_value,
+            source_id=source_id,
+        )
+    )
+
+
 def upsert_quote(
     session: Session,
     *,

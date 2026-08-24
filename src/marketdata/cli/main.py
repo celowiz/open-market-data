@@ -123,6 +123,31 @@ def ingest_bcb_command(
     )
 
 
+@ingest_app.command("b3")
+def ingest_b3_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest B3 BVBG.186 last-trade quotes for a trading date."""
+    from marketdata.ingestion.b3 import ingest_b3
+
+    reference = date.fromisoformat(date_value)
+    session = _session()
+    try:
+        result = ingest_b3(session, reference_date=reference)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    typer.echo(
+        "B3 ingest "
+        f"run={result['run_id']} artifacts={result['artifacts']} "
+        f"inserted={result['inserted']} updated={result['updated']} "
+        f"skipped={result['skipped']} rejected={result['rejected']}"
+    )
+
+
 @app.command("explain")
 def explain(
     identifier: str = typer.Argument(..., help="CNPJ or other instrument identifier"),

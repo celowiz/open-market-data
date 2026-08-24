@@ -24,3 +24,4 @@ def test_cli_providers_lists_defaults() -> None:
     assert "cvm" in result.output
     assert "tesouro" in result.output
     assert "bcb" in result.output
+    assert "b3" in result.output

@@ -143,15 +143,18 @@ Pesquisa por Pregão:
 https://www.b3.com.br/pesquisapregao/download?filelist={PREFIX}{YYMMDD}.zip
 ```
 
-Verified prefixes:
+Verified prefixes (from Pesquisa por Pregão checkbox `value` attributes,
+2026-08-24):
 
-- `PR` → BVBG.086.01
-- `IN` → BVBG.028.02
-- `IR` → BVBG.087.01
+- `PR` → BVBG.086.01 (`PR{YYMMDD}.zip`)
+- `IN` → BVBG.028.02 (`IN{YYMMDD}.zip`)
+- `IR` → BVBG.087.01 (`IR{YYMMDD}.zip`)
+- `SPRE` → BVBG.186.01 (`SPRE{YYMMDD}.zip`)
+- `SPRD` → BVBG.187.01 (`SPRD{YYMMDD}.zip`)
 
-BVBG.186 / 187 prefixes were **not** confirmed by simple probing. Phase 5 must
-discover codes empirically or follow the portal `contentId` flow. B3 may return
-HTTP 200 for empty garbage responses; validate ZIP size and XML roots.
+Prefixes are not always two letters. Empty or missing files often return HTTP
+200 with a 22-byte empty ZIP (`PK\x05\x06`). Reject those; require a local-file
+ZIP header (`PK\x03\x04`) and a usable size.
 
 `arquivos.b3.com.br` uses a two-step token download.
 
@@ -187,8 +190,8 @@ Derivatives: `AdjstdQt` → `OFFICIAL_SETTLEMENT`.
 
 ### License
 
-Treat public redistribution as denied until B3 license review.
-Ingestion may still be implemented for local use.
+Treat bulk/public dataset redistribution as denied until B3 license review.
+Public API currently serves B3 quotes as `API_ONLY` (no Parquet).
 
 `mercados` currently uses COTAHIST, not full BVBG.186/187. Do not assume that
 library already solved B3 EOD.

@@ -3,9 +3,9 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from marketdata.api.access import instrument_visible_on_public_api, public_quotes_stmt
 from marketdata.api.deps import get_db
 from marketdata.domain.enums import PriceType
 from marketdata.domain.errors import decimal_json
@@ -67,10 +67,9 @@ def fund_quotes(
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> FundQuotesResponse:
     instrument_id = resolve_instrument_id(session, identifier)
-    if instrument_id is None:
+    if instrument_id is None or not instrument_visible_on_public_api(session, instrument_id):
         raise HTTPException(status_code=404, detail="instrument not found")
-    stmt = select(InstrumentQuoteRow).where(
-        InstrumentQuoteRow.instrument_id == instrument_id,
+    stmt = public_quotes_stmt(instrument_id).where(
         InstrumentQuoteRow.price_type == PriceType.FUND_NAV.value,
     )
     if date_filter is not None:
@@ -99,14 +98,11 @@ def fund_quotes(
 @router.get("/funds/{identifier}/quotes/latest", response_model=QuoteResponse)
 def fund_latest_quote(identifier: str, session: Session = Depends(get_db)) -> QuoteResponse:
     instrument_id = resolve_instrument_id(session, identifier)
-    if instrument_id is None:
+    if instrument_id is None or not instrument_visible_on_public_api(session, instrument_id):
         raise HTTPException(status_code=404, detail="instrument not found")
     row = session.scalar(
-        select(InstrumentQuoteRow)
-        .where(
-            InstrumentQuoteRow.instrument_id == instrument_id,
-            InstrumentQuoteRow.price_type == PriceType.FUND_NAV.value,
-        )
+        public_quotes_stmt(instrument_id)
+        .where(InstrumentQuoteRow.price_type == PriceType.FUND_NAV.value)
         .order_by(InstrumentQuoteRow.reference_date.desc(), InstrumentQuoteRow.revision.desc())
     )
     if row is None:

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Document xmlns="urn:bvmf.052.01.xsd">
+  <BizFileHdr>
+    <Xchg>
+      <BizGrp>
+        <Document xmlns="urn:bvmf.217.01.xsd">
+          <PricRpt>
+            <TradDt>
+              <Dt>2026-08-24</Dt>
+            </TradDt>
+            <SctyId>
+              <TckrSymb>PETR4</TckrSymb>
+            </SctyId>
+            <FinInstrmId>
+              <OthrId>
+                <Id>200003061028</Id>
+              </OthrId>
+            </FinInstrmId>
+            <FinInstrmAttrbts>
+              <FrstPric Ccy="BRL">42.6</FrstPric>
+              <MinPric Ccy="BRL">41.62</MinPric>
+              <MaxPric Ccy="BRL">42.64</MaxPric>
+              <TradAvrgPric Ccy="BRL">41.94</TradAvrgPric>
+              <LastPric Ccy="BRL">42.11</LastPric>
+              <RglrTxsQty>59749</RglrTxsQty>
+            </FinInstrmAttrbts>
+          </PricRpt>
+          <PricRpt>
+            <TradDt>
+              <Dt>2026-08-24</Dt>
+            </TradDt>
+            <SctyId>
+              <TckrSymb>NOBID11</TckrSymb>
+            </SctyId>
+            <FinInstrmId>
+              <OthrId>
+                <Id>200000000001</Id>
+              </OthrId>
+            </FinInstrmId>
+            <FinInstrmAttrbts>
+              <RglrTxsQty>0</RglrTxsQty>
+            </FinInstrmAttrbts>
+          </PricRpt>
+        </Document>
+      </BizGrp>
+    </Xchg>
+  </BizFileHdr>
+</Document>

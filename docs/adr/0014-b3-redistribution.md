@@ -1,6 +1,8 @@
 # ADR-0014: Default-deny public redistribution of B3 data
 
-- Status: Accepted
+- Status: Accepted (datasets). Operational exception 2026-08-24: public API
+  may serve B3 quotes with `redistribution_policy=API_ONLY` and
+  `public_api_enabled=true`. `public_dataset_enabled` remains false.
 - Date: 2026-08-24
 
 ## Context
@@ -13,12 +15,9 @@ B3 licenses. This is **not** the same situation as CVM/Tesouro/BCB ODbL.
 ## Decision
 
 - **Ingestion** of B3 EOD may be implemented for local and self-hosted use.
-- **Official public API and public Parquet default to off**
-  (`public_api_enabled=false`, `public_dataset_enabled=false`,
-  `redistribution_policy=UNKNOWN` or `NO_REDISTRIBUTION`).
-- Do not assume "public download URL means we may republish".
-
-Revisit only with a documented license, counsel, or written B3 permission.
+- **Official public Parquet stays off.** Quotes may appear on the public API
+  under `API_ONLY` (`public_api_enabled=true`, `public_dataset_enabled=false`).
+  Bulk republish still requires a license, counsel, or written B3 permission.
 
 ## Alternatives
 
@@ -27,9 +26,8 @@ Revisit only with a documented license, counsel, or written B3 permission.
 
 ## Consequences
 
-- Coverage reports on the official instance may count B3 as found locally
-  while still omitting it from public endpoints.
-- Phase 5 can proceed on ingestion; Phase 9 must skip B3 until this ADR changes.
+- Public API may list B3 quotes (`API_ONLY`); public Parquet must still skip B3.
+- Phase 9 must skip B3 until a license or written permission is confirmed.
 
 ## Why before Phase 5 public exposure
 

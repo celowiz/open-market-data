@@ -19,12 +19,12 @@ for sources that may be redistributed.
 
 | Phase | Milestone | Status |
 |---|---|---|
-| 0 | Seed documentation, ADRs, implementation plan | Current |
-| 1 | Foundation: package, domain, PostgreSQL, object store, CLI/API skeletons, CI | Next |
-| 2 | CVM Fund NAV end-to-end | Planned |
-| 3 | Tesouro Direto quotes | Planned |
-| 4 | BCB PTAX / Selic / CDI series | Planned |
-| 5 | B3 equities ingestion (public redistribution gated) | Planned |
+| 0 | Seed documentation, ADRs, implementation plan | Complete |
+| 1 | Foundation: package, domain, PostgreSQL, object store, CLI/API skeletons, CI | Complete |
+| 2 | CVM Fund NAV end-to-end | Complete |
+| 3 | Tesouro Direto quotes | Complete |
+| 4 | BCB PTAX / Selic / CDI series | Complete |
+| 5 | B3 equities ingestion (`API_ONLY` public quotes, no Parquet) | Complete |
 | 6 | B3 derivatives official settlement | Planned |
 | 7 | Yahoo local/POC provider, public exposure off | Planned |
 | 8 | Brazilian credit public prints where available | Later in MVP window |

@@ -101,15 +101,13 @@ Validated August 2026 against official portals. This is not legal advice.
 - Market Data B3 Consumption Policy effective 2026-01-01 treats EOD files as
   Market Data. Distribution, product development, and storage for commercial
   datasets/APIs generally require B3 licenses.
-- Redistribution: **`UNKNOWN`**, operational default **deny public API and
-  public datasets** until a license or written permission is confirmed.
-- Ingestion for local/self-hosted use may proceed with `ingestion_enabled=true`,
-  `public_api_enabled=false`, `public_dataset_enabled=false` on the official
-  public instance.
-- See [`adr/0014-b3-redistribution.md`](adr/0014-b3-redistribution.md).
-
-This is a **blocking** question before any public B3 exposure (Phase 5
-publication), not before local ingestion design.
+- Redistribution: **`UNKNOWN`** for bulk datasets; operational public API is
+  **`API_ONLY`** (temporary). `public_dataset_enabled` stays false.
+- Ingestion sets `public_api_enabled=true`, `redistribution_policy=API_ONLY`,
+  `public_dataset_enabled=false`. Re-run `marketdata ingest b3` to update an
+  existing `sources` row.
+- See [`adr/0014-b3-redistribution.md`](adr/0014-b3-redistribution.md). Bulk
+  Parquet remains blocked until a license is confirmed.
 
 ### Yahoo Finance via yfinance
 

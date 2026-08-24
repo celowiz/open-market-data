@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from marketdata.api.access import series_source_visible_on_public_api
 from marketdata.api.deps import get_db
 from marketdata.domain.errors import decimal_json
 from marketdata.storage.models import MarketSeriesObservationRow, MarketSeriesRow, SourceRow
@@ -34,7 +35,7 @@ def _series_by_code(session: Session, code: str) -> MarketSeriesRow:
         row = session.scalar(
             select(MarketSeriesRow).where(MarketSeriesRow.source_series_id == code)
         )
-    if row is None:
+    if row is None or not series_source_visible_on_public_api(session, row.source_id):
         raise HTTPException(status_code=404, detail="series not found")
     return row
 

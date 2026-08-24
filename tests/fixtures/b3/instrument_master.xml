@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Document xmlns="urn:bvmf.052.01.xsd">
+  <BizFileHdr>
+    <Xchg>
+      <BizGrp>
+        <Document xmlns="urn:bvmf.100.02.xsd">
+          <FinInstrm>
+            <EqtyInf>
+              <ISIN>BRPETRACNPR6</ISIN>
+              <TckrSymb>PETR4</TckrSymb>
+              <CrpnNm>PETROBRAS</CrpnNm>
+              <TradgCcy>BRL</TradgCcy>
+            </EqtyInf>
+          </FinInstrm>
+        </Document>
+      </BizGrp>
+    </Xchg>
+  </BizFileHdr>
+</Document>
