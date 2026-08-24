@@ -12,6 +12,14 @@
               <TradgCcy>BRL</TradgCcy>
             </EqtyInf>
           </FinInstrm>
+          <FinInstrm>
+            <FutrCtrctsInf>
+              <ISIN>BRBMEFD1I4Z0</ISIN>
+              <TckrSymb>DI1F27</TckrSymb>
+              <XprtnDt>2027-01-04</XprtnDt>
+              <TradgCcy>BRL</TradgCcy>
+            </FutrCtrctsInf>
+          </FinInstrm>
         </Document>
       </BizGrp>
     </Xchg>

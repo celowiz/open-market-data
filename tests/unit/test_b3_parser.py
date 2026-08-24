@@ -8,8 +8,10 @@ import pytest
 
 from marketdata.providers.b3 import (
     B3ParseError,
+    is_mvp_future_ticker,
     parse_instrument_master,
     parse_price_report,
+    parse_settlement_report,
     pregao_filelist,
     validate_b3_zip,
 )
@@ -30,6 +32,7 @@ def _nested_zip(outer_name: str, inner_name: str, xml: bytes) -> bytes:
 def test_pregao_filelist_uses_spre_for_equities() -> None:
     assert pregao_filelist("186", date(2026, 8, 24)) == "SPRE260824.zip"
     assert pregao_filelist("028", date(2026, 8, 24)) == "IN260824.zip"
+    assert pregao_filelist("187", date(2026, 8, 24)) == "SPRD260824.zip"
 
 
 def test_validate_rejects_empty_zip() -> None:
@@ -70,3 +73,58 @@ def test_parse_instrument_master_isin() -> None:
     by_ticker = parse_instrument_master(payload)
     assert by_ticker["PETR4"].isin == "BRPETRACNPR6"
     assert by_ticker["PETR4"].ticker == "PETR4"
+
+
+def test_parse_instrument_master_futures_isin_and_maturity() -> None:
+    xml = (FIXTURES / "instrument_master.xml").read_text(encoding="utf-8")
+    payload = _nested_zip("IN260824.zip", "BVBG.028.02_sample.xml", xml.encode("utf-8"))
+    by_ticker = parse_instrument_master(payload)
+    di1 = by_ticker["DI1F27"]
+    assert di1.isin == "BRBMEFD1I4Z0"
+    assert di1.maturity_date == date(2027, 1, 4)
+    assert di1.currency == "BRL"
+
+
+def test_parse_settlement_uses_adjstdqt_not_lastpric() -> None:
+    xml = (FIXTURES / "derivatives_price_report.xml").read_bytes()
+    payload = _nested_zip("SPRD260824.zip", "BVBG.187.01_sample.xml", xml)
+    records = parse_settlement_report(payload)
+    by_ticker = {item.ticker: item for item in records}
+    di1 = by_ticker["DI1F27"]
+    assert di1.reference_date == date(2026, 8, 24)
+    assert di1.settlement == Decimal("89656.53")
+    assert di1.unit == "PU"
+    assert di1.security_id == "200000891646"
+    assert di1.currency == "BRL"
+    assert di1.extra["AdjstdQtTax"] == "13.789"
+    assert di1.extra["PrvsAdjstdQt"] == "89621.42"
+    assert di1.extra["LastPric"] == "13.81"
+    assert di1.settlement != Decimal("13.81")
+    assert "WINQ26" not in by_ticker
+    assert by_ticker["DOLG27"].settlement == Decimal("5146.559")
+
+
+def test_parse_settlement_dedupes_duplicate_xml_blobs() -> None:
+    xml = (FIXTURES / "derivatives_price_report.xml").read_bytes()
+    inner_buffer = BytesIO()
+    with ZipFile(inner_buffer, "w") as inner:
+        inner.writestr("BVBG.187.01_a.xml", xml)
+        inner.writestr("BVBG.187.01_b.xml", xml)
+    outer_buffer = BytesIO()
+    with ZipFile(outer_buffer, "w") as outer:
+        outer.writestr("SPRD260824.zip", inner_buffer.getvalue())
+    records = parse_settlement_report(outer_buffer.getvalue())
+    di1 = [item for item in records if item.ticker == "DI1F27"]
+    assert len(di1) == 1
+    assert di1[0].settlement == Decimal("89656.53")
+
+
+def test_mvp_future_ticker_allowlist() -> None:
+    assert is_mvp_future_ticker("DI1F27")
+    assert is_mvp_future_ticker("DOLG27")
+    assert is_mvp_future_ticker("WDOZ26")
+    assert is_mvp_future_ticker("WING27")
+    assert is_mvp_future_ticker("INDV26")
+    assert not is_mvp_future_ticker("BGIF27C1234")
+    assert not is_mvp_future_ticker("PETR4")
+    assert not is_mvp_future_ticker("FRCF33")

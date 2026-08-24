@@ -154,7 +154,12 @@ Verified prefixes (from Pesquisa por Pregão checkbox `value` attributes,
 
 Prefixes are not always two letters. Empty or missing files often return HTTP
 200 with a 22-byte empty ZIP (`PK\x05\x06`). Reject those; require a local-file
-ZIP header (`PK\x03\x04`) and a usable size.
+ZIP header (`PK\x03\x04`) and a usable size. A later retry of the same SPRD URL
+can still return the empty ZIP even after a successful download.
+
+BVBG.187 inner ZIPs may contain two XML files with the same tickers and
+settlement values (near-duplicate payloads). Deduplicate by ticker and
+reference date when parsing.
 
 `arquivos.b3.com.br` uses a two-step token download.
 
@@ -177,8 +182,9 @@ Publication (trading days, BRT, approximate, OC 040/2025-PRE):
 - BVBG.087 ~17:30
 - BVBG.186 ~19:00–20:00
 - BVBG.086 snapshots ~18:40 / 19:20 / 20:00
-- BVBG.187 ~20:00–20:30
+- BVBG.187 ~20:00–20:30 (portal listing can appear earlier, around 19:15)
 - Option-expiry days can delay last publish ~20:15
+- Safe operator clock for 186+187 together: after 20:30 America/Sao_Paulo
 
 186/187 are independently generated and can diverge from 086. Never silently
 dedupe them as if they were the same file.
@@ -186,7 +192,14 @@ dedupe them as if they were the same file.
 ### Semantics
 
 See [`PRICE_SEMANTICS.md`](PRICE_SEMANTICS.md). Equities: `LastPric` → `LAST`.
-Derivatives: `AdjstdQt` → `OFFICIAL_SETTLEMENT`.
+Derivatives: `AdjstdQt` → `OFFICIAL_SETTLEMENT` (PU). `AdjstdQtTax` is official
+rate metadata on the same quote (`unit` documents PU vs percent per year); do
+not convert and do not map `LastPric` to settlement.
+
+Phase 6 persists settlement only for DI1, DOL, WDO, WIN, and IND futures
+matching `^(DI1|DOL|WDO|WIN|IND)[FGHJKMNQUVXZ]\d{2}$`. Other 187 products
+(options, agricultural futures, FRC/FRO) are deferred. BVBG.028.02 futures
+identity lives in `FutrCtrctsInf` (ISIN, `XprtnDt`), not `EqtyInf`.
 
 ### License
 

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Document xmlns="urn:bvmf.052.01.xsd">
+  <BizFileHdr>
+    <Xchg>
+      <BizGrp>
+        <Document xmlns="urn:bvmf.217.01.xsd">
+          <PricRpt>
+            <TradDt>
+              <Dt>2026-08-24</Dt>
+            </TradDt>
+            <SctyId>
+              <TckrSymb>DI1F27</TckrSymb>
+            </SctyId>
+            <FinInstrmId>
+              <OthrId>
+                <Id>200000891646</Id>
+              </OthrId>
+            </FinInstrmId>
+            <FinInstrmAttrbts>
+              <OpnIntrst>2242831</OpnIntrst>
+              <LastPric Ccy="BRL">13.81</LastPric>
+              <AdjstdQt Ccy="BRL">89656.53</AdjstdQt>
+              <AdjstdQtTax Ccy="BRL">13.789</AdjstdQtTax>
+              <PrvsAdjstdQt Ccy="BRL">89621.42</PrvsAdjstdQt>
+            </FinInstrmAttrbts>
+          </PricRpt>
+          <PricRpt>
+            <TradDt>
+              <Dt>2026-08-24</Dt>
+            </TradDt>
+            <SctyId>
+              <TckrSymb>DOLG27</TckrSymb>
+            </SctyId>
+            <FinInstrmId>
+              <OthrId>
+                <Id>300000052042</Id>
+              </OthrId>
+            </FinInstrmId>
+            <FinInstrmAttrbts>
+              <LastPric Ccy="BRL">5146</LastPric>
+              <AdjstdQt Ccy="BRL">5146.559</AdjstdQt>
+            </FinInstrmAttrbts>
+          </PricRpt>
+          <PricRpt>
+            <TradDt>
+              <Dt>2026-08-24</Dt>
+            </TradDt>
+            <SctyId>
+              <TckrSymb>BGIF27C1234</TckrSymb>
+            </SctyId>
+            <FinInstrmId>
+              <OthrId>
+                <Id>400000000001</Id>
+              </OthrId>
+            </FinInstrmId>
+            <FinInstrmAttrbts>
+              <AdjstdQt Ccy="BRL">12.5</AdjstdQt>
+            </FinInstrmAttrbts>
+          </PricRpt>
+          <PricRpt>
+            <TradDt>
+              <Dt>2026-08-24</Dt>
+            </TradDt>
+            <SctyId>
+              <TckrSymb>WINQ26</TckrSymb>
+            </SctyId>
+            <FinInstrmId>
+              <OthrId>
+                <Id>400000136262</Id>
+              </OthrId>
+            </FinInstrmId>
+            <FinInstrmAttrbts>
+              <LastPric Ccy="BRL">181000</LastPric>
+              <RglrTxsQty>10</RglrTxsQty>
+            </FinInstrmAttrbts>
+          </PricRpt>
+        </Document>
+      </BizGrp>
+    </Xchg>
+  </BizFileHdr>
+</Document>

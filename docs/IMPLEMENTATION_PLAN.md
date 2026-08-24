@@ -511,6 +511,8 @@ gate remains off (or local-only API)
 
 **Worktrees:** None concurrent with Phase 5
 
+**Status:** Complete
+
 ---
 
 ## Phase 7 — Yahoo (local / POC)

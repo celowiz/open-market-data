@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -22,6 +23,11 @@ FILELIST_BY_KIND = {
     "087": ("IR", ".zip"),
 }
 MIN_ZIP_BYTES = 100
+FUTURE_TICKER_RE = re.compile(r"^(DI1|DOL|WDO|WIN|IND)[FGHJKMNQUVXZ]\d{2}$")
+
+
+def is_mvp_future_ticker(ticker: str) -> bool:
+    return FUTURE_TICKER_RE.fullmatch(ticker) is not None
 
 
 class B3ParseError(ValueError):
@@ -39,11 +45,23 @@ class B3PriceRecord:
 
 
 @dataclass(frozen=True)
+class B3SettlementRecord:
+    ticker: str
+    reference_date: date
+    settlement: Decimal
+    unit: str
+    security_id: str | None
+    currency: str | None
+    extra: dict[str, str]
+
+
+@dataclass(frozen=True)
 class B3InstrumentRecord:
     ticker: str
     isin: str | None
     name: str | None
     currency: str | None
+    maturity_date: date | None = None
 
 
 def pregao_filelist(kind: str, reference_date: date) -> str:
@@ -102,6 +120,14 @@ def parse_price_report(payload: bytes) -> list[B3PriceRecord]:
     return records
 
 
+def parse_settlement_report(payload: bytes) -> list[B3SettlementRecord]:
+    by_key: dict[tuple[str, date], B3SettlementRecord] = {}
+    for blob in iter_xml_blobs(payload):
+        for record in _parse_settlement_xml(blob):
+            by_key[(record.ticker, record.reference_date)] = record
+    return list(by_key.values())
+
+
 def parse_instrument_master(payload: bytes) -> dict[str, B3InstrumentRecord]:
     by_ticker: dict[str, B3InstrumentRecord] = {}
     for blob in iter_xml_blobs(payload):
@@ -144,6 +170,70 @@ def _attrs_element(elem: ET.Element) -> ET.Element | None:
     return None
 
 
+SETTLEMENT_EXTRA_FIELDS = (
+    "AdjstdQtTax",
+    "PrvsAdjstdQt",
+    "PrvsAdjstdQtTax",
+    "OpnIntrst",
+    "LastPric",
+)
+
+
+def _ccy_from_child(attrs: ET.Element, name: str) -> str | None:
+    child = next((item for item in attrs if _local_name(item.tag) == name), None)
+    if child is None:
+        return None
+    return child.attrib.get("Ccy")
+
+
+def _parse_settlement_xml(blob: bytes) -> list[B3SettlementRecord]:
+    records: list[B3SettlementRecord] = []
+    for _event, elem in ET.iterparse(BytesIO(blob), events=("end",)):
+        if _local_name(elem.tag) != "PricRpt":
+            continue
+        parsed = _settlement_from_element(elem)
+        if parsed is not None:
+            records.append(parsed)
+        elem.clear()
+    return records
+
+
+def _settlement_from_element(elem: ET.Element) -> B3SettlementRecord | None:
+    ticker = _text(elem, "TckrSymb")
+    raw_date = _text(elem, "Dt")
+    attrs = _attrs_element(elem)
+    if not ticker or not raw_date or attrs is None:
+        return None
+    adj_raw = _child_text(attrs, "AdjstdQt")
+    tax_raw = _child_text(attrs, "AdjstdQtTax")
+    if adj_raw:
+        raw_value, unit, currency_field = adj_raw, "PU", "AdjstdQt"
+    elif tax_raw:
+        raw_value, unit, currency_field = tax_raw, "percent_per_year", "AdjstdQtTax"
+    else:
+        return None
+    try:
+        settlement = exact_decimal(raw_value)
+    except (InvalidFinancialValueError, InvalidOperation, ValueError):
+        return None
+    extra: dict[str, str] = {}
+    for field in SETTLEMENT_EXTRA_FIELDS:
+        value = _child_text(attrs, field)
+        if value is not None:
+            extra[field] = value
+    if tax_raw is not None:
+        extra["rate_convention"] = "252_business_days"
+    return B3SettlementRecord(
+        ticker=ticker,
+        reference_date=date.fromisoformat(raw_date),
+        settlement=settlement,
+        unit=unit,
+        security_id=_text(elem, "Id") if _text(elem, "Id") != ticker else None,
+        currency=_ccy_from_child(attrs, currency_field),
+        extra=extra,
+    )
+
+
 def _price_from_element(elem: ET.Element) -> B3PriceRecord | None:
     ticker = _text(elem, "TckrSymb")
     raw_date = _text(elem, "Dt")
@@ -175,20 +265,27 @@ def _price_from_element(elem: ET.Element) -> B3PriceRecord | None:
     )
 
 
+_MASTER_BLOCKS = frozenset({"EqtyInf", "FutrCtrctsInf"})
+
+
 def _parse_master_xml(blob: bytes) -> dict[str, B3InstrumentRecord]:
     by_ticker: dict[str, B3InstrumentRecord] = {}
     for _event, elem in ET.iterparse(BytesIO(blob), events=("end",)):
-        if _local_name(elem.tag) != "EqtyInf":
+        block = _local_name(elem.tag)
+        if block not in _MASTER_BLOCKS:
             continue
         ticker = _child_text(elem, "TckrSymb") or _text(elem, "TckrSymb")
         if not ticker:
             elem.clear()
             continue
+        raw_maturity = _child_text(elem, "XprtnDt") or _text(elem, "XprtnDt")
+        maturity = date.fromisoformat(raw_maturity) if raw_maturity else None
         by_ticker[ticker] = B3InstrumentRecord(
             ticker=ticker,
             isin=_child_text(elem, "ISIN") or _text(elem, "ISIN"),
-            name=_child_text(elem, "CrpnNm") or _text(elem, "CrpnNm"),
+            name=_child_text(elem, "CrpnNm") or _text(elem, "CrpnNm") or ticker,
             currency=_child_text(elem, "TradgCcy") or _text(elem, "TradgCcy"),
+            maturity_date=maturity,
         )
         elem.clear()
     return by_ticker

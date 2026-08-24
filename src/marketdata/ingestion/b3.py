@@ -13,11 +13,14 @@ from marketdata.domain.enums import (
 from marketdata.providers.b3 import (
     B3ParseError,
     B3Provider,
+    is_mvp_future_ticker,
     parse_instrument_master,
     parse_price_report,
+    parse_settlement_report,
     pregao_url,
     validate_b3_zip,
 )
+from marketdata.storage.models import InstrumentRow
 from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
 from marketdata.storage.repositories import (
     attach_identifier,
@@ -44,6 +47,7 @@ def ingest_b3(
     provider: B3Provider | None = None,
     price_payload: bytes | None = None,
     master_payload: bytes | None = None,
+    derivatives_payload: bytes | None = None,
 ) -> dict[str, int | str]:
     b3 = provider or B3Provider()
     object_store = storage or build_object_storage()
@@ -92,7 +96,6 @@ def ingest_b3(
         )
         artifacts += 1
         quotes = parse_price_report(price_bytes)
-        run.records_parsed = len(quotes)
         for index, record in enumerate(quotes, start=1):
             instrument = get_or_create_instrument_by_key(
                 session,
@@ -140,6 +143,97 @@ def ingest_b3(
             if index % 500 == 0:
                 session.flush()
 
+        parsed = len(quotes)
+        derivatives_bytes: bytes | None = None
+        derivatives_url = pregao_url("187", reference_date)
+        derivatives_status: int | None = None
+        if derivatives_payload is not None:
+            derivatives_bytes, derivatives_url, derivatives_status = _load_file(
+                b3, kind="187", reference_date=reference_date, payload=derivatives_payload
+            )
+        elif price_payload is None:
+            try:
+                derivatives_bytes, derivatives_url, derivatives_status = _load_file(
+                    b3, kind="187", reference_date=reference_date, payload=None
+                )
+            except (B3ParseError, httpx.HTTPError):
+                derivatives_bytes = None
+        if derivatives_bytes is not None:
+            derivatives_key = (
+                f"raw/b3/year={reference_date.year:04d}/month={reference_date.month:02d}/"
+                f"bvbg187_{reference_date.isoformat()}.zip"
+            )
+            derivatives_uri = object_store.store(
+                derivatives_key, derivatives_bytes, content_type="application/zip"
+            )
+            settlement_artifact = store_raw_artifact(
+                session,
+                source_id=source.id,
+                ingestion_run_id=run.id,
+                source_url=derivatives_url,
+                payload=derivatives_bytes,
+                storage_uri=derivatives_uri,
+                filename=f"bvbg187_{reference_date.isoformat()}.zip",
+                content_type="application/zip",
+                http_status=derivatives_status,
+                etag=None,
+                last_modified=None,
+                reference_date=reference_date,
+            )
+            artifacts += 1
+            settlements = [
+                record
+                for record in parse_settlement_report(derivatives_bytes)
+                if is_mvp_future_ticker(record.ticker)
+            ]
+            parsed += len(settlements)
+            for index, record in enumerate(settlements, start=1):
+                instrument = get_or_create_instrument_by_key(
+                    session,
+                    source_id=source.id,
+                    source_key=record.ticker,
+                    asset_class=AssetClass.FUTURE,
+                    instrument_type="future",
+                    name=record.ticker,
+                    currency=record.currency or "BRL",
+                )
+                attach_identifier(
+                    session,
+                    instrument_id=instrument.id,
+                    identifier_type=IdentifierType.TICKER,
+                    identifier_value=record.ticker,
+                    source_id=source.id,
+                )
+                if record.security_id:
+                    attach_identifier(
+                        session,
+                        instrument_id=instrument.id,
+                        identifier_type=IdentifierType.B3_SECURITY_ID,
+                        identifier_value=record.security_id,
+                        source_id=source.id,
+                    )
+                action = upsert_quote(
+                    session,
+                    instrument_id=instrument.id,
+                    source_id=source.id,
+                    reference_date=record.reference_date,
+                    value=record.settlement,
+                    price_type=PriceType.OFFICIAL_SETTLEMENT,
+                    artifact=settlement_artifact,
+                    ingestion_run_id=run.id,
+                    currency=record.currency or "BRL",
+                    unit=record.unit,
+                    extra=record.extra,
+                )
+                if action == "inserted":
+                    inserted += 1
+                elif action == "updated":
+                    updated += 1
+                else:
+                    skipped += 1
+                if index % 500 == 0:
+                    session.flush()
+
         master_bytes = master_payload
         master_url = pregao_url("028", reference_date)
         master_status: int | None = 200 if master_payload is not None else None
@@ -179,20 +273,24 @@ def ingest_b3(
                 rejected += 1
             else:
                 for ticker, info in master.items():
-                    if not info.isin:
-                        continue
                     instrument_id = resolve_instrument_id(session, ticker)
                     if instrument_id is None:
                         continue
-                    attach_identifier(
-                        session,
-                        instrument_id=instrument_id,
-                        identifier_type=IdentifierType.ISIN,
-                        identifier_value=info.isin,
-                        source_id=source.id,
-                    )
+                    if info.isin:
+                        attach_identifier(
+                            session,
+                            instrument_id=instrument_id,
+                            identifier_type=IdentifierType.ISIN,
+                            identifier_value=info.isin,
+                            source_id=source.id,
+                        )
+                    if info.maturity_date is not None:
+                        instrument = session.get(InstrumentRow, instrument_id)
+                        if instrument is not None and instrument.maturity_date is None:
+                            instrument.maturity_date = info.maturity_date
 
         run.artifacts_downloaded = artifacts
+        run.records_parsed = parsed
         run.records_inserted = inserted
         run.records_updated = updated
         run.records_rejected = rejected

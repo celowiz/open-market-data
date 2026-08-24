@@ -25,7 +25,7 @@ for sources that may be redistributed.
 | 3 | Tesouro Direto quotes | Complete |
 | 4 | BCB PTAX / Selic / CDI series | Complete |
 | 5 | B3 equities ingestion (`API_ONLY` public quotes, no Parquet) | Complete |
-| 6 | B3 derivatives official settlement | Planned |
+| 6 | B3 derivatives official settlement | Complete |
 | 7 | Yahoo local/POC provider, public exposure off | Planned |
 | 8 | Brazilian credit public prints where available | Later in MVP window |
 | 9 | Public Parquet + manifests for ODbL sources | Planned |

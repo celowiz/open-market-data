@@ -25,6 +25,7 @@ class QuoteResponse(BaseModel):
     revision: int
     retrieved_at: str | None = None
     raw_artifact_sha256: str | None = None
+    unit: str | None = None
 
 
 class FundQuotesResponse(BaseModel):
@@ -54,6 +55,7 @@ def _to_quote(session: Session, row: InstrumentQuoteRow) -> QuoteResponse:
         revision=row.revision,
         retrieved_at=row.retrieved_at.isoformat() if row.retrieved_at else None,
         raw_artifact_sha256=artifact_sha,
+        unit=row.unit,
     )
 
 

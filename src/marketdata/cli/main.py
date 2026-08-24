@@ -127,7 +127,7 @@ def ingest_bcb_command(
 def ingest_b3_command(
     date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
 ) -> None:
-    """Ingest B3 BVBG.186 last-trade quotes for a trading date."""
+    """Ingest B3 BVBG.186 last-trade quotes and BVBG.187 official settlement."""
     from marketdata.ingestion.b3 import ingest_b3
 
     reference = date.fromisoformat(date_value)
