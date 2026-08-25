@@ -33,7 +33,8 @@ The API always uses **public** mode. The CLI defaults to **local** mode
 Public coverage reuses [`src/marketdata/api/access.py`](../src/marketdata/api/access.py).
 A Yahoo-only name stays in the universe but is `RESTRICTED` with
 `missing_reason=REDISTRIBUTION_RESTRICTED` and `price=null`. B3 names may be
-`PRICED` under current `API_ONLY` flags. Still no Parquet.
+`PRICED` under current `API_ONLY` flags. Coverage does not write Parquet.
+ODbL bulk files are a separate command; see [`DATASETS.md`](DATASETS.md).
 
 ## Expected observations
 

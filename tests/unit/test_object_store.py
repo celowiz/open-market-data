@@ -21,3 +21,12 @@ def test_local_object_storage_rejects_parent_escape(tmp_path) -> None:
     store = LocalFileObjectStorage(tmp_path)
     with pytest.raises(ObjectStorageError):
         store.store("../secret", b"nope")
+
+
+def test_local_object_storage_replace_overwrites(tmp_path) -> None:
+    store = LocalFileObjectStorage(tmp_path)
+    store.store("public/manifests/quotes-latest.json", b"v1")
+    store.store("public/manifests/quotes-latest.json", b"v2-complete")
+    assert store.retrieve("public/manifests/quotes-latest.json") == b"v2-complete"
+    leftovers = list(tmp_path.rglob(".tmp-*"))
+    assert leftovers == []

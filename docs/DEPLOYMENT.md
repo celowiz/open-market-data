@@ -13,6 +13,10 @@ Until then:
   already have one; this is not Phase 11 production)
 - Use filesystem object storage (`OBJECT_STORAGE_BACKEND=local`)
 - Daily smoke ingest: `uv run marketdata ingest <provider> --date YYYY-MM-DD`
+- Public Parquet (ODbL sources only): set `PUBLIC_DATASET_PUBLICATION_ENABLED=true`
+  then `uv run marketdata publish datasets --date YYYY-MM-DD`. Files land under
+  `data/public/...` on the local filesystem backend. Cloudflare R2 remains
+  Phase 11.
 
 Do not create paid cloud resources without explicit approval.
 Do not treat a one-day ingest as a full-history load (see Phase 12).

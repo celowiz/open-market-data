@@ -209,8 +209,10 @@ date, consecutive failures, latest error.
 
 ### `dataset_publications`
 
-Later. Tracks generated Parquet files, manifests, checksums, schema versions,
-and redistribution checks.
+Later. Phase 9 tracks generated Parquet files, manifests, checksums, schema
+versions, and redistribution checks in **object storage** (`latest` JSON
+pointers). A SQL ledger is not required until Phase 11 needs publish history
+or R2 inventory.
 
 ---
 
@@ -298,4 +300,4 @@ Desired public resources (when licensing allows):
 - rates / series
 - sources
 - coverage
-- datasets (later)
+- datasets

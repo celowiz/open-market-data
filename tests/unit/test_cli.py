@@ -49,3 +49,29 @@ def test_cli_ingest_b3_help_mentions_credit() -> None:
     result = runner.invoke(app, ["ingest", "b3", "--help"])
     assert result.exit_code == 0
     assert "credit" in result.output.lower()
+
+
+def test_cli_publish_help_lists_datasets() -> None:
+    result = runner.invoke(app, ["publish", "--help"])
+    assert result.exit_code == 0
+    assert "datasets" in result.output
+    assert "b3" not in result.output
+
+
+def test_cli_publish_datasets_help() -> None:
+    result = runner.invoke(app, ["publish", "datasets", "--help"])
+    assert result.exit_code == 0
+    assert "--date" in result.output
+    assert "--dry-run" in result.output
+    assert "--dataset" in result.output
+
+
+def test_cli_publish_has_no_b3_command() -> None:
+    result = runner.invoke(app, ["publish", "b3"])
+    assert result.exit_code != 0
+
+
+def test_cli_publish_datasets_requires_publication_flag() -> None:
+    result = runner.invoke(app, ["publish", "datasets", "--date", "2026-08-21"])
+    assert result.exit_code != 0
+    assert "PUBLIC_DATASET_PUBLICATION_ENABLED" in result.output

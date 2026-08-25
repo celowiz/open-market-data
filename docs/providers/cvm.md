@@ -44,3 +44,7 @@ GET /v1/sources
 
 The `{identifier}` path should use digits-only CNPJ (punctuation in the URL
 path is parsed as extra segments). Query matching still strips punctuation.
+
+`marketdata publish datasets` includes CVM fund NAVs (`FUND_NAV`) in the
+`quotes` and `fund_nav` Parquet catalogs when
+`PUBLIC_DATASET_PUBLICATION_ENABLED=true`. See [`DATASETS.md`](../DATASETS.md).

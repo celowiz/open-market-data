@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from marketdata.config import get_settings
 from marketdata.storage.database import create_db_engine, create_session_factory
+from marketdata.storage.object_store import ObjectStorage, build_object_storage
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -21,3 +22,7 @@ def get_db() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
+
+
+def get_object_storage() -> ObjectStorage:
+    return build_object_storage()

@@ -17,3 +17,7 @@ Identity is `title_type:maturity_date`, for example `LTN:2029-01-01`.
 ```text
 GET /v1/quotes/LTN:2029-01-01?price_type=PU_BASE
 ```
+
+`marketdata publish datasets` includes Tesouro quotes (`PU_BASE` and the other
+stored Tesouro `price_type`s) in the `quotes` Parquet catalog. See
+[`DATASETS.md`](../DATASETS.md).

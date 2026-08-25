@@ -144,6 +144,10 @@ For CVM, Tesouro, and BCB public products:
 - Do not mix ODbL series and non-redistributable series in the same published
   dataset file.
 
+Phase 9 publishes CVM, Tesouro, and BCB as Parquet. Attribution snippets live
+in each dataset manifest (`public/manifests/{name}-latest.json`) and in
+[`DATASETS.md`](DATASETS.md). B3 and Yahoo are not published.
+
 ---
 
 ## Fixtures

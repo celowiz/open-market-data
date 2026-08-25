@@ -28,7 +28,7 @@ for sources that may be redistributed.
 | 6 | B3 derivatives official settlement | Complete |
 | 7 | Yahoo local/POC provider, public exposure off | Complete |
 | 8 | Brazilian credit public prints where available | Complete |
-| 9 | Public Parquet + manifests for ODbL sources | Planned |
+| 9 | Public Parquet + manifests for ODbL sources | Complete |
 | 10 | Coverage engine and `/v1/coverage` | Complete |
 | 11 | Scheduled GitHub Actions, Railway/Neon deploy, optional R2 | After core providers |
 | 12 | Historical backfill CLI (CVM HIST, Tesouro full CSV, BCB ranges, B3/COTAHIST) | Planned (after Phase 6) |

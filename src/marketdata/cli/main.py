@@ -16,7 +16,9 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 ingest_app = typer.Typer(help="Ingest a market-data provider.")
+publish_app = typer.Typer(help="Publish public datasets.")
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(publish_app, name="publish")
 
 
 @app.callback()
@@ -46,7 +48,7 @@ def list_providers() -> None:
 def _session() -> Session:
     settings = get_settings()
     if not settings.database_url:
-        raise typer.BadParameter("DATABASE_URL is required for ingestion")
+        raise typer.BadParameter("DATABASE_URL is required")
     return create_session_factory(create_db_engine(settings))()
 
 
@@ -236,6 +238,58 @@ def explain(
 
 
 _COVERAGE_UNIVERSE_OPTION = typer.Option(None, "--universe", help="Universe CSV path")
+_PUBLISH_DATASET_OPTION = typer.Option(
+    None,
+    "--dataset",
+    help="Catalog name (repeatable). Defaults to sources, instruments, quotes, fund_nav, rates.",
+)
+
+
+@publish_app.command("datasets")
+def publish_datasets_command(
+    date_value: str = typer.Option(..., "--date", help="Snapshot date YYYY-MM-DD"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate without writing objects"),
+    datasets: list[str] | None = _PUBLISH_DATASET_OPTION,
+) -> None:
+    """Publish ODbL Parquet snapshots plus atomic latest manifests."""
+    from marketdata.datasets.manifest import CATALOG_NAMES
+    from marketdata.datasets.publish import publish_datasets
+    from marketdata.storage.object_store import build_object_storage
+
+    settings = get_settings()
+    if not settings.public_dataset_publication_enabled:
+        raise typer.BadParameter(
+            "PUBLIC_DATASET_PUBLICATION_ENABLED must be true to publish datasets"
+        )
+    if settings.public_dataset_format.lower() != "parquet":
+        raise typer.BadParameter("Phase 9 supports parquet only (PUBLIC_DATASET_FORMAT=parquet)")
+    snapshot = date.fromisoformat(date_value)
+    requested = datasets or None
+    if requested:
+        unknown = [name for name in requested if name not in CATALOG_NAMES]
+        if unknown:
+            raise typer.BadParameter(f"unknown dataset names: {', '.join(unknown)}")
+    session = _session()
+    try:
+        summary = publish_datasets(
+            session=session,
+            store=build_object_storage(),
+            snapshot_date=snapshot,
+            names=requested,
+            dry_run=dry_run,
+            public_data_base_url=settings.public_data_base_url,
+        )
+    finally:
+        session.close()
+    published = sum(1 for item in summary.outcomes if item.status in {"published", "dry_run"})
+    skipped = sum(1 for item in summary.outcomes if item.status == "skipped")
+    failed = sum(1 for item in summary.outcomes if item.status == "failed")
+    typer.echo(f"published={published} skipped={skipped} failed={failed}")
+    for item in summary.outcomes:
+        detail = item.object_key or item.error or ""
+        typer.echo(f"{item.name} {item.status} rows={item.row_count} {detail}".rstrip())
+    if summary.failed:
+        raise typer.Exit(code=1)
 
 
 @app.command("coverage")

@@ -27,6 +27,10 @@ publishing derived databases:
 Derivative databases published from these sources must remain under ODbL
 share-alike as required by that license.
 
+Phase 9 writes CVM, Tesouro, and BCB Parquet under `public/datasets/` with
+those attribution snippets copied into each manifest. See
+[`docs/DATASETS.md`](docs/DATASETS.md).
+
 The committed `config/instruments.example.csv` lists tickers for a coverage
 experiment. It is not an official index product and must not be treated as
 redistribution of S&P, Nasdaq, Dow, or B3 index membership data.

@@ -573,16 +573,33 @@ BVBG.186 for credit, RF bulletin `PU_MERCADO` as LAST, `/v1/coverage`
 
 ## Phase 9 — Public Parquet datasets
 
-**Objective:** Curated Parquet + manifests for ODbL sources only.
+**Objective:** Curated Parquet + atomic `latest` manifests for ODbL sources only.
 
-**Scope:** Publisher checks `redistribution_policy` and
-`public_dataset_enabled`; atomic latest manifest; skip B3/Yahoo.
+**Status:** Complete
+
+**Scope:**
+
+- Dataset gate in `datasets/access.py` (`PUBLIC_DATASET_POLICIES` +
+  `public_dataset_enabled`). `API_ONLY` is not dataset-eligible.
+- Catalog: `sources`, `instruments`, `quotes`, `fund_nav`, `rates`.
+- Publisher reads serving PostgreSQL (all eligible rows; `--date` is the
+  snapshot id) and writes versioned Parquet through `ObjectStorage`.
+- Atomic sequence: validate schema → row_count → sha256 → versioned object →
+  then `latest.json` (temp + `os.replace` on local disk).
+- CLI: `marketdata publish datasets --date` with `--dry-run` and `--dataset`.
+  Requires `PUBLIC_DATASET_PUBLICATION_ENABLED=true` and `DATABASE_URL`.
+- Listing API: `GET /v1/datasets` and `GET /v1/datasets/{name}` (manifests
+  only; no Parquet streaming).
+- Skip B3 and Yahoo. Skip empty catalogs without moving `latest`.
 
 **Depends on:** Phases 2–4 data; B3 only if ADR-0014 changes. Full-history
 Parquet is more useful after Phase 12, but a partial serving snapshot may be
 published earlier.
 
-**Out of scope:** Public B3/Yahoo files; implementing `marketdata backfill`
+**Out of scope:** Public B3/Yahoo files; CSV; hive partitions;
+`dataset_publications` table; R2 buckets; `marketdata backfill`.
+
+See [`DATASETS.md`](DATASETS.md).
 
 ---
 

@@ -152,7 +152,7 @@ src/marketdata/
   normalization/   Shared mapping helpers that still do not import provider libs.
   quality/         Validation and quality events.
   storage/         Database session, repositories, object-store implementations.
-  datasets/        Parquet + manifest publisher (later).
+  datasets/        Parquet + manifest publisher (Phase 9).
   coverage/        Universe coverage engine (CSV vs stored quotes).
   api/             FastAPI app, routes, response schemas.
   cli/             Typer CLI.
@@ -161,8 +161,10 @@ src/marketdata/
 Rules:
 
 - Domain code must not import `mercados`, `python-bcb`, `pyield`, or `yfinance`.
-- API handlers read PostgreSQL only. They never call a provider during a public request.
-- Object storage is behind a small interface. Domain and ingestion depend on the interface, not on R2.
+- API handlers read PostgreSQL, except `GET /v1/datasets` which reads
+  **object-storage manifests** (never providers, never live market HTTP).
+- Object storage is behind a small interface. Domain, ingestion, and dataset
+  publication depend on the interface, not on R2.
 - Daily ingest (`marketdata ingest … --date`) and historical backfill
   (`marketdata backfill … --start --end`, Phase 12) are different commands.
   Backfill must checkpoint, rate-limit, and use source-specific history files
@@ -230,10 +232,15 @@ Suggested object key layout (not frozen if a better partition scheme appears):
 
 ```text
 raw/{source}/year=YYYY/month=MM/day=DD/{filename}
-curated/{dataset}/source={source}/year=YYYY/month=MM/
-public/datasets/...
-public/manifests/...
+public/datasets/{name}/schema_v1/{YYYY-MM-DD}.parquet
+public/manifests/{name}/{YYYY-MM-DD}.json
+public/manifests/{name}-latest.json
 ```
+
+Hive partitions (`source=/year=/month=`) and a parallel `curated/` tree are
+deferred. Phase 9 writes one Parquet file per catalog name per snapshot under
+`public/datasets/`. R2 is not required; local filesystem is the development
+backend. See [`DATASETS.md`](DATASETS.md).
 
 ---
 
@@ -248,7 +255,8 @@ public/manifests/...
 - Pagination with default and maximum limits
 - No arbitrary SQL endpoint
 
-Small queries go to the API. Large historical extracts go to Parquet.
+Small queries go to the API. Large historical extracts go to Parquet
+(`marketdata publish datasets`; listing at `GET /v1/datasets`).
 
 ---
 
@@ -282,6 +290,7 @@ The application must not import Neon, Railway, or Cloudflare SDKs in domain code
 
 - [`DATA_MODEL.md`](DATA_MODEL.md)
 - [`DATA_SOURCES.md`](DATA_SOURCES.md)
+- [`DATASETS.md`](DATASETS.md)
 - [`PRICE_SEMANTICS.md`](PRICE_SEMANTICS.md)
 - [`LICENSING.md`](LICENSING.md)
 - [`ROADMAP.md`](ROADMAP.md)

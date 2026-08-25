@@ -1,3 +1,5 @@
+import os
+import tempfile
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -32,7 +34,19 @@ class LocalFileObjectStorage:
         del content_type
         path = self._path_for(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".partial")
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_name, path)
+        except Exception:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
         return path.as_uri()
 
     def retrieve(self, key: str) -> bytes:

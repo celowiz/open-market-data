@@ -18,3 +18,6 @@ Multi-year SGS history (10-year query chunks) is **Phase 12**:
 GET /v1/series/BCB:CDI_DAILY/observations
 GET /v1/series/12/observations
 ```
+
+`marketdata publish datasets` includes BCB SGS / PTAX observations in the
+`rates` Parquet catalog. See [`DATASETS.md`](../DATASETS.md).
