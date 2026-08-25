@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from calendar import monthrange
 from collections.abc import Iterable, Iterator
 from datetime import date
 from uuid import UUID
 
+import httpx
 from sqlalchemy.orm import Session
 
 from marketdata.config import get_settings
-from marketdata.domain.enums import IngestionRunStatus
+from marketdata.domain.enums import IngestionRunStatus, PriceType
 from marketdata.ingestion.checkpoint import (
     BackfillCheckpoint,
     load_checkpoint,
@@ -37,12 +39,13 @@ from marketdata.storage.object_store import (
     build_object_storage,
 )
 from marketdata.storage.repositories import (
+    build_instrument_quote,
     finish_ingestion_run,
     get_or_create_cvm_source,
     get_or_create_fund_instrument,
+    load_quote_keys,
     start_ingestion_run,
     store_raw_artifact,
-    upsert_fund_nav_quote,
 )
 
 CVM_CHECKPOINT_PROVIDER = "cvm"
@@ -52,6 +55,11 @@ _TRANSIENT_ROWS = (InstrumentQuoteRow, InstrumentRow, InstrumentIdentifierRow)
 
 def _month_token(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
+
+
+def _month_date_bounds(year: int, month: int) -> tuple[date, date]:
+    last = monthrange(year, month)[1]
+    return date(year, month, 1), date(year, month, last)
 
 
 def _monthly_object_key(year: int, month: int) -> str:
@@ -80,45 +88,76 @@ def _persist_cvm_records(
     ingestion_run_id: UUID,
     flush_every: int = _DEFAULT_FLUSH_EVERY,
     keep: tuple[object, ...] = (),
+    identity_start: date | None = None,
+    identity_end: date | None = None,
 ) -> tuple[int, int, int, int]:
-    """Upsert fund NAV quotes, flushing and committing every ``flush_every`` rows.
+    """Insert fund NAV quotes, flushing and committing every ``flush_every`` rows.
 
     The caller owns the session lifecycle. Batched commits keep HIST months from
-    retaining every ORM object at once.
+    retaining every ORM object at once. Existing identities are skipped in
+    memory so Neon backfills are not one SELECT per row.
     """
     inserted = updated = skipped = rejected = 0
-    pending = 0
     retain = (artifact, *keep)
     batch = flush_every if flush_every > 0 else _DEFAULT_FLUSH_EVERY
+    fund_ids: dict[str, UUID] = {}
+    existing = load_quote_keys(
+        session,
+        source_id=source_id,
+        start=identity_start,
+        end=identity_end,
+    )
+    pending_rows: list[InstrumentQuoteRow] = []
+
+    def _flush_pending() -> None:
+        if not pending_rows:
+            return
+        session.add_all(pending_rows)
+        session.flush()
+        session.commit()
+        _expunge_transient_rows(session, keep=retain)
+        pending_rows.clear()
+
     for record in records:
         if record.quota_value <= 0:
             rejected += 1
             continue
-        instrument = get_or_create_fund_instrument(session, source_id=source_id, record=record)
-        action = upsert_fund_nav_quote(
-            session,
-            instrument_id=instrument.id,
-            source_id=source_id,
-            record=record,
-            artifact=artifact,
-            ingestion_run_id=ingestion_run_id,
-        )
-        if action == "inserted":
-            inserted += 1
-        elif action == "updated":
-            updated += 1
-        else:
+        source_key = f"{record.cnpj_fundo_classe}:{record.subclass_id or ''}"
+        instrument_id = fund_ids.get(source_key)
+        if instrument_id is None:
+            instrument = get_or_create_fund_instrument(session, source_id=source_id, record=record)
+            instrument_id = instrument.id
+            fund_ids[source_key] = instrument_id
+        identity = (instrument_id, record.reference_date, PriceType.FUND_NAV.value)
+        if identity in existing:
             skipped += 1
-        pending += 1
-        if pending >= batch:
-            session.flush()
-            session.commit()
-            _expunge_transient_rows(session, keep=retain)
-            pending = 0
-    if pending:
-        session.flush()
-        session.commit()
-        _expunge_transient_rows(session, keep=retain)
+            continue
+        pending_rows.append(
+            build_instrument_quote(
+                instrument_id=instrument_id,
+                source_id=source_id,
+                reference_date=record.reference_date,
+                value=record.quota_value,
+                price_type=PriceType.FUND_NAV,
+                artifact=artifact,
+                ingestion_run_id=ingestion_run_id,
+                currency="BRL",
+                unit="BRL_per_quota",
+                source_instrument_id=record.cnpj_fundo_classe,
+                extra={
+                    "vl_patrim_liq": (
+                        str(record.net_assets) if record.net_assets is not None else None
+                    ),
+                    "schema_era": record.schema_era,
+                    "subclass_id": record.subclass_id,
+                },
+            )
+        )
+        existing.add(identity)
+        inserted += 1
+        if len(pending_rows) >= batch:
+            _flush_pending()
+    _flush_pending()
     return inserted, updated, skipped, rejected
 
 
@@ -186,6 +225,8 @@ def ingest_cvm(
                 ingestion_run_id=run.id,
                 flush_every=flush_every,
                 keep=(run, source, artifact),
+                identity_start=_month_date_bounds(year, month)[0],
+                identity_end=_month_date_bounds(year, month)[1],
             )
             parsed += ins + upd + skip + rej
             inserted += ins
@@ -319,7 +360,32 @@ def backfill_cvm(
                 truncated = True
                 break
             try:
-                if uses_monthly_dados(year, month, window_as_of):
+                use_monthly = uses_monthly_dados(year, month, window_as_of)
+                payload = b""
+                uri = ""
+                source_url = ""
+                http_status: int | None = None
+                content_type: str | None = None
+                etag: str | None = None
+                last_modified: str | None = None
+                if not use_monthly:
+                    try:
+                        if hist_cache and year not in hist_cache:
+                            hist_cache.clear()
+                            hist_artifacts.clear()
+                        payload, uri, source_url, http_status, content_type, etag, last_modified = (
+                            _load_hist_year(
+                                year=year,
+                                cvm=cvm,
+                                object_store=object_store,
+                                cache=hist_cache,
+                            )
+                        )
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code != 404:
+                            raise
+                        use_monthly = True
+                if use_monthly:
                     response = cvm.fetch_month(year, month)
                     payload = response.content
                     uri = object_store.store(
@@ -346,17 +412,6 @@ def backfill_cvm(
                     artifacts += 1
                     csv_texts = [extract_csv_from_zip(payload)]
                 else:
-                    if hist_cache and year not in hist_cache:
-                        hist_cache.clear()
-                        hist_artifacts.clear()
-                    payload, uri, source_url, http_status, content_type, etag, last_modified = (
-                        _load_hist_year(
-                            year=year,
-                            cvm=cvm,
-                            object_store=object_store,
-                            cache=hist_cache,
-                        )
-                    )
                     if year not in hist_artifacts:
                         artifact = store_raw_artifact(
                             session,
@@ -400,6 +455,8 @@ def backfill_cvm(
                         ingestion_run_id=run.id,
                         flush_every=flush_every,
                         keep=(run, source, artifact),
+                        identity_start=max(start, _month_date_bounds(year, month)[0]),
+                        identity_end=min(end, _month_date_bounds(year, month)[1]),
                     )
                 except CvmParseError:
                     rejected += 1

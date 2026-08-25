@@ -3,14 +3,24 @@
 Phase 11 artifacts: a portable API `Dockerfile`, GitHub Actions ingest/publish
 workflows, and this runbook.
 
-**This phase does not create Neon, Railway, Cloudflare R2, Vercel, or any other
-cloud project.** Official hosting remains an operator step with explicit
-approval. Local development must keep working with PostgreSQL and `./data`
-only.
+Official hosting is an operator step with explicit approval. Local development
+must keep working with PostgreSQL and `./data` only. Agents must not create
+paid resources unless the user asks in the same session.
 
-Historical population of PostgreSQL (`marketdata backfill`) is **Phase 12**.
-The Next.js Data Explorer (Phase 13) talks only to FastAPI `/v1` — never to
-`DATABASE_URL`. Cron conversion and B3 trading-date rules live in
+Current operator state (2026-08-24):
+
+- **Neon** is the serving-database target. Populate it with Phase 12
+  `marketdata backfill` **before** hosting FastAPI.
+- **Vercel** Data Explorer is live at
+  [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/).
+  It talks only to FastAPI `/v1` — never to `DATABASE_URL`. Until a public
+  API exists it defaults to `http://127.0.0.1:8000` (the visitor's machine).
+- **Railway** FastAPI is **not** created yet. Do not provision it until Neon
+  serving tables have history. Then follow
+  [Next operator step: Railway FastAPI](#next-operator-step-railway-fastapi-after-neon-backfill).
+- Cloudflare R2 is not enabled.
+
+Cron conversion and B3 trading-date rules live in
 [`INGEST_SCHEDULE.md`](INGEST_SCHEDULE.md).
 
 ---
@@ -170,17 +180,18 @@ docker run --rm --env-file .env open-market-data alembic upgrade head
 
 ---
 
-## Production shape (not provisioned here)
+## Production shape
 
-Intended official stack when an operator later approves paid resources:
+Intended official stack. Neon and Vercel exist as operator projects; Railway
+is the next hosting step **after** Neon backfill.
 
-| Role | Intended choice | App sees |
-|---|---|---|
-| Serving database | Neon PostgreSQL | `DATABASE_URL` |
-| API process | Railway, this `Dockerfile` | `PORT` (injected) + env vars below |
-| Object storage | Cloudflare R2 (S3-compatible), when enabled | `OBJECT_STORAGE_BACKEND=s3` and `OBJECT_STORAGE_*` |
-| Scheduled ingest | GitHub Actions → project CLI (ADR-0006) | same env via Actions secrets/variables |
-| Data Explorer | Vercel / local Next.js (Phase 13) | `NEXT_PUBLIC_API_BASE_URL` only — never `DATABASE_URL` |
+| Role | Intended choice | App sees | Operator status |
+|---|---|---|---|
+| Serving database | Neon PostgreSQL | `DATABASE_URL` | Target for Phase 12 live load |
+| API process | Railway, this `Dockerfile` | `PORT` (injected) + env vars below | **Not created** — wait for Neon history |
+| Object storage | Cloudflare R2 (S3-compatible), when enabled | `OBJECT_STORAGE_BACKEND=s3` and `OBJECT_STORAGE_*` | R2 not enabled |
+| Scheduled ingest | GitHub Actions → project CLI (ADR-0006) | same env via Actions secrets/variables | Workflows exist |
+| Data Explorer | Vercel Next.js (Phase 13) | `NEXT_PUBLIC_API_BASE_URL` only — never `DATABASE_URL` | Live at [open-market-data.vercel.app](https://open-market-data.vercel.app/) |
 
 Self-hosters may use any PostgreSQL, any S3-compatible bucket, and the same
 image or `uvicorn`. Cloud vendors are deployment choices, not domain
@@ -191,6 +202,74 @@ are ephemeral: if `OBJECT_STORAGE_BACKEND=local`, objects vanish when the job
 ends while PostgreSQL provenance still points at them. Production ingest
 should use a durable backend (`s3` or a self-hosted disk that is not the
 runner workspace).
+
+---
+
+## Next operator step: Railway FastAPI (after Neon backfill)
+
+**Gate:** do not create a Railway project until `marketdata backfill` has
+written the intended history into Neon. Confirm with `/v1` against local
+uvicorn pointed at that `DATABASE_URL`, or with SQL against Neon.
+
+The public Explorer cannot call `127.0.0.1:8000`. Any public FastAPI host
+would work; Railway is the official choice (ADR-0005). Fly, Render, or a VPS
+are valid self-host alternatives, not the official instance.
+
+When the operator explicitly approves this step:
+
+1. Create a Railway service from this repository `Dockerfile`. Railway injects
+   `PORT`; the image already binds `0.0.0.0`.
+2. Set Railway `DATABASE_URL` to the Neon URL (`postgresql://…?sslmode=require`).
+   Suggested release command: `alembic upgrade head`.
+3. Set Railway `CORS_ALLOWED_ORIGINS` to the exact Explorer origins:
+
+   ```text
+   CORS_ALLOWED_ORIGINS=https://open-market-data.vercel.app,http://localhost:3000
+   ```
+
+   No trailing slash on origins.
+4. Set Railway `PUBLIC_API_BASE_URL` to the Railway public origin (no path).
+   Other Python `PUBLIC_*` names (`PUBLIC_DATA_BASE_URL`,
+   `PUBLIC_DATASET_PUBLICATION_ENABLED`, `PUBLIC_DATASET_FORMAT`) stay on
+   FastAPI / GitHub Actions. **Do not add them to the Vercel project** and
+   **do not rename them** in `.env.example` to dodge the Vercel dashboard.
+5. On the Vercel Explorer project, set **only**:
+
+   | Name | Value | Visibility |
+   |---|---|---|
+   | `NEXT_PUBLIC_API_BASE_URL` | `https://<railway-public-host>` (no trailing slash) | **config**, not secret |
+
+   Vercel treats `NEXT_PUBLIC_`, `PUBLIC_`, and `VITE_` as public framework
+   prefixes. Those variables cannot use `visibility: secret` because they are
+   inlined into the browser bundle. After saving, **redeploy** so the build
+   picks up the value.
+6. Do **not** put `DATABASE_URL` on Vercel.
+7. Smoke tests: `GET https://<railway>/v1/health` then open
+   [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/)
+   and confirm example cards hit `/v1` (404 body from the API is fine; a
+   connection error to `127.0.0.1:8000` is not).
+
+Local `.env` may set `YAHOO_PROVIDER_ENABLED=true` for development. Keep
+`.env.example` at `false`. Production Yahoo on Railway is a separate flag
+decision (ADR-0013); it is not required to wire Explorer → FastAPI.
+
+---
+
+## Environment variable ownership
+
+Python settings in [`.env.example`](../.env.example) belong on FastAPI
+(local, Railway) and on GitHub Actions ingest jobs. They are **not** Next.js
+variables.
+
+| Variable | Where | Notes |
+|---|---|---|
+| `DATABASE_URL` | FastAPI, GitHub Actions | Never Vercel |
+| `CORS_ALLOWED_ORIGINS` | FastAPI | Include the Vercel origin when the API is public |
+| `PUBLIC_API_BASE_URL` | FastAPI | Canonical public URL of this API |
+| `PUBLIC_DATA_BASE_URL` | FastAPI / Actions | Parquet/CDN base for manifests; not the Explorer |
+| `PUBLIC_DATASET_*` | FastAPI / Actions | Publication gate; not the Explorer |
+| `NEXT_PUBLIC_API_BASE_URL` | Vercel / `apps/explorer/.env.local` | Browser fetch target for `/v1`. Default `http://127.0.0.1:8000` |
+| `YAHOO_PROVIDER_ENABLED` | FastAPI `.env` | `.env.example` stays `false`; local `.env` may be `true` |
 
 ---
 
@@ -327,8 +406,8 @@ Set `CORS_ALLOWED_ORIGINS` to a comma-separated list of exact origins:
 # local Explorer
 CORS_ALLOWED_ORIGINS=http://localhost:3000
 
-# later production Explorer (example — not created in this phase)
-# CORS_ALLOWED_ORIGINS=https://explorer.example.com
+# public Explorer on Vercel (set on Railway when FastAPI is hosted)
+# CORS_ALLOWED_ORIGINS=https://open-market-data.vercel.app,http://localhost:3000
 ```
 
 Intended middleware (empty string = no CORS middleware):

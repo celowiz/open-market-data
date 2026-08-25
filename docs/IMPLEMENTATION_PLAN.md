@@ -619,10 +619,18 @@ is more meaningful after Phase 12, but a one-day universe still works.
 
 ## Phase 11 — Official deploy and scheduled ingest
 
-**Status:** Complete for artifacts, not provisioned. Dockerfile, ingest/publish
+**Status:** Complete for artifacts. Operator hosting is partial and sequenced:
+Neon is the serving-database target; the Data Explorer exists on Vercel;
+**Railway FastAPI is not provisioned yet.** Dockerfile, ingest/publish
 workflows, `backfill.yml` (`workflow_dispatch` only), and
-[`DEPLOYMENT.md`](DEPLOYMENT.md) exist. This phase did **not** create Neon,
-Railway, Cloudflare R2, or Vercel projects.
+[`DEPLOYMENT.md`](DEPLOYMENT.md) exist. This phase did **not** create those
+cloud projects from the repository.
+
+**Do not provision Railway until Phase 12 operator live backfill has populated
+Neon serving tables.** An empty public `/v1` is not useful. The checklist for
+the Railway step lives in [`DEPLOYMENT.md`](DEPLOYMENT.md#next-operator-step-railway-fastapi-after-neon-backfill)
+and in [Next operator implementation](#next-operator-implementation--railway-fastapi-after-neon-backfill)
+below.
 
 **Objective:** CI already exists; add ingest workflows, portable Dockerfile,
 Railway + Neon with **explicit user approval**, optional R2 when enabled.
@@ -643,13 +651,16 @@ COTAHIST (all Phase 12). Next.js Explorer is Phase 13.
 
 ## Phase 12 — Historical backfill
 
-**Status:** Complete (CLI + offline unit tests). Operator live backfill is
-documented, not executed for all HIST years in CI.
+**Status:** Complete (CLI + offline unit tests). Operator live backfill into
+**Neon** is the current gate: tables must be populated before a public FastAPI
+(Railway) is created. Live load is documented in [`DEPLOYMENT.md`](DEPLOYMENT.md),
+not executed for all HIST years in CI.
 
 **Objective:** Fill PostgreSQL (local or a Neon branch via `DATABASE_URL`) with
 multi-year series so `/v1` history routes return real price paths, not a
 single ingest day. This is the CLI/data milestone that Phase 13 charts depend
-on. It is **not** the same as Phase 11 daily cron.
+on. It is **not** the same as Phase 11 daily cron. It is also the gate for
+Railway: do not host `/v1` publicly until Neon has real history.
 
 **Why this phase, not 7–11:** Phases 2–6 already ingest one day (or a CVM
 monthly window). Yahoo, credit, Parquet, coverage, and official deploy do not
@@ -731,13 +742,17 @@ then optional COTAHIST.
 
 ## Phase 13 — Next.js Data Explorer
 
-**Status:** Complete for the local app (`apps/explorer`). Vercel is not
-provisioned. Explorer CI is `.github/workflows/explorer.yml` (`npm ci` +
-`npm run build`; no secrets).
+**Status:** Complete for the local app (`apps/explorer`). The operator Vercel
+project is live at [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/).
+That public site still defaults to `http://127.0.0.1:8000` until a public
+FastAPI exists (Railway, after Neon backfill). Explorer CI is
+`.github/workflows/explorer.yml` (`npm ci` + `npm run build`; no secrets).
 
 **Objective:** A public Data Explorer that lets a person pick a few instruments
 or series and see the **historical price path** already stored by Phase 12.
-Companion to backfill: without 12, the UI only shows a stub day.
+Companion to backfill: without 12, the UI only shows a stub day. Without a
+public FastAPI, the Vercel deployment cannot reach `/v1` from visitors'
+browsers.
 
 **Scope:**
 
@@ -749,22 +764,71 @@ Companion to backfill: without 12, the UI only shows a stub day.
 - Provenance visible (source, `price_type`, official flag, date)
 - Honor API redistribution gates: hide or no-index sources the API omits;
   do not add a Parquet download for B3
-- Local `next dev` against `http://127.0.0.1:8000`; production against
-  `PUBLIC_API_BASE_URL`
+- Local `next dev` against `http://127.0.0.1:8000` via `NEXT_PUBLIC_API_BASE_URL`
+- Production Vercel against the same variable pointing at the public FastAPI
+  origin (Railway). Do **not** put Python `PUBLIC_*` settings on the Vercel
+  project — those belong on FastAPI (see [Next operator implementation](#next-operator-implementation--railway-fastapi-after-neon-backfill))
 
 **Deliverables:** Deployed or local Explorer that plots a backfilled Tesouro
 title, a BCB series, a CVM fund, and a B3 ticker (if `public_api_enabled`)
 
-**Depends on:** Phase 12 (enough history to chart). Phase 11 official API URL
-is optional; local FastAPI is enough to build the UI.
+**Depends on:** Phase 12 (enough history to chart). Local FastAPI is enough to
+build and QA the UI. A working **public** Explorer needs Railway (or any
+public `/v1`) after Neon is loaded.
 
 **Out of scope:** Auth, billing, trading terminal, WebSockets, DuckDB-Wasm,
-editing data, calling providers from Next.js
+editing data, calling providers from Next.js, hosting FastAPI on Vercel
+(ADR-0004 / ADR-0005)
 
-**Infrastructure (approval required):** Vercel project. No Neon connection
-string in the frontend.
+**Infrastructure:** Vercel Explorer project exists. FastAPI on Railway is
+**not** created yet. No Neon connection string in the frontend.
 
 **Worktrees:** None concurrent with Phase 12 CLI work on the same checkout.
+
+---
+
+## Next operator implementation — Railway FastAPI (after Neon backfill)
+
+**Status:** Documented, not started. **Do not create a Railway project or
+deploy FastAPI until operator live backfill has updated Neon serving tables.**
+
+**Why this order:** The Explorer on Vercel is a browser app. Visitors cannot
+call the operator's `127.0.0.1:8000`. Hosting FastAPI before Neon has history
+would publish empty `/v1`. Backfill first (Phase 12 into Neon), then Railway,
+then point Vercel at that API.
+
+**When the user explicitly approves this step,** follow the checklist in
+[`DEPLOYMENT.md`](DEPLOYMENT.md#next-operator-step-railway-fastapi-after-neon-backfill).
+In short:
+
+1. Confirm Neon has the intended quotes/series/funds (Phase 12 live load).
+2. Create the Railway service from the repository `Dockerfile` (ADR-0005).
+   Bind `DATABASE_URL` to Neon (`sslmode=require`). Run `alembic upgrade head`
+   as a release command if the schema is not already applied.
+3. Set FastAPI `CORS_ALLOWED_ORIGINS` to include
+   `https://open-market-data.vercel.app` (exact origin, no trailing slash).
+   Keep `http://localhost:3000` if local Explorer should hit production `/v1`.
+4. Set FastAPI `PUBLIC_API_BASE_URL` to the Railway public origin. Keep
+   Python `PUBLIC_DATA_BASE_URL` / `PUBLIC_DATASET_*` on Railway or GitHub
+   Actions — **never** on the Vercel Next.js project.
+5. On Vercel, set `NEXT_PUBLIC_API_BASE_URL` to that same Railway origin with
+   **visibility: config** (not secret). Vercel rejects public-prefix names
+   (`NEXT_PUBLIC_`, `PUBLIC_`, `VITE_`, …) as secrets because they are inlined
+   into the browser bundle. Redeploy so the value is baked at build time.
+6. Smoke `GET {railway}/v1/health` and the Explorer home/examples against
+   live `/v1`. Do not invent prices when the API 404s.
+
+**Do not rename** Python `PUBLIC_*` variables in `.env.example` / `.env` to
+work around the Vercel dashboard. Those names are FastAPI/Pydantic settings,
+not Next.js public prefixes.
+
+**Depends on:** Phase 12 operator Neon load; Phase 13 Explorer already on
+Vercel; Phase 11 Dockerfile.
+
+**Out of scope until approved:** creating the Railway project, custom domains,
+Cloudflare R2, paid add-ons.
+
+**Worktrees:** None. Operator infra, not a code milestone.
 
 ---
 
@@ -800,6 +864,7 @@ See [`docs/adr/README.md`](adr/README.md). Do not reopen them without evidence.
 | Custom domains | **NON-BLOCKING** | Env placeholders |
 | CVM full-history size vs Neon plan | **NON-BLOCKING** Phase 12 | Start with Tesouro+BCB+one CVM month; do not dump all HIST years into a free branch |
 | COTAHIST vs BVBG.186 overlap | **NON-BLOCKING** Phase 12 | Document semantics; do not silently merge as the same quote |
+| When to provision Railway FastAPI | **GATED** | After Neon serving tables are backfilled. Do not create Railway to “fix” the Vercel `127.0.0.1:8000` error before that load. Checklist: [`DEPLOYMENT.md`](DEPLOYMENT.md#next-operator-step-railway-fastapi-after-neon-backfill) |
 
 ---
 
@@ -817,6 +882,9 @@ See [`docs/adr/README.md`](adr/README.md). Do not reopen them without evidence.
 8. **Phase 12** (historical backfill) may run after Phase 6 even if 7–11 are
    still open, when the goal is Neon/API history. **Phase 13** (Explorer)
    starts only after Phase 12 can serve multi-date `/v1` series.
+9. **Railway FastAPI** is the next operator hosting step **after** Neon
+   backfill. Do not provision it in the same session as documentation-only
+   work. Do not put Python `PUBLIC_*` env vars on the Vercel project.
 
 Official MCP: Railway may need OAuth (`needsAuth`). Neon MCP was not visible
 during planning — re-check at deploy time. Cloudflare R2 stays unused.

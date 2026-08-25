@@ -1,5 +1,6 @@
 import time
 from datetime import date, timedelta
+from uuid import UUID
 
 import httpx
 from sqlalchemy import select
@@ -45,9 +46,12 @@ from marketdata.storage.models import InstrumentQuoteRow, InstrumentRow
 from marketdata.storage.object_store import ObjectStorage, build_object_storage
 from marketdata.storage.repositories import (
     attach_identifier,
+    build_instrument_quote,
+    cached_instrument_id,
     finish_ingestion_run,
     get_or_create_instrument_by_key,
     get_or_create_source,
+    load_quote_keys,
     record_quality_event,
     resolve_instrument_id,
     start_ingestion_run,
@@ -145,8 +149,13 @@ def _ingest_b3_day(
         )
         artifacts += 1
         quotes = parse_price_report(price_bytes)
-        for index, record in enumerate(quotes, start=1):
-            instrument = get_or_create_instrument_by_key(
+        instrument_ids: dict[str, UUID] = {}
+        existing_quotes = load_quote_keys(session, source_id=source.id, on_date=reference_date)
+        pending_quotes: list[InstrumentQuoteRow] = []
+        for record in quotes:
+            created = record.ticker not in instrument_ids
+            instrument_id = cached_instrument_id(
+                instrument_ids,
                 session,
                 source_id=source.id,
                 source_key=record.ticker,
@@ -155,42 +164,50 @@ def _ingest_b3_day(
                 name=record.ticker,
                 currency=record.currency or "BRL",
             )
-            attach_identifier(
-                session,
-                instrument_id=instrument.id,
-                identifier_type=IdentifierType.TICKER,
-                identifier_value=record.ticker,
-                source_id=source.id,
-            )
-            if record.security_id:
+            if created:
                 attach_identifier(
                     session,
-                    instrument_id=instrument.id,
-                    identifier_type=IdentifierType.B3_SECURITY_ID,
-                    identifier_value=record.security_id,
+                    instrument_id=instrument_id,
+                    identifier_type=IdentifierType.TICKER,
+                    identifier_value=record.ticker,
                     source_id=source.id,
                 )
-            action = upsert_quote(
-                session,
-                instrument_id=instrument.id,
-                source_id=source.id,
-                reference_date=record.reference_date,
-                value=record.last_price,
-                price_type=PriceType.LAST,
-                artifact=artifact,
-                ingestion_run_id=run.id,
-                currency=record.currency or "BRL",
-                unit="BRL",
-                extra=record.extra,
-            )
-            if action == "inserted":
-                inserted += 1
-            elif action == "updated":
-                updated += 1
-            else:
+                if record.security_id:
+                    attach_identifier(
+                        session,
+                        instrument_id=instrument_id,
+                        identifier_type=IdentifierType.B3_SECURITY_ID,
+                        identifier_value=record.security_id,
+                        source_id=source.id,
+                    )
+            identity = (instrument_id, record.reference_date, PriceType.LAST.value)
+            if identity in existing_quotes:
                 skipped += 1
-            if index % 500 == 0:
+                continue
+            pending_quotes.append(
+                build_instrument_quote(
+                    instrument_id=instrument_id,
+                    source_id=source.id,
+                    reference_date=record.reference_date,
+                    value=record.last_price,
+                    price_type=PriceType.LAST,
+                    artifact=artifact,
+                    ingestion_run_id=run.id,
+                    currency=record.currency or "BRL",
+                    unit="BRL",
+                    extra=record.extra,
+                )
+            )
+            existing_quotes.add(identity)
+            inserted += 1
+            if len(pending_quotes) >= 500:
+                session.add_all(pending_quotes)
                 session.flush()
+                pending_quotes.clear()
+        if pending_quotes:
+            session.add_all(pending_quotes)
+            session.flush()
+            pending_quotes.clear()
 
         parsed = len(quotes)
         derivatives_bytes: bytes | None = None

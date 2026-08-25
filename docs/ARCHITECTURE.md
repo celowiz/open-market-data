@@ -22,8 +22,10 @@ Code, class names, and public APIs are English. Documentation is English.
 
 ## Non-goals (still out of MVP)
 
-Phases 11–13 are implemented in-repo: deploy **artifacts** (not provisioned
-cloud projects), `marketdata backfill`, and a local Next.js Explorer on `/v1`.
+Phases 11–13 are implemented in-repo: deploy **artifacts**, `marketdata
+backfill`, and a Next.js Explorer on `/v1`. Neon is the official serving-database
+target. The Explorer is on Vercel. Railway FastAPI is **not** created until
+Neon has history. See [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 The following stay out of MVP:
 
@@ -40,6 +42,10 @@ The following stay out of MVP:
 
 The first product is daily EOD market data plus stored history and a read-only
 Explorer, not a trading terminal.
+
+Operator hosting is sequenced: Neon backfill first, then Railway FastAPI, then
+the existing Vercel Explorer can point at public `/v1`. This repository still
+must not create those cloud projects unless the operator asks.
 
 ---
 
@@ -270,19 +276,19 @@ Small queries go to the API. Large historical extracts go to Parquet
 
 ## Local development versus official deployment
 
-| Concern | Local / self-host | Official instance (operator, not created here) |
+| Concern | Local / self-host | Official instance |
 |---|---|---|
 | Database | PostgreSQL via `DATABASE_URL` | Neon PostgreSQL via `DATABASE_URL` |
 | Object storage | Filesystem (`./data`) | S3-compatible (R2 preferred) after `uv sync --extra s3` |
-| API process | `uvicorn` | Railway running the repository `Dockerfile` |
+| API process | `uvicorn` | Railway running the repository `Dockerfile` (**not created** until Neon backfill) |
 | Daily ingestion | `marketdata ingest … --date` | GitHub Actions calling the CLI |
-| Historical backfill | `marketdata backfill --start --end` | Same CLI; `backfill.yml` is dispatch-only |
-| Data Explorer | `cd apps/explorer && npm run dev` → `http://127.0.0.1:8000` | Vercel → public FastAPI only (not provisioned) |
+| Historical backfill | `marketdata backfill --start --end` | Same CLI into Neon; `backfill.yml` is dispatch-only |
+| Data Explorer | `cd apps/explorer && npm run dev` → `http://127.0.0.1:8000` | Vercel [open-market-data.vercel.app](https://open-market-data.vercel.app/) → public FastAPI (`NEXT_PUBLIC_API_BASE_URL`) |
 | Docs site | MkDocs locally (later) | GitHub Pages (later) |
 
-Phase 11 shipped the Dockerfile and workflows. It did **not** create Neon,
-Railway, R2, or Vercel projects. The application must not import those SDKs
-in domain code.
+Phase 11 shipped the Dockerfile and workflows. Operator hosting is sequenced:
+backfill Neon, then Railway FastAPI, then point Vercel at that origin. The
+application must not import Neon/Railway/R2/Vercel SDKs in domain code.
 
 ---
 

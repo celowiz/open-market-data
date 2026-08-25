@@ -153,8 +153,10 @@ The intended official deployment currently uses:
 - GitHub Actions
 - Cloudflare CDN / WAF
 - GitHub Pages for documentation
-- Next.js + Vercel as the public Data Explorer in **Phase 13** (after
-  Phase 12 historical backfill; Explorer consumes FastAPI only)
+- Next.js + Vercel as the public Data Explorer in **Phase 13** (Explorer
+  consumes FastAPI only). The Vercel site exists; public `/v1` waits on
+  Railway **after** Phase 12 Neon backfill. See
+  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 MCP access for Neon, Cloudflare and Railway may be available in the development
 environment.
@@ -233,8 +235,22 @@ but not all production resources exist yet.
 - Account configured.
 - Railway Remote MCP is expected to be available through OAuth.
 - No Railway project currently exists.
-- Do not create Railway projects or deploy services during discovery or
-  foundation unless explicitly required by the current implementation phase.
+- **Do not create a Railway project until operator live backfill has
+  populated Neon serving tables.** Then FastAPI on Railway is the next
+  operator step (explicit approval still required). Checklist:
+  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+- Do not create Railway projects or deploy services during discovery,
+  documentation, or foundation work.
+
+### Vercel
+
+- Data Explorer is live at https://open-market-data.vercel.app/.
+- The app must receive `NEXT_PUBLIC_API_BASE_URL` (visibility **config**,
+  not secret). It must never receive `DATABASE_URL` or Python `PUBLIC_*`
+  settings (`PUBLIC_DATA_BASE_URL` is a FastAPI/CDN URL, not a Next.js
+  public prefix).
+- Until Railway (or another public FastAPI) exists, the site cannot reach
+  `/v1` from visitors' browsers.
 
 ### Cloudflare
 

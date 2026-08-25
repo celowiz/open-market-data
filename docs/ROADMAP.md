@@ -30,16 +30,20 @@ for sources that may be redistributed.
 | 8 | Brazilian credit public prints where available | Complete |
 | 9 | Public Parquet + manifests for ODbL sources | Complete |
 | 10 | Coverage engine and `/v1/coverage` | Complete |
-| 11 | Scheduled GitHub Actions, Dockerfile, deploy docs (no cloud projects created) | Complete for artifacts, not provisioned |
-| 12 | Historical backfill CLI (CVM HIST, Tesouro full CSV, BCB ranges, B3/COTAHIST) | Complete (CLI + unit tests; operator live load is local) |
-| 13 | Next.js Data Explorer (`apps/explorer`; charts of Phase 12 series via `/v1` only) | Complete (local; Vercel not provisioned) |
+| 11 | Scheduled GitHub Actions, Dockerfile, deploy docs | Complete for artifacts. Neon is the serving-DB target; Railway FastAPI **not** created yet |
+| 12 | Historical backfill CLI (CVM HIST, Tesouro full CSV, BCB ranges, B3/COTAHIST) | Complete (CLI + unit tests). Operator live load into **Neon** is the current gate before Railway |
+| 13 | Next.js Data Explorer (`apps/explorer`; charts of Phase 12 series via `/v1` only) | Complete locally. Vercel is live at [open-market-data.vercel.app](https://open-market-data.vercel.app/); public `/v1` waits on Railway |
 
 CVM remains the first functional vertical after Foundation.
 
 Phases 12 and 13 are a **paired track**: backfill populates PostgreSQL
 history so `/v1` can return price series; the Explorer is how people look at
-those series. Official Neon/Railway/Vercel hosting remains an operator step
-with explicit approval. Local PostgreSQL + `./data` + `next dev` is enough.
+those series. Local PostgreSQL + `./data` + `next dev` is enough to develop.
+
+**Operator hosting sequence (do not skip):** finish Phase 12 live backfill
+into Neon → then provision Railway FastAPI → then point Vercel
+`NEXT_PUBLIC_API_BASE_URL` at that origin. Railway is intentionally **after**
+Neon load. See [`DEPLOYMENT.md`](DEPLOYMENT.md#next-operator-step-railway-fastapi-after-neon-backfill).
 
 ### MVP success criteria (from project brief)
 
@@ -89,13 +93,22 @@ item). It still must not query PostgreSQL directly.
 1. Local PostgreSQL + filesystem object storage (required from Phase 1)
 2. GitHub Actions CI (Phase 1) and Explorer CI (`.github/workflows/explorer.yml`)
 3. GitHub Actions ingest schedules and `backfill.yml` dispatch (Phase 11 artifacts)
-4. Neon + Railway for the official instance (operator approval; **not created**
-   in Phase 11)
-5. Historical backfill via `marketdata backfill` (Phase 12) into local Postgres
-   or a Neon URL the operator already has
-6. Local Next.js Explorer (`apps/explorer`) against FastAPI; Vercel later with
-   approval
-7. Cloudflare R2 only after R2 is enabled and approved (`uv sync --extra s3`)
-8. Custom domains `api.` / `data.` when a domain is chosen
+4. Neon as the official serving database (operator). Point `DATABASE_URL` at
+   Neon for live backfill; local Postgres remains the default for development
+5. Historical backfill via `marketdata backfill` (Phase 12) **into Neon** until
+   serving tables have real history. **This is the gate for Railway.**
+6. Local Next.js Explorer (`apps/explorer`) against `http://127.0.0.1:8000`
+7. Vercel Explorer ([open-market-data.vercel.app](https://open-market-data.vercel.app/))
+   — already created. It cannot reach visitors' localhost; it stays empty until
+   a public FastAPI exists
+8. Railway FastAPI (ADR-0005), **after** step 5, with explicit approval. Wire
+   `DATABASE_URL` to Neon, `CORS_ALLOWED_ORIGINS` to the Vercel origin, and
+   Vercel `NEXT_PUBLIC_API_BASE_URL` to the Railway origin (visibility
+   **config**, not secret). Checklist:
+   [`DEPLOYMENT.md`](DEPLOYMENT.md#next-operator-step-railway-fastapi-after-neon-backfill)
+9. Cloudflare R2 only after R2 is enabled and approved (`uv sync --extra s3`)
+10. Custom domains `api.` / `data.` when a domain is chosen
 
-Cloud services must not block local development.
+Cloud services must not block local development. Do not create a Railway
+project in the same session as documentation-only work. Do not put Python
+`PUBLIC_*` settings on the Vercel project.

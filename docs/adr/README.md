@@ -9,7 +9,7 @@ details do not get ADRs.
 | [0002](0002-neon-managed-postgres.md) | Neon as official managed Postgres | Accepted (deploy later) |
 | [0003](0003-object-storage-interface.md) | Object storage interface, filesystem first | Accepted |
 | [0004](0004-fastapi-public-api.md) | FastAPI for public API | Accepted |
-| [0005](0005-railway-api-hosting.md) | Railway for official API hosting | Accepted (deploy later) |
+| [0005](0005-railway-api-hosting.md) | Railway for official API hosting | Accepted (provision after Neon backfill) |
 | [0006](0006-github-actions-ingestion.md) | GitHub Actions for ingestion | Accepted (workflows later) |
 | [0007](0007-parquet-bulk-datasets.md) | Parquet for bulk datasets | Accepted (Phase 9) |
 | [0008](0008-source-code-license.md) | Apache-2.0 for source code | Accepted |

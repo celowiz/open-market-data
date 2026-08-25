@@ -367,6 +367,99 @@ def attach_identifier(
     )
 
 
+def load_quote_keys(
+    session: Session,
+    *,
+    source_id: UUID,
+    start: date | None = None,
+    end: date | None = None,
+    on_date: date | None = None,
+) -> set[tuple[UUID, date, str]]:
+    """Load (instrument_id, reference_date, price_type) already stored for a source."""
+    stmt = select(
+        InstrumentQuoteRow.instrument_id,
+        InstrumentQuoteRow.reference_date,
+        InstrumentQuoteRow.price_type,
+    ).where(InstrumentQuoteRow.source_id == source_id)
+    if on_date is not None:
+        stmt = stmt.where(InstrumentQuoteRow.reference_date == on_date)
+    else:
+        if start is not None:
+            stmt = stmt.where(InstrumentQuoteRow.reference_date >= start)
+        if end is not None:
+            stmt = stmt.where(InstrumentQuoteRow.reference_date <= end)
+    return {
+        (instrument_id, reference_date, price_type)
+        for instrument_id, reference_date, price_type in session.execute(stmt)
+    }
+
+
+def cached_instrument_id(
+    cache: dict[str, UUID],
+    session: Session,
+    *,
+    source_id: UUID,
+    source_key: str,
+    asset_class: AssetClass,
+    instrument_type: str,
+    name: str,
+    currency: str | None,
+    maturity_date: date | None = None,
+) -> UUID:
+    cached = cache.get(source_key)
+    if cached is not None:
+        return cached
+    instrument = get_or_create_instrument_by_key(
+        session,
+        source_id=source_id,
+        source_key=source_key,
+        asset_class=asset_class,
+        instrument_type=instrument_type,
+        name=name,
+        currency=currency,
+        maturity_date=maturity_date,
+    )
+    cache[source_key] = instrument.id
+    return instrument.id
+
+
+def build_instrument_quote(
+    *,
+    instrument_id: UUID,
+    source_id: UUID,
+    reference_date: date,
+    value,
+    price_type: PriceType | str,
+    artifact: RawArtifactRow,
+    ingestion_run_id: UUID,
+    currency: str | None,
+    unit: str | None,
+    extra: dict | None = None,
+    is_official: bool = True,
+    source_instrument_id: str | None = None,
+    revision: int = 1,
+) -> InstrumentQuoteRow:
+    price = price_type.value if isinstance(price_type, PriceType) else price_type
+    return InstrumentQuoteRow(
+        id=uuid4(),
+        instrument_id=instrument_id,
+        reference_date=reference_date,
+        value=value,
+        currency=currency,
+        unit=unit,
+        price_type=price,
+        source_id=source_id,
+        source_instrument_id=source_instrument_id,
+        is_official=is_official,
+        retrieved_at=artifact.retrieved_at,
+        raw_artifact_id=artifact.id,
+        ingestion_run_id=ingestion_run_id,
+        revision=revision,
+        quality_status=QualityStatus.OK.value,
+        extra=extra or {},
+    )
+
+
 def upsert_quote(
     session: Session,
     *,

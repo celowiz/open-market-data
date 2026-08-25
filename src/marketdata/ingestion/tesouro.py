@@ -1,4 +1,5 @@
 from datetime import date
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -15,15 +16,16 @@ from marketdata.providers.tesouro import (
     parse_tesouro_csv,
     tesouro_instrument_key,
 )
-from marketdata.storage.models import IngestionRunRow, RawArtifactRow, SourceRow
+from marketdata.storage.models import IngestionRunRow, InstrumentQuoteRow, RawArtifactRow, SourceRow
 from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
 from marketdata.storage.repositories import (
+    build_instrument_quote,
+    cached_instrument_id,
     finish_ingestion_run,
-    get_or_create_instrument_by_key,
     get_or_create_source,
+    load_quote_keys,
     start_ingestion_run,
     store_raw_artifact,
-    upsert_quote,
 )
 
 _TESOURO_FLUSH_EVERY = 1000
@@ -57,39 +59,55 @@ def _upsert_tesouro_records(
     flush_every: int | None = None,
 ) -> tuple[int, int, int]:
     inserted = updated = skipped = 0
-    for index, record in enumerate(records, start=1):
-        instrument = get_or_create_instrument_by_key(
+    instrument_ids: dict[str, UUID] = {}
+    existing = load_quote_keys(session, source_id=source.id)
+    pending: list[InstrumentQuoteRow] = []
+    batch = flush_every if flush_every is not None and flush_every > 0 else len(records) or 1
+
+    def _flush_pending() -> None:
+        if not pending:
+            return
+        session.add_all(pending)
+        session.flush()
+        session.commit()
+        pending.clear()
+
+    for record in records:
+        source_key = tesouro_instrument_key(record.title_type, record.maturity_date)
+        instrument_id = cached_instrument_id(
+            instrument_ids,
             session,
             source_id=source.id,
-            source_key=tesouro_instrument_key(record.title_type, record.maturity_date),
+            source_key=source_key,
             asset_class=AssetClass.GOVERNMENT_BOND,
             instrument_type=record.title_type,
             name=record.marketing_name,
             currency="BRL",
             maturity_date=record.maturity_date,
         )
-        action = upsert_quote(
-            session,
-            instrument_id=instrument.id,
-            source_id=source.id,
-            reference_date=record.reference_date,
-            value=record.value,
-            price_type=record.price_type,
-            artifact=artifact,
-            ingestion_run_id=run.id,
-            currency="BRL" if record.unit == "BRL" else None,
-            unit=record.unit,
-            extra={"source_field": record.source_field, "title_type": record.title_type},
-        )
-        if action == "inserted":
-            inserted += 1
-        elif action == "updated":
-            updated += 1
-        else:
+        identity = (instrument_id, record.reference_date, record.price_type.value)
+        if identity in existing:
             skipped += 1
-        if flush_every is not None and index % flush_every == 0:
-            session.flush()
-            session.commit()
+            continue
+        pending.append(
+            build_instrument_quote(
+                instrument_id=instrument_id,
+                source_id=source.id,
+                reference_date=record.reference_date,
+                value=record.value,
+                price_type=record.price_type,
+                artifact=artifact,
+                ingestion_run_id=run.id,
+                currency="BRL" if record.unit == "BRL" else None,
+                unit=record.unit,
+                extra={"source_field": record.source_field, "title_type": record.title_type},
+            )
+        )
+        existing.add(identity)
+        inserted += 1
+        if len(pending) >= batch:
+            _flush_pending()
+    _flush_pending()
     return inserted, updated, skipped
 
 

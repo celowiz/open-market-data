@@ -225,7 +225,7 @@ def _cvm_http_get(url: str, *, client: httpx.Client | None = None) -> httpx.Resp
     headers = {"User-Agent": f"{settings.http_user_agent}/{__version__}"}
     owns_client = client is None
     http_client = client or httpx.Client(
-        timeout=settings.http_timeout_seconds,
+        timeout=max(settings.http_timeout_seconds, 120),
         follow_redirects=True,
         headers=headers,
     )

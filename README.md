@@ -21,15 +21,19 @@ Phases 0–13 of [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 are implemented in this repository.
 
 - **Phases 0–10:** complete (providers, Parquet for ODbL sources, coverage).
-- **Phase 11:** complete for artifacts, **not provisioned**. Dockerfile,
-  GitHub Actions ingest/publish/backfill workflows, and
-  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) exist. This phase did **not**
-  create Neon, Railway, Cloudflare R2, or Vercel projects.
+- **Phase 11:** complete for artifacts. Dockerfile, GitHub Actions
+  ingest/publish/backfill workflows, and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+  exist. Neon is the serving-database target. Railway FastAPI is **not**
+  created yet — wait until Phase 12 live backfill has populated Neon.
 - **Phase 12:** `marketdata backfill` for CVM, Tesouro, BCB, B3 (optional
-  COTAHIST), and Yahoo. Yahoo is currently visible on the public API.
+  COTAHIST), and Yahoo. Operator live load into Neon is the current gate
+  before a public API. Yahoo is currently visible on the public API.
   B3 and Yahoo are never published as Parquet.
-- **Phase 13:** local Next.js Data Explorer in `apps/explorer`, consuming
-  FastAPI `/v1` only (never `DATABASE_URL`).
+- **Phase 13:** Next.js Data Explorer in `apps/explorer`, consuming FastAPI
+  `/v1` only (never `DATABASE_URL`). Local default is `http://127.0.0.1:8000`.
+  Vercel is live at [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/);
+  it cannot reach visitors' localhost until Railway (or another public
+  FastAPI) exists.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
