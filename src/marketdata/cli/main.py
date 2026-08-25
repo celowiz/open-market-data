@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 
 import typer
 from sqlalchemy.orm import Session
@@ -127,7 +128,7 @@ def ingest_bcb_command(
 def ingest_b3_command(
     date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
 ) -> None:
-    """Ingest B3 BVBG.186 last-trade quotes and BVBG.187 official settlement."""
+    """Ingest B3 BVBG.186 last trades, BVBG.187 settlement, and OTC credit prints."""
     from marketdata.ingestion.b3 import ingest_b3
 
     reference = date.fromisoformat(date_value)
@@ -232,3 +233,42 @@ def explain(
             typer.echo(f"Ingestion run    {artifact.ingestion_run_id}")
     finally:
         session.close()
+
+
+_COVERAGE_UNIVERSE_OPTION = typer.Option(None, "--universe", help="Universe CSV path")
+
+
+@app.command("coverage")
+def coverage_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+    universe: Path | None = _COVERAGE_UNIVERSE_OPTION,
+    public: bool = typer.Option(
+        False, "--public", help="Apply the public API licensing gate (Yahoo omitted)"
+    ),
+) -> None:
+    """Score a CSV universe against stored quotes for a reference date."""
+    from marketdata.coverage.csv import load_universe
+    from marketdata.coverage.engine import CoverageMode, evaluate_coverage, format_coverage_report
+    from marketdata.coverage.paths import default_universe_path
+    from marketdata.coverage.store import SessionCoverageStore
+
+    reference = date.fromisoformat(date_value)
+    csv_path = (
+        universe
+        if universe is not None
+        else default_universe_path(get_settings().coverage_config_dir)
+    )
+    if not csv_path.is_file():
+        raise typer.BadParameter(f"universe file not found: {csv_path}")
+    session = _session()
+    try:
+        report = evaluate_coverage(
+            load_universe(csv_path),
+            reference_date=reference,
+            store=SessionCoverageStore(session),
+            mode=CoverageMode.PUBLIC if public else CoverageMode.LOCAL,
+            universe_name=csv_path.name,
+        )
+    finally:
+        session.close()
+    typer.echo(format_coverage_report(report))

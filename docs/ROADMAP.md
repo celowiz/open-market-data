@@ -27,9 +27,9 @@ for sources that may be redistributed.
 | 5 | B3 equities ingestion (`API_ONLY` public quotes, no Parquet) | Complete |
 | 6 | B3 derivatives official settlement | Complete |
 | 7 | Yahoo local/POC provider, public exposure off | Complete |
-| 8 | Brazilian credit public prints where available | Later in MVP window |
+| 8 | Brazilian credit public prints where available | Complete |
 | 9 | Public Parquet + manifests for ODbL sources | Planned |
-| 10 | Coverage engine and `/v1/coverage` | Planned |
+| 10 | Coverage engine and `/v1/coverage` | Complete |
 | 11 | Scheduled GitHub Actions, Railway/Neon deploy, optional R2 | After core providers |
 | 12 | Historical backfill CLI (CVM HIST, Tesouro full CSV, BCB ranges, B3/COTAHIST) | Planned (after Phase 6) |
 | 13 | Next.js Data Explorer on Vercel (charts of Phase 12 series via `/v1` only) | Planned (after Phase 12) |

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import csv
+import json
 import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from io import BytesIO
+from io import BytesIO, StringIO
 from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
 
@@ -24,6 +26,18 @@ FILELIST_BY_KIND = {
 }
 MIN_ZIP_BYTES = 100
 FUTURE_TICKER_RE = re.compile(r"^(DI1|DOL|WDO|WIN|IND)[FGHJKMNQUVXZ]\d{2}$")
+BDI_EXPORT_URL = "https://arquivos.b3.com.br/bdi/table/export"
+BDI_CREDIT_TRADES_TABLE = "ConsolidatedRecords"
+BDI_CREDIT_MASTER_TABLE = "InstrumentRegistration"
+CREDIT_TYPE_MAP = {
+    "DEB": "debenture",
+    "CRI": "cri",
+    "CRI PÚBLICO": "cri",
+    "CRI PUBLICO": "cri",
+    "CRA": "cra",
+    "CRA PÚBLICO": "cra",
+    "CRA PUBLICO": "cra",
+}
 
 
 def is_mvp_future_ticker(ticker: str) -> bool:
@@ -61,6 +75,26 @@ class B3InstrumentRecord:
     isin: str | None
     name: str | None
     currency: str | None
+    maturity_date: date | None = None
+
+
+@dataclass(frozen=True)
+class B3CreditTradeRecord:
+    ticker: str
+    reference_date: date
+    last_price: Decimal
+    instrument_type: str
+    isin: str | None
+    name: str | None
+    extra: dict[str, str]
+
+
+@dataclass(frozen=True)
+class B3CreditInstrumentRecord:
+    ticker: str
+    instrument_type: str
+    isin: str | None
+    name: str | None
     maturity_date: date | None = None
 
 
@@ -133,6 +167,181 @@ def parse_instrument_master(payload: bytes) -> dict[str, B3InstrumentRecord]:
     for blob in iter_xml_blobs(payload):
         by_ticker.update(_parse_master_xml(blob))
     return by_ticker
+
+
+def credit_instrument_type(code: str | None) -> str | None:
+    if not code:
+        return None
+    return CREDIT_TYPE_MAP.get(code.strip().upper())
+
+
+def parse_otc_trade_file(payload: bytes) -> list[B3CreditTradeRecord]:
+    by_key: dict[tuple[str, date], B3CreditTradeRecord] = {}
+    for row in _bdi_rows(payload):
+        parsed = _credit_trade_from_row(row)
+        if parsed is None:
+            continue
+        key = (parsed.ticker, parsed.reference_date)
+        existing = by_key.get(key)
+        if existing is None or (
+            existing.extra.get("BusinessClass") != "EXTRAGRUPO"
+            and parsed.extra.get("BusinessClass") == "EXTRAGRUPO"
+        ):
+            by_key[key] = parsed
+    return list(by_key.values())
+
+
+def otc_payload_has_rows(payload: bytes) -> bool:
+    try:
+        return bool(_bdi_rows(payload))
+    except (B3ParseError, json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return False
+
+
+def otc_payload_report_date(payload: bytes) -> date | None:
+    try:
+        rows = _bdi_rows(payload)
+    except (B3ParseError, json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return None
+    for row in rows:
+        parsed = _parse_iso_date(row.get("TradeDate") or row.get("RptDt") or row.get("DtRef") or "")
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def parse_otc_instrument_file(payload: bytes) -> list[B3CreditInstrumentRecord]:
+    records: list[B3CreditInstrumentRecord] = []
+    seen: set[str] = set()
+    for row in _bdi_rows(payload):
+        parsed = _credit_instrument_from_row(row)
+        if parsed is None or parsed.ticker in seen:
+            continue
+        seen.add(parsed.ticker)
+        records.append(parsed)
+    return records
+
+
+def _bdi_rows(payload: bytes) -> list[dict[str, str]]:
+    stripped = payload.lstrip()
+    if not stripped:
+        return []
+    if stripped.startswith(b"{") or stripped.startswith(b"["):
+        return _rows_from_json(payload)
+    return _rows_from_csv(payload)
+
+
+def _rows_from_json(payload: bytes) -> list[dict[str, str]]:
+    data = json.loads(payload, parse_float=str, parse_int=str)
+    if isinstance(data, list):
+        return [
+            {str(key): _cell(value) for key, value in item.items()}
+            for item in data
+            if isinstance(item, dict)
+        ]
+    if not isinstance(data, dict):
+        raise B3ParseError("BDI payload is not a JSON object")
+    columns = data.get("columns") or []
+    names = [str(column.get("name") or "") for column in columns]
+    rows: list[dict[str, str]] = []
+    for raw in data.get("values") or []:
+        if not isinstance(raw, list):
+            continue
+        mapped: dict[str, str] = {}
+        for index, name in enumerate(names):
+            if not name:
+                continue
+            mapped[name] = _cell(raw[index] if index < len(raw) else None)
+        rows.append(mapped)
+    return rows
+
+
+def _rows_from_csv(payload: bytes) -> list[dict[str, str]]:
+    text = payload.decode("utf-8-sig")
+    sample = text[:1024]
+    delimiter = ";" if sample.count(";") > sample.count(",") else ","
+    reader = csv.DictReader(StringIO(text), delimiter=delimiter)
+    return [{str(key): _cell(value) for key, value in row.items() if key} for row in reader]
+
+
+def _cell(value: object) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"none", "null"}:
+        return ""
+    return text
+
+
+def _parse_iso_date(raw: str) -> date | None:
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _credit_trade_from_row(row: dict[str, str]) -> B3CreditTradeRecord | None:
+    instrument_type = credit_instrument_type(row.get("InstrumentCode") or row.get("InstrumentType"))
+    ticker = row.get("TckrSymb") or ""
+    raw_date = row.get("TradeDate") or row.get("RptDt") or ""
+    last_raw = row.get("Closing") or ""
+    trades_raw = row.get("NumberOfTrades")
+    qty_raw = row.get("Quantity")
+    if not instrument_type or not ticker or not last_raw:
+        return None
+    activity_raw = trades_raw or qty_raw or "0"
+    try:
+        trade_count = int(Decimal(activity_raw)) if activity_raw else 0
+    except (InvalidOperation, ValueError):
+        return None
+    if trade_count <= 0:
+        return None
+    try:
+        last_price = exact_decimal(last_raw)
+    except (InvalidFinancialValueError, InvalidOperation, ValueError):
+        return None
+    reference_date = _parse_iso_date(raw_date)
+    if reference_date is None:
+        return None
+    extra_fields = (
+        "Minimum",
+        "Maximum",
+        "Average",
+        "Quantity",
+        "Volume",
+        "NumberOfTrades",
+        "BusinessClass",
+        "ReferencePrice",
+        "SettlementDt",
+        "Osc",
+    )
+    extra = {field: row[field] for field in extra_fields if row.get(field)}
+    extra["source_field"] = "Closing"
+    return B3CreditTradeRecord(
+        ticker=ticker,
+        reference_date=reference_date,
+        last_price=last_price,
+        instrument_type=instrument_type,
+        isin=row.get("ISIN") or None,
+        name=row.get("Issuer") or ticker,
+        extra=extra,
+    )
+
+
+def _credit_instrument_from_row(row: dict[str, str]) -> B3CreditInstrumentRecord | None:
+    instrument_type = credit_instrument_type(row.get("InstrumentType") or row.get("InstrumentCode"))
+    ticker = row.get("TckrSymb") or ""
+    if not instrument_type or not ticker:
+        return None
+    return B3CreditInstrumentRecord(
+        ticker=ticker,
+        instrument_type=instrument_type,
+        isin=row.get("ISIN") or None,
+        name=row.get("Issuer") or ticker,
+        maturity_date=_parse_iso_date(row.get("Maturity") or ""),
+    )
 
 
 def _parse_price_xml(blob: bytes) -> list[B3PriceRecord]:
@@ -309,6 +518,35 @@ class B3Provider:
             response = http_client.get(url)
             response.raise_for_status()
             validate_b3_zip(response.content)
+            return response
+        finally:
+            if owns_client:
+                http_client.close()
+
+    def fetch_public_table(
+        self, table_name: str, reference_date: date, *, client: httpx.Client | None = None
+    ) -> httpx.Response:
+        settings = get_settings()
+        headers = {"User-Agent": f"{settings.http_user_agent}/{__version__}"}
+        timeout = max(settings.http_timeout_seconds, 120)
+        owns_client = client is None
+        http_client = client or httpx.Client(
+            timeout=timeout, follow_redirects=True, headers=headers
+        )
+        try:
+            response = http_client.post(
+                BDI_EXPORT_URL,
+                json={
+                    "Name": table_name,
+                    "Date": reference_date.isoformat(),
+                    "FinalDate": reference_date.isoformat(),
+                    "ClientId": "",
+                    "Filters": None,
+                },
+            )
+            response.raise_for_status()
+            if not response.content.strip():
+                raise B3ParseError(f"BDI table {table_name} returned an empty payload")
             return response
         finally:
             if owns_client:

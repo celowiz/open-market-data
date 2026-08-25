@@ -86,6 +86,23 @@ WDO settlement follows DOL; WIN settlement follows IND. Store the official
 published settlement; do not recompute it unless a later phase adds a validated
 derived series with its own semantics.
 
+### B3 credit (OTC consolidated)
+
+Official public prints are Boletim Diário `ConsolidatedRecords` (Negociação
+consolidada / Balcão), not BVBG.186 and not Pesquisa por Pregão Renda Fixa
+Privada.
+
+- `Closing` (Último Preço / Last Price) → `LAST`
+- `Average` (Preço Médio) → metadata only
+- `ReferencePrice` (Preço de Referência) → **not ingested as a quote** (B3 MtM
+  if available, else VWAP of the day’s trades)
+- RF bulletin `PU_MERCADO` → **not ingested** (reference / model price)
+
+The JSON field is named Closing; it is last observed price, not
+`PriceType.CLOSE`. Persist a quote only when Último Preço is present and there
+was at least one trade. Absence is a `quality_events` row
+(`NO_PUBLIC_PRICE`), never a zero or a carried-forward last.
+
 ### Tesouro Direto (CKAN CSV)
 
 These are Tesouro Direto retail morning quotes, not ANBIMA indicative rates.
@@ -124,8 +141,9 @@ Never annualize daily Selic/CDI silently.
 2. Never treat missing data as zero.
 3. Never carry the last known price forward and present it as today.
 4. Absence on a weekend or holiday is not necessarily an error.
-5. `NO_PUBLIC_PRICE` (coverage later) is used when there was no public print,
-   not as a fake last trade.
+5. `NO_PUBLIC_PRICE` / coverage `NO_TRADE` is used when there was no public print,
+   not as a fake last trade. Coverage never copies a prior-day quote into today's
+   `price`; that case is `STALE`.
 6. Multiple quotes per instrument and date are allowed when they have different
    `price_type` or `source_id`.
 

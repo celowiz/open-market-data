@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     public_dataset_publication_enabled: bool = False
     public_dataset_format: str = "parquet"
 
+    coverage_config_dir: Path = Path(".")
+
     cvm_provider_enabled: bool = True
     b3_provider_enabled: bool = True
     tesouro_provider_enabled: bool = True

@@ -120,6 +120,11 @@ Validated August 2026 against official portals. This is not legal advice.
 - Enforce in code, not only in docs. See
   [`adr/0013-yahoo-gating.md`](adr/0013-yahoo-gating.md).
 
+`config/instruments.example.csv` US ticker lists are a **coverage experiment
+snapshot**, not redistribution of S&P / Nasdaq / Dow index constituent products.
+B3 IBOV/SMLL rows snapshot B3 theoretical-portfolio tickers; they are not a
+licensed index feed. See [`COVERAGE.md`](COVERAGE.md).
+
 ### ANBIMA
 
 - Provider stub exists conceptually with `enabled=false`

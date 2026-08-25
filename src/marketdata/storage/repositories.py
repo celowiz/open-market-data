@@ -10,6 +10,7 @@ from marketdata.domain.enums import (
     IdentifierType,
     IngestionRunStatus,
     PriceType,
+    QualitySeverity,
     QualityStatus,
     RedistributionPolicy,
 )
@@ -21,6 +22,7 @@ from marketdata.storage.models import (
     InstrumentRow,
     MarketSeriesObservationRow,
     MarketSeriesRow,
+    QualityEventRow,
     RawArtifactRow,
     SourceRow,
 )
@@ -442,6 +444,44 @@ def get_or_create_market_series(
         source_id=source_id,
         unit=unit,
         value_semantics=PriceType.REFERENCE.value,
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
+def record_quality_event(
+    session: Session,
+    *,
+    ingestion_run_id: UUID | None,
+    instrument_id: UUID | None,
+    source_id: UUID | None,
+    event_type: str,
+    message: str,
+    severity: QualitySeverity = QualitySeverity.INFO,
+    extra: dict | None = None,
+) -> QualityEventRow | None:
+    metadata = extra or {}
+    existing_rows = session.scalars(
+        select(QualityEventRow).where(
+            QualityEventRow.event_type == event_type,
+            QualityEventRow.instrument_id == instrument_id,
+            QualityEventRow.source_id == source_id,
+        )
+    )
+    for existing in existing_rows:
+        if existing.extra.get("reference_date") == metadata.get("reference_date"):
+            return None
+    row = QualityEventRow(
+        id=uuid4(),
+        ingestion_run_id=ingestion_run_id,
+        instrument_id=instrument_id,
+        source_id=source_id,
+        severity=severity.value,
+        event_type=event_type,
+        message=message,
+        extra=metadata,
+        created_at=datetime.now(UTC),
     )
     session.add(row)
     session.flush()

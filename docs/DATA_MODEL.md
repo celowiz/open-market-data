@@ -297,5 +297,5 @@ Desired public resources (when licensing allows):
 - fund NAVs
 - rates / series
 - sources
-- coverage (later)
+- coverage
 - datasets (later)

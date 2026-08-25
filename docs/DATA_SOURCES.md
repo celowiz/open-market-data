@@ -163,7 +163,23 @@ BVBG.187 inner ZIPs may contain two XML files with the same tickers and
 settlement values (near-duplicate payloads). Deduplicate by ticker and
 reference date when parsing.
 
-`arquivos.b3.com.br` uses a two-step token download.
+`arquivos.b3.com.br` uses a two-step token download for some listed files.
+After EC 007/2025-VTEC (Public Data page deactivated 2026-01-19), OTC taxonomy
+names `OTCTradeInformationConsolidated` / `OTCInstrumentsConsolidated` return
+HTTP 400. Credit prints are fetched from Boletim Diário table export:
+
+```text
+POST https://arquivos.b3.com.br/bdi/table/export
+{"Name":"<table>","Date":"YYYY-MM-DD","FinalDate":"YYYY-MM-DD","ClientId":"","Filters":null}
+```
+
+Verified table names (2026-08-24): `ConsolidatedRecords` (Negociação
+consolidada) and `InstrumentRegistration` (Cadastro de instrumentos). Captcha
+was not required for this POST.
+
+Pesquisa por Pregão also lists **Renda Fixa Privada** (`RF{DDMMYY}`). That
+bulletin’s `PU_MERCADO` is a reference / model price, not a public print. Do
+not ingest it as `LAST`.
 
 ### Files to use
 
@@ -174,10 +190,12 @@ reference date when parsing.
 | BVBG.028.02 | Instrument master at session start |
 | BVBG.086.01 | Full price report, three intraday snapshots; use snapshot 03 |
 | BVBG.087.01 | Index / BDR / IOPV |
+| BDI `ConsolidatedRecords` | OTC credit prints (DEB / CRI / CRA Último Preço) |
+| BDI `InstrumentRegistration` | OTC cadastro for the CREDIT universe |
 | COTAHIST | Equities **Phase 12** backfill; price-correction flag; no derivative settlement |
 
 Format: XML inside nested ZIP (ISO 20022-style BVMF messages), except COTAHIST
-(fixed-width text in ZIP).
+(fixed-width text in ZIP) and BDI OTC tables (JSON from the table export POST).
 
 Publication (trading days, BRT, approximate, OC 040/2025-PRE):
 
@@ -197,6 +215,10 @@ See [`PRICE_SEMANTICS.md`](PRICE_SEMANTICS.md). Equities: `LastPric` → `LAST`.
 Derivatives: `AdjstdQt` → `OFFICIAL_SETTLEMENT` (PU). `AdjstdQtTax` is official
 rate metadata on the same quote (`unit` documents PU vs percent per year); do
 not convert and do not map `LastPric` to settlement.
+
+Phase 8 OTC credit: BDI `ConsolidatedRecords` `Closing` (Último Preço) →
+`LAST`. Do not map `ReferencePrice` or RF bulletin `PU_MERCADO` to `LAST`.
+BVBG.186 is not the credit file.
 
 Phase 6 persists settlement only for DI1, DOL, WDO, WIN, and IND futures
 matching `^(DI1|DOL|WDO|WIN|IND)[FGHJKMNQUVXZ]\d{2}$`. Other 187 products

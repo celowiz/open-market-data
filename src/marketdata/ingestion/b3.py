@@ -1,6 +1,7 @@
 from datetime import date
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from marketdata.domain.enums import (
@@ -11,22 +12,30 @@ from marketdata.domain.enums import (
     RedistributionPolicy,
 )
 from marketdata.providers.b3 import (
+    BDI_CREDIT_MASTER_TABLE,
+    BDI_CREDIT_TRADES_TABLE,
+    BDI_EXPORT_URL,
     B3ParseError,
     B3Provider,
     is_mvp_future_ticker,
+    otc_payload_has_rows,
+    otc_payload_report_date,
     parse_instrument_master,
+    parse_otc_instrument_file,
+    parse_otc_trade_file,
     parse_price_report,
     parse_settlement_report,
     pregao_url,
     validate_b3_zip,
 )
-from marketdata.storage.models import InstrumentRow
+from marketdata.storage.models import InstrumentQuoteRow, InstrumentRow
 from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
 from marketdata.storage.repositories import (
     attach_identifier,
     finish_ingestion_run,
     get_or_create_instrument_by_key,
     get_or_create_source,
+    record_quality_event,
     resolve_instrument_id,
     start_ingestion_run,
     store_raw_artifact,
@@ -48,6 +57,8 @@ def ingest_b3(
     price_payload: bytes | None = None,
     master_payload: bytes | None = None,
     derivatives_payload: bytes | None = None,
+    credit_trades_payload: bytes | None = None,
+    credit_master_payload: bytes | None = None,
 ) -> dict[str, int | str]:
     b3 = provider or B3Provider()
     object_store = storage or build_object_storage()
@@ -289,6 +300,156 @@ def ingest_b3(
                         if instrument is not None and instrument.maturity_date is None:
                             instrument.maturity_date = info.maturity_date
 
+        credit_trades_bytes, credit_trades_url, credit_trades_status = _load_otc_table(
+            b3,
+            table_name=BDI_CREDIT_TRADES_TABLE,
+            reference_date=reference_date,
+            payload=credit_trades_payload,
+            live=price_payload is None,
+        )
+        credit_master_bytes, credit_master_url, credit_master_status = _load_otc_table(
+            b3,
+            table_name=BDI_CREDIT_MASTER_TABLE,
+            reference_date=reference_date,
+            payload=credit_master_payload,
+            live=price_payload is None,
+        )
+        credit_quote_keys: set[tuple[str, date]] = set()
+        if credit_trades_bytes is not None:
+            trades_key = (
+                f"raw/b3/year={reference_date.year:04d}/month={reference_date.month:02d}/"
+                f"otc_trades_{reference_date.isoformat()}.json"
+            )
+            trades_uri = object_store.store(
+                trades_key, credit_trades_bytes, content_type="application/json"
+            )
+            credit_artifact = store_raw_artifact(
+                session,
+                source_id=source.id,
+                ingestion_run_id=run.id,
+                source_url=credit_trades_url,
+                payload=credit_trades_bytes,
+                storage_uri=trades_uri,
+                filename=f"otc_trades_{reference_date.isoformat()}.json",
+                content_type="application/json",
+                http_status=credit_trades_status,
+                etag=None,
+                last_modified=None,
+                reference_date=reference_date,
+            )
+            artifacts += 1
+            try:
+                credit_trades = parse_otc_trade_file(credit_trades_bytes)
+            except (B3ParseError, ValueError):
+                rejected += 1
+                credit_trades = []
+            parsed += len(credit_trades)
+            for index, record in enumerate(credit_trades, start=1):
+                instrument = _upsert_credit_instrument(
+                    session,
+                    source_id=source.id,
+                    ticker=record.ticker,
+                    instrument_type=record.instrument_type,
+                    name=record.name or record.ticker,
+                    isin=record.isin,
+                    maturity_date=None,
+                )
+                action = upsert_quote(
+                    session,
+                    instrument_id=instrument.id,
+                    source_id=source.id,
+                    reference_date=record.reference_date,
+                    value=record.last_price,
+                    price_type=PriceType.LAST,
+                    artifact=credit_artifact,
+                    ingestion_run_id=run.id,
+                    currency="BRL",
+                    unit="BRL",
+                    extra=record.extra,
+                )
+                credit_quote_keys.add((record.ticker, record.reference_date))
+                if action == "inserted":
+                    inserted += 1
+                elif action == "updated":
+                    updated += 1
+                else:
+                    skipped += 1
+                if index % 500 == 0:
+                    session.flush()
+
+        if credit_master_bytes is not None:
+            master_otc_key = (
+                f"raw/b3/year={reference_date.year:04d}/month={reference_date.month:02d}/"
+                f"otc_instruments_{reference_date.isoformat()}.json"
+            )
+            master_otc_uri = object_store.store(
+                master_otc_key, credit_master_bytes, content_type="application/json"
+            )
+            store_raw_artifact(
+                session,
+                source_id=source.id,
+                ingestion_run_id=run.id,
+                source_url=credit_master_url,
+                payload=credit_master_bytes,
+                storage_uri=master_otc_uri,
+                filename=f"otc_instruments_{reference_date.isoformat()}.json",
+                content_type="application/json",
+                http_status=credit_master_status,
+                etag=None,
+                last_modified=None,
+                reference_date=reference_date,
+            )
+            artifacts += 1
+            try:
+                cadastro = parse_otc_instrument_file(credit_master_bytes)
+            except (B3ParseError, ValueError):
+                rejected += 1
+                cadastro = []
+            for record in cadastro:
+                instrument = _upsert_credit_instrument(
+                    session,
+                    source_id=source.id,
+                    ticker=record.ticker,
+                    instrument_type=record.instrument_type,
+                    name=record.name or record.ticker,
+                    isin=record.isin,
+                    maturity_date=record.maturity_date,
+                )
+                if _should_record_credit_absence(
+                    reference_date=reference_date,
+                    trades_payload=credit_trades_bytes,
+                ):
+                    absence_date = _credit_absence_date(
+                        credit_trades_bytes, fallback=reference_date
+                    )
+                    has_quote = (record.ticker, absence_date) in credit_quote_keys
+                    if not has_quote:
+                        existing_quote = session.scalar(
+                            select(InstrumentQuoteRow.id).where(
+                                InstrumentQuoteRow.instrument_id == instrument.id,
+                                InstrumentQuoteRow.source_id == source.id,
+                                InstrumentQuoteRow.reference_date == absence_date,
+                                InstrumentQuoteRow.price_type == PriceType.LAST.value,
+                            )
+                        )
+                        has_quote = existing_quote is not None
+                    if not has_quote:
+                        record_quality_event(
+                            session,
+                            ingestion_run_id=run.id,
+                            instrument_id=instrument.id,
+                            source_id=source.id,
+                            event_type="NO_PUBLIC_PRICE",
+                            message=(
+                                f"No public last price for {record.ticker} "
+                                f"on {absence_date.isoformat()}"
+                            ),
+                            extra={
+                                "reference_date": absence_date.isoformat(),
+                                "ticker": record.ticker,
+                            },
+                        )
+
         run.artifacts_downloaded = artifacts
         run.records_parsed = parsed
         run.records_inserted = inserted
@@ -329,3 +490,78 @@ def _load_file(
         else pregao_url(kind, reference_date)
     )
     return response.content, url, response.status_code
+
+
+def _load_otc_table(
+    provider: B3Provider,
+    *,
+    table_name: str,
+    reference_date: date,
+    payload: bytes | None,
+    live: bool,
+) -> tuple[bytes | None, str, int | None]:
+    url = BDI_EXPORT_URL
+    if payload is not None:
+        return payload, url, 200
+    if not live:
+        return None, url, None
+    try:
+        response = provider.fetch_public_table(table_name, reference_date)
+    except (B3ParseError, httpx.HTTPError):
+        return None, url, None
+    response_url = str(response.request.url) if response.request is not None else url
+    return response.content, response_url, response.status_code
+
+
+def _upsert_credit_instrument(
+    session: Session,
+    *,
+    source_id,
+    ticker: str,
+    instrument_type: str,
+    name: str,
+    isin: str | None,
+    maturity_date: date | None,
+) -> InstrumentRow:
+    instrument = get_or_create_instrument_by_key(
+        session,
+        source_id=source_id,
+        source_key=ticker,
+        asset_class=AssetClass.CREDIT,
+        instrument_type=instrument_type,
+        name=name,
+        currency="BRL",
+        maturity_date=maturity_date,
+    )
+    if maturity_date is not None and instrument.maturity_date is None:
+        instrument.maturity_date = maturity_date
+    attach_identifier(
+        session,
+        instrument_id=instrument.id,
+        identifier_type=IdentifierType.TICKER,
+        identifier_value=ticker,
+        source_id=source_id,
+    )
+    if isin:
+        attach_identifier(
+            session,
+            instrument_id=instrument.id,
+            identifier_type=IdentifierType.ISIN,
+            identifier_value=isin,
+            source_id=source_id,
+        )
+    return instrument
+
+
+def _should_record_credit_absence(*, reference_date: date, trades_payload: bytes | None) -> bool:
+    if trades_payload is None or not trades_payload.strip():
+        return False
+    if reference_date.weekday() >= 5:
+        return False
+    return otc_payload_has_rows(trades_payload)
+
+
+def _credit_absence_date(trades_payload: bytes | None, *, fallback: date) -> date:
+    if trades_payload is None:
+        return fallback
+    return otc_payload_report_date(trades_payload) or fallback

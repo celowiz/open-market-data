@@ -20,6 +20,9 @@ venv/
 # Local data
 data/
 
+# Operator coverage universe (example file is committed)
+config/instruments.csv
+
 # IDE / OS
 .DS_Store
 Thumbs.db

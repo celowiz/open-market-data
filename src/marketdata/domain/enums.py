@@ -70,6 +70,24 @@ class IngestionRunStatus(StrEnum):
     PARTIAL = "partial"
 
 
+class CoverageStatus(StrEnum):
+    PRICED = "PRICED"
+    MISSING = "MISSING"
+    RESTRICTED = "RESTRICTED"
+
+
+class MissingReason(StrEnum):
+    UNSUPPORTED = "UNSUPPORTED"
+    NO_DATA = "NO_DATA"
+    NO_TRADE = "NO_TRADE"
+    MAPPING_ERROR = "MAPPING_ERROR"
+    SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
+    STALE = "STALE"
+    INVALID_VALUE = "INVALID_VALUE"
+    NOT_PUBLISHED_YET = "NOT_PUBLISHED_YET"
+    REDISTRIBUTION_RESTRICTED = "REDISTRIBUTION_RESTRICTED"
+
+
 PUBLIC_REDISTRIBUTION_POLICIES = frozenset(
     {
         RedistributionPolicy.PUBLIC,

@@ -1,0 +1,8 @@
+# snapshot_date=2026-08-21
+# Tiny coverage fixture. Not a live index membership list.
+instrument_id,asset_class,ticker,isin,cnpj_fundo_classe,title_type,maturity_date,exchange,currency,preferred_provider,universe
+,equity,PETR4,BRPETRACNOR9,,,,B3,BRL,b3,ibov
+,future,DI1F27,,,,2027-01-04,B3,BRL,b3,b3_futures
+,equity,AAPL,,,,,NASDAQ,USD,yahoo,ndx
+,equity,UNKNOWN1,,,,,B3,BRL,b3,ibov
+,fund,CVMSTUB,,,,,B3,BRL,cvm,

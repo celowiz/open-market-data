@@ -153,7 +153,7 @@ src/marketdata/
   quality/         Validation and quality events.
   storage/         Database session, repositories, object-store implementations.
   datasets/        Parquet + manifest publisher (later).
-  coverage/        Universe coverage engine (later).
+  coverage/        Universe coverage engine (CSV vs stored quotes).
   api/             FastAPI app, routes, response schemas.
   cli/             Typer CLI.
 ```

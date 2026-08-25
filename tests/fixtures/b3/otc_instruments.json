@@ -1,0 +1,18 @@
+{
+  "name": "InstrumentRegistration",
+  "columns": [
+    {"name": "DtRef"},
+    {"name": "TckrSymb"},
+    {"name": "ISIN"},
+    {"name": "Issuer"},
+    {"name": "InstrumentType"},
+    {"name": "Maturity"}
+  ],
+  "values": [
+    ["2026-08-21T00:00:00", "JALL14", "BRJALLDBS036", "JALLES MACHADO S.A.", "DEB", "2028-07-15T00:00:00"],
+    ["2026-08-21T00:00:00", "VIRG24", "BRIMWLCRIJ68", "VIRGO SECURITIZADORA", "CRI", "2030-01-01T00:00:00"],
+    ["2026-08-21T00:00:00", "CRA0240086L", "BRIMWLCRA8S4", "VIRGO SECURITIZADORA", "CRA", "2027-12-01T00:00:00"],
+    ["2026-08-21T00:00:00", "SILENT1", "BRSILNDBS001", "EMISSOR SEM PRINT", "DEB", "2029-05-20T00:00:00"],
+    ["2026-08-21T00:00:00", "CDB123", "BRCDBACDB001", "BANCO EXEMPLO", "CDB", "2027-01-01T00:00:00"]
+  ]
+}

@@ -546,14 +546,28 @@ public flags false; tests that public routes omit Yahoo.
 
 ## Phase 8 — Brazilian credit
 
-**Objective:** Debêntures / CRI / CRA public prints where B3 publishes them.
+**Objective:** Persist last-trade quotes for B3-published debênture / CRI / CRA
+prints, and record `NO_PUBLIC_PRICE` absence when the OTC trades file was
+published but an instrument in the cadastro has no usable Último Preço.
 
-**Scope:** LAST_TRADE only when a trade exists; `NO_PUBLIC_PRICE` otherwise;
-no silent stale last.
+**Status:** Complete
+
+**Scope:**
+
+- Extend `marketdata ingest b3 --date` (no new provider or `/v1/credit`)
+- Boletim Diário POST export: `ConsolidatedRecords` + `InstrumentRegistration`
+- `Closing` / Último Preço → `PriceType.LAST` via `exact_decimal`; unit `BRL`
+- Filter DEB / CRI / CRA (including CRI/CRA PÚBLICO); ignore CDB and RF ETFs
+- Collapse INTRAGRUPO/EXTRAGRUPO groupings to one LAST per instrument + date
+- Upsert CREDIT instruments from cadastro; quality_event absence, not a quote
+- Keep source `b3` flags: `API_ONLY`, public API on, Parquet off
+- Serve through existing `GET /v1/quotes` and `api/access.py`
 
 **Depends on:** Phases 5–6
 
-**Out of scope:** Fair-value models, ANBIMA prices
+**Out of scope:** Fair-value models, ANBIMA, CALC, UP2DATA Debêntures MTM,
+BVBG.186 for credit, RF bulletin `PU_MERCADO` as LAST, `/v1/coverage`
+(Phase 10)
 
 ---
 
@@ -575,6 +589,8 @@ published earlier.
 ## Phase 10 — Coverage engine
 
 **Objective:** Percent of a CSV universe priced on a date.
+
+**Status:** Complete
 
 **Scope:** `config/instruments.example.csv`; CLI `coverage`; `GET /v1/coverage`;
 missing reasons from the brief (UNSUPPORTED, NO_DATA, NO_TRADE, ...)

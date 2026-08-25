@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from marketdata import __version__
+from marketdata.api.routes.coverage import router as coverage_router
 from marketdata.api.routes.funds import router as funds_router
 from marketdata.api.routes.health import router as health_router
 from marketdata.api.routes.quotes import router as quotes_router
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(funds_router, prefix=settings.api_v1_prefix)
     app.include_router(quotes_router, prefix=settings.api_v1_prefix)
     app.include_router(series_router, prefix=settings.api_v1_prefix)
+    app.include_router(coverage_router, prefix=settings.api_v1_prefix)
     return app
 
 

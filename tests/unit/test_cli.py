@@ -32,3 +32,17 @@ def test_cli_ingest_help_includes_yahoo() -> None:
     result = runner.invoke(app, ["ingest", "--help"])
     assert result.exit_code == 0
     assert "yahoo" in result.output
+
+
+def test_cli_coverage_help() -> None:
+    result = runner.invoke(app, ["coverage", "--help"])
+    assert result.exit_code == 0
+    assert "--date" in result.output
+    assert "--universe" in result.output
+    assert "--public" in result.output
+
+
+def test_cli_ingest_b3_help_mentions_credit() -> None:
+    result = runner.invoke(app, ["ingest", "b3", "--help"])
+    assert result.exit_code == 0
+    assert "credit" in result.output.lower()

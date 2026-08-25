@@ -59,3 +59,7 @@ GET /v1/quotes/AAPL?source=yahoo → 404
 
 Inspect locally with the database or `marketdata explain AAPL --date YYYY-MM-DD`.
 There is no `/v1/yahoo` route.
+
+Local `marketdata coverage` may count Yahoo `CLOSE` as priced. `GET /v1/coverage`
+keeps Yahoo-only names in the universe but marks them
+`REDISTRIBUTION_RESTRICTED` with `price=null`. See [`COVERAGE.md`](../COVERAGE.md).

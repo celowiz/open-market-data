@@ -55,6 +55,16 @@ Health check (once the API is running):
 curl http://127.0.0.1:8000/v1/health
 ```
 
+After PostgreSQL is configured and quotes are ingested:
+
+```bash
+uv run marketdata coverage --date 2026-08-21
+curl "http://127.0.0.1:8000/v1/coverage?date=2026-08-21"
+```
+
+Coverage scores a CSV universe against stored quotes. It does not fetch
+providers. See [`docs/COVERAGE.md`](docs/COVERAGE.md).
+
 PostgreSQL is required for migrations and later ingestion, not for the health
 endpoint or unit tests.
 
