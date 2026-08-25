@@ -1,3 +1,4 @@
+import click
 from typer.testing import CliRunner
 
 from marketdata import __version__
@@ -37,9 +38,11 @@ def test_cli_ingest_help_includes_yahoo() -> None:
 def test_cli_coverage_help() -> None:
     result = runner.invoke(app, ["coverage", "--help"])
     assert result.exit_code == 0
-    assert "--date" in result.output
-    assert "--universe" in result.output
-    assert "--public" in result.output
+    # Rich may insert ANSI inside flags (e.g. between the hyphens of --date).
+    output = click.unstyle(result.output)
+    assert "--date" in output
+    assert "--universe" in output
+    assert "--public" in output
 
 
 def test_cli_ingest_b3_help_mentions_credit() -> None:
