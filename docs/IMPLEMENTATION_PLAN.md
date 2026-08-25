@@ -27,7 +27,8 @@ Alembic, PostgreSQL, httpx, tenacity, Typer, pytest, Ruff, Pyright.
 - Never commit secrets. Never log `DATABASE_URL`.
 - Local development must not require Neon, Railway, or Cloudflare.
 - Do not implement Next.js, auth, billing, real-time, MCP, SDKs, ClickHouse,
-  Airflow, Kafka, or Kubernetes in these phases.
+  Airflow, Kafka, or Kubernetes until the phase that names them (Next.js is
+  Phase 13 only).
 - English for code, APIs, and these docs.
 - Prefer complete vertical slices over partial platform-wide work.
 
@@ -76,6 +77,8 @@ flowchart LR
   P9[Phase9_Parquet]
   P10[Phase10_Coverage]
   P11[Phase11_Deploy_CI]
+  P12[Phase12_Historical_Backfill]
+  P13[Phase13_Data_Explorer]
 
   P0 --> P1 --> P2
   P2 --> P3
@@ -92,12 +95,17 @@ flowchart LR
   P9 --> P10
   P2 --> P11
   P9 --> P11
+  P6 --> P12
+  P12 --> P13
+  P12 --> P9
+  P11 --> P13
 ```
 
 ### Sequential (must not parallelize)
 
 - Phase 0 → Phase 1 → Phase 2
 - Phase 5 → Phase 6 (shared B3 adapter)
+- Phase 12 → Phase 13 (Explorer needs stored history)
 
 ### Safe parallel after Phase 2 (isolated worktrees)
 
@@ -115,6 +123,7 @@ flowchart LR
 - Phase 5 and Phase 6
 - Phase 9 publisher while quote/series schema is still changing
 - Phase 11 deploy while migrations are in flux
+- Phase 13 Explorer before Phase 12 can serve multi-date `/v1` history
 
 ### Worktree rule
 
@@ -352,7 +361,8 @@ commit
 **Risks:** mercados pre-1.0; cadastral class vs fund CNPJ mismatch; CVM
 throttling. Mitigate: quotes-first, cadastral later; polite concurrency.
 
-**Out of scope:** Full cadastral sync, Parquet, GitHub ingest workflow, Tesouro/B3
+**Out of scope:** Full cadastral sync, Parquet, GitHub ingest workflow,
+Tesouro/B3, CVM `HIST/` yearly archive (Phase 12)
 
 **Subagents:**
 
@@ -411,7 +421,8 @@ parent serializes)
 
 **Risks:** Header drift; NTN-B1 identity; confusing ANBIMA with Tesouro
 
-**Out of scope:** REST Data Lake, ANBIMA, curve stripping
+**Out of scope:** REST Data Lake, ANBIMA, curve stripping, unfiltered
+full-CSV history load (Phase 12 `backfill tesouro`)
 
 **Subagents:** Explore current CKAN resource URL; Testing parsers; Review
 price types
@@ -453,7 +464,8 @@ price types
 
 **Risks:** Rate limits; unit confusion; pandas leakage into domain
 
-**Out of scope:** Expectativas, full SGS catalog, IPCA (later)
+**Out of scope:** Expectativas, full SGS catalog, IPCA (later), multi-year
+range ingest CLI (Phase 12 `backfill bcb`; keep the 10-year chunk helper)
 
 **Subagents:** Explore python-bcb APIs; Testing unit conversions; Review domain
 boundary
@@ -474,7 +486,7 @@ from BVBG.186 + instrument master BVBG.028.02.
 - `LastPric` → `LAST`; never Adj Close
 - Sync identifiers from 028.02
 - Source flags: ingest on, **public API/datasets off** on official instance
-- COTAHIST optional backfill, documented as different semantics
+- COTAHIST deferred to Phase 12 (different semantics; not a substitute for 186)
 - Validate ZIP size (B3 may 200-empty)
 
 **Deliverables:** Local API or DB query for PETR4 history from B3 while public
@@ -484,7 +496,8 @@ gate remains off (or local-only API)
 
 **Risks:** Prefix opacity; license; 186 vs 086 divergence
 
-**Out of scope:** Public Parquet of B3; derivatives settlement; corporate actions
+**Out of scope:** Public Parquet of B3; derivatives settlement; corporate
+actions; COTAHIST / multi-year B3 backfill (Phase 12)
 
 **Subagents:** Explore BVBG samples (research); Review redistribution flags
 
@@ -507,7 +520,8 @@ gate remains off (or local-only API)
 
 **Depends on:** Phase 5
 
-**Out of scope:** Recomputing settlement from curves
+**Out of scope:** Recomputing settlement from curves; multi-year BVBG.187
+backfill (Phase 12)
 
 **Worktrees:** None concurrent with Phase 5
 
@@ -525,6 +539,8 @@ public flags false; tests that public routes omit Yahoo.
 **Depends on:** Prefer after Phase 6; may wait so it does not distract
 
 **Out of scope:** Public redistribution
+
+**Status:** Complete
 
 ---
 
@@ -548,9 +564,11 @@ no silent stale last.
 **Scope:** Publisher checks `redistribution_policy` and
 `public_dataset_enabled`; atomic latest manifest; skip B3/Yahoo.
 
-**Depends on:** Phases 2–4 data; B3 only if ADR-0014 changes
+**Depends on:** Phases 2–4 data; B3 only if ADR-0014 changes. Full-history
+Parquet is more useful after Phase 12, but a partial serving snapshot may be
+published earlier.
 
-**Out of scope:** Public B3/Yahoo files
+**Out of scope:** Public B3/Yahoo files; implementing `marketdata backfill`
 
 ---
 
@@ -561,7 +579,8 @@ no silent stale last.
 **Scope:** `config/instruments.example.csv`; CLI `coverage`; `GET /v1/coverage`;
 missing reasons from the brief (UNSUPPORTED, NO_DATA, NO_TRADE, ...)
 
-**Depends on:** Core providers (2–7 as available)
+**Depends on:** Core providers (2–7 as available). Coverage over long calendars
+is more meaningful after Phase 12, but a one-day universe still works.
 
 ---
 
@@ -571,13 +590,136 @@ missing reasons from the brief (UNSUPPORTED, NO_DATA, NO_TRADE, ...)
 Railway + Neon with **explicit user approval**, optional R2 when enabled.
 
 **Scope:** `.github/workflows/ingest-*.yml` with `workflow_dispatch`;
-`docs/DEPLOYMENT.md`; MkDocs later if requested.
+`docs/DEPLOYMENT.md`; MkDocs later if requested. Daily jobs call
+`marketdata ingest … --date`. When Phase 12 exists, add `backfill.yml` that
+invokes `marketdata backfill` (do not reimplement history fetch in YAML).
 
 **Infrastructure (approval required):** Neon project/branch, Railway service,
 Cloudflare R2, custom domains.
 
 **Out of scope:** Creating paid resources without approval; R2 before it is
-enabled.
+enabled; CVM `HIST/` parser, Tesouro unfiltered CSV load, BCB multi-year CLI,
+COTAHIST (all Phase 12). Next.js Explorer is Phase 13.
+
+---
+
+## Phase 12 — Historical backfill
+
+**Objective:** Fill PostgreSQL (local or a Neon branch via `DATABASE_URL`) with
+multi-year series so `/v1` history routes return real price paths, not a
+single ingest day. This is the CLI/data milestone that Phase 13 charts depend
+on. It is **not** the same as Phase 11 daily cron.
+
+**Why this phase, not 7–11:** Phases 2–6 already ingest one day (or a CVM
+monthly window). Yahoo, credit, Parquet, coverage, and official deploy do not
+unblock historical quotes. Keep 7–11 numbering stable (ADRs cite them).
+
+**May start after Phase 6** without waiting for 7–11. Point `DATABASE_URL` at
+a Neon **dev branch** when the goal is to inspect hosted tables. Object
+storage stays local unless R2 is already approved.
+
+**Scope:**
+
+- CLI: `marketdata backfill <provider> --start YYYY-MM-DD --end YYYY-MM-DD`
+  (and optional `marketdata ingest all --date` for the daily path only)
+- Per-provider strategies (do not use one naive date loop for every source):
+  - **Tesouro:** download the CKAN CSV once; persist every `Data Base` in
+    range (today `--date` filters the file down to one day)
+  - **BCB:** use existing `chunk_date_range` (≤10 years per SGS call); one
+    run covers `--start`/`--end`, not a single calendar day
+  - **CVM:** monthly ZIPs under `DADOS/` for the rolling window; yearly
+    `DADOS/HIST/inf_diario_fi_{YYYY}.zip` for older years; one month (or one
+    HIST year) per checkpointed commit
+  - **B3:** trading-day loop of BVBG.186/187/028 with polite delays; skip
+    empty 22-byte ZIPs; **COTAHIST** for deep equities history, documented as
+    a different file and correction-flag semantics (never treat as 186)
+- Checkpointing (resume from last successful month/day), retries, concurrency
+  caps, batched flushes (current CVM ingest holds a whole month in one
+  session — that will OOM on a long backfill)
+- Respect `redistribution_policy`: B3 history may land in Neon/API (`API_ONLY`)
+  but must not be published as Parquet
+
+**Deliverables:** After a bounded backfill, these queries return a dated
+series, not a single point:
+
+- `GET /v1/quotes/LTN:2029-01-01/history` (Tesouro)
+- `GET /v1/series/BCB:CDI_DAILY/observations` over years
+- `GET /v1/funds/{cnpj}/quotes` across many `DT_COMPTC`
+- `GET /v1/quotes/PETR4/history?source=b3` for the backfilled window
+
+**Files:** `cli/main.py` (backfill typer group), `ingestion/*` range/HIST/COTAHIST
+paths, provider fetch helpers, `docs/providers/*.md`, tests for range
+filtering, HIST ZIP layout, 10-year BCB chunks, empty B3 days
+
+**Infrastructure:** Local PostgreSQL or Neon via `DATABASE_URL`. No new paid
+Neon/Railway/R2 resources in this phase unless the user already approved them
+for Phase 11.
+
+**Tests:** Tesouro range vs single-day filter; BCB chunk boundaries; CVM HIST
+year vs monthly URL; B3 weekend/empty ZIP skip; idempotent resume; no float
+prices
+
+**Acceptance criteria:**
+
+1. `uv run marketdata backfill --help` lists cvm, tesouro, bcb, b3
+2. Tesouro backfill does **not** re-download the CSV once per calendar day
+3. BCB backfill uses ≤10-year windows
+4. CVM HIST years are fetched from `…/DADOS/HIST/`, not invented monthly URLs
+5. Re-running the same range upserts/skips rather than duplicating identical
+   quotes
+6. CI unit tests green; live backfill is `@pytest.mark.integration`
+
+**Depends on:** Phases 2–6
+
+**Risks:** CVM full history is tens of millions of `instrument_quotes` rows
+(Neon storage/compute); B3 Pesquisa por Pregão is not a 20-year archive;
+COTAHIST ≠ BVBG.186; source rate limits
+
+**Out of scope:** Next.js UI (Phase 13); Phase 11 workflows (wire `backfill.yml`
+there once this CLI exists); ClickHouse; publishing B3 Parquet; cadastral CVM
+sync; Yahoo/credit history
+
+**Worktrees:** None with Phase 13. Provider HIST/COTAHIST work may use isolated
+worktrees if files stay disjoint; parent owns `cli/main.py`.
+
+**Cursor mode:** Agent Mode. Implement Tesouro + BCB first (cheap, full
+history), then CVM monthly checkpoints, then CVM HIST, then B3 day loop,
+then optional COTAHIST.
+
+---
+
+## Phase 13 — Next.js Data Explorer
+
+**Objective:** A public Data Explorer that lets a person pick a few instruments
+or series and see the **historical price path** already stored by Phase 12.
+Companion to backfill: without 12, the UI only shows a stub day.
+
+**Scope:**
+
+- Next.js app on Vercel consuming **FastAPI `/v1` only** (ADR-0004). Never
+  query PostgreSQL/Neon from the browser or from Next.js server components
+  via a direct DB URL
+- Quote/series charts and tables for identifiers the API already resolves
+  (CNPJ, `LTN:maturity`, PETR4, `BCB:CDI_DAILY`, …)
+- Provenance visible (source, `price_type`, official flag, date)
+- Honor API redistribution gates: hide or no-index sources the API omits;
+  do not add a Parquet download for B3
+- Local `next dev` against `http://127.0.0.1:8000`; production against
+  `PUBLIC_API_BASE_URL`
+
+**Deliverables:** Deployed or local Explorer that plots a backfilled Tesouro
+title, a BCB series, a CVM fund, and a B3 ticker (if `public_api_enabled`)
+
+**Depends on:** Phase 12 (enough history to chart). Phase 11 official API URL
+is optional; local FastAPI is enough to build the UI.
+
+**Out of scope:** Auth, billing, trading terminal, WebSockets, DuckDB-Wasm,
+editing data, calling providers from Next.js
+
+**Infrastructure (approval required):** Vercel project. No Neon connection
+string in the frontend.
+
+**Worktrees:** None concurrent with Phase 12 CLI work on the same checkout.
 
 ---
 
@@ -611,6 +753,8 @@ See [`docs/adr/README.md`](adr/README.md). Do not reopen them without evidence.
 | Pyright vs mypy | **NON-BLOCKING** | Use Pyright |
 | Default `RECENT_REPROCESS_DAYS` 7 vs 90 | **NON-BLOCKING** | Prefer 90 globally or per CVM |
 | Custom domains | **NON-BLOCKING** | Env placeholders |
+| CVM full-history size vs Neon plan | **NON-BLOCKING** Phase 12 | Start with Tesouro+BCB+one CVM month; do not dump all HIST years into a free branch |
+| COTAHIST vs BVBG.186 overlap | **NON-BLOCKING** Phase 12 | Document semantics; do not silently merge as the same quote |
 
 ---
 
@@ -625,6 +769,9 @@ See [`docs/adr/README.md`](adr/README.md). Do not reopen them without evidence.
 6. **Validation gate every phase:** pytest, ruff check, ruff format --check,
    pyright, diff review, no secrets, no next-phase leakage.
 7. **Do not** start Phase 11 cloud objects without a new explicit approval.
+8. **Phase 12** (historical backfill) may run after Phase 6 even if 7–11 are
+   still open, when the goal is Neon/API history. **Phase 13** (Explorer)
+   starts only after Phase 12 can serve multi-date `/v1` series.
 
 Official MCP: Railway may need OAuth (`needsAuth`). Neon MCP was not visible
 during planning — re-check at deploy time. Cloudflare R2 stays unused.

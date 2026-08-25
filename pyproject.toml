@@ -29,6 +29,7 @@ dependencies = [
   "uvicorn>=0.30",
   "psycopg[binary]>=3.2",
   "python-bcb>=0.4.0",
+  "yfinance>=1.6.0",
 ]
 
 [project.scripts]

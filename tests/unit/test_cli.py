@@ -25,3 +25,10 @@ def test_cli_providers_lists_defaults() -> None:
     assert "tesouro" in result.output
     assert "bcb" in result.output
     assert "b3" in result.output
+    assert "yahoo" in result.output
+
+
+def test_cli_ingest_help_includes_yahoo() -> None:
+    result = runner.invoke(app, ["ingest", "--help"])
+    assert result.exit_code == 0
+    assert "yahoo" in result.output

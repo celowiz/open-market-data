@@ -148,6 +148,39 @@ def ingest_b3_command(
     )
 
 
+_YAHOO_SYMBOL_OPTION = typer.Option(
+    None,
+    "--symbol",
+    help="Yahoo symbol (repeatable). Defaults to AAPL.",
+)
+
+
+@ingest_app.command("yahoo")
+def ingest_yahoo_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+    symbols: list[str] | None = _YAHOO_SYMBOL_OPTION,
+) -> None:
+    """Ingest unofficial Yahoo Finance EOD closes for local/POC coverage."""
+    from marketdata.ingestion.yahoo import ingest_yahoo
+
+    reference = date.fromisoformat(date_value)
+    session = _session()
+    try:
+        result = ingest_yahoo(session, reference_date=reference, symbols=symbols or None)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    typer.echo(
+        "Yahoo ingest "
+        f"run={result['run_id']} artifacts={result['artifacts']} "
+        f"inserted={result['inserted']} updated={result['updated']} "
+        f"skipped={result['skipped']}"
+    )
+
+
 @app.command("explain")
 def explain(
     identifier: str = typer.Argument(..., help="CNPJ or other instrument identifier"),

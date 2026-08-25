@@ -378,6 +378,7 @@ def upsert_quote(
     currency: str | None,
     unit: str | None,
     extra: dict | None = None,
+    is_official: bool = True,
 ) -> str:
     latest = session.scalar(
         select(InstrumentQuoteRow)
@@ -409,7 +410,7 @@ def upsert_quote(
             unit=unit,
             price_type=price_type.value,
             source_id=source_id,
-            is_official=True,
+            is_official=is_official,
             retrieved_at=artifact.retrieved_at,
             raw_artifact_id=artifact.id,
             ingestion_run_id=ingestion_run_id,
