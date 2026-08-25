@@ -19,8 +19,8 @@ The app must run with stock `uvicorn` anywhere, including later Railway.
   matches typing + OpenAPI needs.
 - **Expose PostgREST / Supabase:** rejected; we need domain provenance and
   redistribution gates, not table CRUD.
-- **Vercel Python:** rejected for the data API; Vercel is reserved for a future
-  Next.js explorer.
+- **Vercel Python:** rejected for the data API; Vercel is reserved for the
+  **Phase 13** Next.js explorer (after Phase 12 backfill).
 
 ## Consequences
 

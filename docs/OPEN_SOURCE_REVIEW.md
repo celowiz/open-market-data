@@ -84,7 +84,7 @@ Reading public code for ideas is allowed. Reimplement independently.
 
 ```text
 CvmProvider      → httpx and/or mercados.cvm (verify ZIP support first)
-B3Provider       → custom BVBG + optional mercados COTAHIST backfill
+B3Provider       → custom BVBG + optional COTAHIST backfill (Phase 12)
 TesouroProvider  → httpx CKAN CSV; PYield optional validation only
 BcbProvider      → python-bcb
 YahooProvider    → yfinance (public flags off)

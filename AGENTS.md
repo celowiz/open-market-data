@@ -153,7 +153,8 @@ The intended official deployment currently uses:
 - GitHub Actions
 - Cloudflare CDN / WAF
 - GitHub Pages for documentation
-- Next.js + Vercel may be added later as the public Data Explorer
+- Next.js + Vercel as the public Data Explorer in **Phase 13** (after
+  Phase 12 historical backfill; Explorer consumes FastAPI only)
 
 MCP access for Neon, Cloudflare and Railway may be available in the development
 environment.

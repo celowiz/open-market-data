@@ -30,6 +30,10 @@ uv run marketdata explain 00017024000153 --date 2026-08-03
 `--lookback-days` defaults to `RECENT_REPROCESS_DAYS` (90). Use `0` to fetch
 only the month of `--date`.
 
+Yearly archive files under `DADOS/HIST/` and a `backfill cvm --start --end`
+command are **Phase 12**. Do not loop `ingest cvm` across decades without that
+CLI (memory, duplicate monthly fetches, missing HIST URLs).
+
 ## API
 
 ```text

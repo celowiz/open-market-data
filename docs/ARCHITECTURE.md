@@ -20,11 +20,12 @@ Code, class names, and public APIs are English. Documentation is English.
 - Remain self-hostable: local PostgreSQL and local filesystem object storage must work.
 - Keep the official deployment cloud-neutral: Neon, Railway, and Cloudflare R2 are deployment choices, not domain dependencies.
 
-## Non-goals (MVP)
+## Non-goals (MVP Phases 0–11)
 
-The following are explicitly deferred:
+The following stay out of the core provider/deploy track:
 
-- Next.js Data Explorer
+- Next.js Data Explorer (**Phase 13**, after historical backfill)
+- Historical `marketdata backfill` CLI, CVM `HIST/`, COTAHIST (**Phase 12**)
 - DuckDB-Wasm
 - MCP server
 - SDKs
@@ -36,6 +37,7 @@ The following are explicitly deferred:
 - Custodian price feeds
 
 The first product is daily EOD market data, not a trading terminal.
+Phases 12–13 add stored history and a read-only Explorer on `/v1`.
 
 ---
 
@@ -68,8 +70,9 @@ The first product is daily EOD market data, not a trading terminal.
            Public API              Public datasets
 ```
 
-A future Next.js Data Explorer, if added, must consume the public FastAPI API.
-It must not query PostgreSQL directly.
+A future Next.js Data Explorer (**Phase 13**) must consume the public FastAPI
+API. It must not query PostgreSQL directly. It is only useful after **Phase 12**
+has backfilled multi-date quotes and series.
 
 ```mermaid
 flowchart TB
@@ -160,6 +163,11 @@ Rules:
 - Domain code must not import `mercados`, `python-bcb`, `pyield`, or `yfinance`.
 - API handlers read PostgreSQL only. They never call a provider during a public request.
 - Object storage is behind a small interface. Domain and ingestion depend on the interface, not on R2.
+- Daily ingest (`marketdata ingest … --date`) and historical backfill
+  (`marketdata backfill … --start --end`, Phase 12) are different commands.
+  Backfill must checkpoint, rate-limit, and use source-specific history files
+  (CVM `HIST/` yearly ZIPs, Tesouro full CSV, BCB 10-year chunks, optional
+  B3 COTAHIST).
 
 ---
 
@@ -251,7 +259,9 @@ Small queries go to the API. Large historical extracts go to Parquet.
 | Database | PostgreSQL via `DATABASE_URL` | Neon PostgreSQL via `DATABASE_URL` |
 | Object storage | Filesystem | S3-compatible (R2 preferred) |
 | API process | `uvicorn` | Railway running the same app |
-| Ingestion | CLI | GitHub Actions calling the CLI |
+| Daily ingestion | `marketdata ingest … --date` | GitHub Actions (Phase 11) calling the CLI |
+| Historical backfill | `marketdata backfill` (Phase 12) | Same CLI; `DATABASE_URL` may be a Neon branch |
+| Data Explorer | `next dev` → local `/v1` (Phase 13) | Vercel → public FastAPI only |
 | Docs site | MkDocs locally (later) | GitHub Pages (later) |
 
 The application must not import Neon, Railway, or Cloudflare SDKs in domain code.

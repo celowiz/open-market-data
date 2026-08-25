@@ -12,7 +12,8 @@ open files with Polars or `read_parquet` in DuckDB.
 
 Public bulk datasets use **Parquet** as the primary format, CSV as optional
 secondary. Publication is atomic: upload versioned files, validate, then update
-the latest manifest.
+the latest manifest. Phase 9 may publish whatever is already in serving
+PostgreSQL; **Phase 12** backfill is what makes those files multi-year.
 
 Only sources with an allowed `redistribution_policy` are published.
 

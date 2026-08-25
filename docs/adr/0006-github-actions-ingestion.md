@@ -14,7 +14,10 @@ Official scheduled ingestion uses **GitHub Actions** invoking the project CLI.
 Do not introduce Airflow, Celery, Kafka, or Redis for MVP.
 
 Every ingest workflow should support `workflow_dispatch` for reruns and
-backfills.
+backfills. The **CLI** that performs range/HIST/COTAHIST loads is
+[`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md) **Phase 12**. Phase 11
+Actions should call that CLI (`backfill.yml`), not reimplement downloads in
+YAML.
 
 ## Alternatives
 

@@ -1967,6 +1967,11 @@ backfill
 
 Criar pipeline específico para históricos.
 
+Sequencing: implemented as **Phase 12** in [`docs/IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
+(CLI `marketdata backfill`). GitHub Actions `backfill.yml` is wired in **Phase 11**
+once that CLI exists. The Next.js Data Explorer that charts those series is
+**Phase 13**.
+
 Exemplo:
 
 ```bash
@@ -3153,6 +3158,11 @@ Adapte se encontrar estrutura mais simples e coerente.
 
 Executar em fases.
 
+Binding execution order (including **Phase 12** historical backfill and
+**Phase 13** Next.js Data Explorer) is [`docs/IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
+This list is product intent; numbers 10–11 below differ from that plan
+(coverage vs public API). Do not implement 12–13 until that plan says so.
+
 ## Phase 0 — Discovery
 
 Antes de código relevante:
@@ -3243,23 +3253,33 @@ Expor dados autorizados.
 
 Rodar universo heterogêneo.
 
+## Phase 12 — Historical backfill
+
+CLI `marketdata backfill` para popular PostgreSQL/Neon com séries multi-ano
+(CVM HIST, Tesouro CSV completo, BCB em janelas de 10 anos, B3/COTAHIST).
+
+## Phase 13 — Data Explorer
+
+Next.js na Vercel, somente contra FastAPI `/v1`, depois da Phase 12.
+
 ---
 
 
 
 # 109. Não antecipar frontend
 
-NÃO criar Next.js agora.
+NÃO criar Next.js nas Phases 0–12.
 
 Somente após:
 
 ```text
 Providers working
 API working
-datasets working
+historical backfill (Phase 12) so /v1 returns a price series
 ```
 
-poderemos criar Data Explorer.
+criar o Data Explorer (**Phase 13** em [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)).
+O Explorer consome só FastAPI; nunca PostgreSQL/Neon direto.
 
 ---
 

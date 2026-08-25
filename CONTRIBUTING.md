@@ -16,6 +16,10 @@ Set `DATABASE_URL` in `.env` to a local PostgreSQL database when you need
 migrations or database tests. Object storage defaults to `./data` on the
 filesystem. Neon, Railway, and Cloudflare are not required.
 
+Daily ingest: `uv run marketdata ingest <provider> --date YYYY-MM-DD`.
+Multi-year backfill is **Phase 12** (not implemented yet). Do not commit
+files under `data/`.
+
 Optional local PostgreSQL:
 
 ```bash

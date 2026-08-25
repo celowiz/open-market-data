@@ -15,7 +15,9 @@ Use **Neon** for the official managed PostgreSQL when deployment is approved.
 The application continues to use a generic `DATABASE_URL` and standard
 PostgreSQL. Local development uses any PostgreSQL.
 
-Do not create Neon production resources until Phase 11 with explicit approval.
+Do not create Neon **production** resources until Phase 11 with explicit
+approval. A Neon **dev branch** may be used earlier via `DATABASE_URL` (for
+example Phase 12 backfill) without treating that as official deploy.
 
 ## Alternatives
 

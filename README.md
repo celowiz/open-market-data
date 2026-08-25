@@ -17,11 +17,13 @@ Initial focus is the Brazilian financial market.
 
 ## Status
 
-Foundation is in progress. Seed architecture documentation is in `docs/`.
-The public API and bulk datasets are not generally available yet. Local
-CVM, Tesouro, and BCB ingestion plus `/v1` query routes exist for development.
+Core providers (CVM, Tesouro, BCB, B3 equities and derivatives) ingest **one
+reference date** (CVM: a monthly ZIP window) into local filesystem object
+storage and PostgreSQL. Historical backfill (`marketdata backfill`) is
+**Phase 12**. A Next.js Data Explorer is **Phase 13**.
 
-The first functional vertical after Foundation is **CVM fund NAV**.
+The public API and bulk datasets are not generally available yet. See
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Architecture
 

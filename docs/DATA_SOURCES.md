@@ -95,7 +95,9 @@ Official policy (dataset page):
 
 - Current month and previous month: daily Mon–Sat ~08:00 BRT
 - M-2 through M-11: weekly reapresentações
-- Rolling window is 12 months; older files live under HIST and are frozen
+- Rolling window is 12 months; older files live under HIST and are frozen.
+  Phase 2 daily ingest uses monthly `DADOS/` ZIPs only. Yearly
+  `HIST/inf_diario_fi_{YYYY}.zip` is **Phase 12** backfill.
 
 Administrators have about one business day to file (ICVM 555 Art. 59).
 Missing D-1 is not always an error.
@@ -172,7 +174,7 @@ reference date when parsing.
 | BVBG.028.02 | Instrument master at session start |
 | BVBG.086.01 | Full price report, three intraday snapshots; use snapshot 03 |
 | BVBG.087.01 | Index / BDR / IOPV |
-| COTAHIST | Equities backfill; has price-correction flag; no derivative settlement |
+| COTAHIST | Equities **Phase 12** backfill; price-correction flag; no derivative settlement |
 
 Format: XML inside nested ZIP (ISO 20022-style BVMF messages), except COTAHIST
 (fixed-width text in ZIP).
@@ -231,6 +233,8 @@ Tipo Titulo;Data Vencimento;Data Base;Taxa Compra Manha;Taxa Venda Manha;PU Comp
 - Separator `;`, Brazilian decimal comma, dates `DD/MM/YYYY`
 - Daily morning snapshot since January 2002
 - Identity: map `Tipo Titulo` to `title_type`, plus `Data Vencimento`
+- Phase 3 `ingest tesouro --date` keeps only that `Data Base`. Loading the
+  full CSV (or a `--start`/`--end` slice) is **Phase 12** `backfill tesouro`.
 
 | Marketing name | title_type |
 |---|---|
@@ -259,7 +263,8 @@ License: ODbL 1.0.
 | PTAX OData | `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/` |
 
 **Constraint since 2026-03-26:** historical JSON/CSV queries are limited to
-**10-year windows**. Backfills must be chunked.
+**10-year windows**. Backfills must be chunked. Phase 4 ingest still fetches a
+single `--date`; multi-year SGS load is **Phase 12** `backfill bcb`.
 
 Avoid legacy SOAP SGS for new code.
 
