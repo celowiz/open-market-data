@@ -340,9 +340,23 @@ def test_history_limit_schema_default_500_max_5000() -> None:
         assert schema["minimum"] == 1
 
 
-def test_quotes_limit_5001_is_unprocessable() -> None:
+def test_quotes_limit_5001_is_unprocessable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "marketdata.api.deps.get_settings",
+        lambda: Settings(_env_file=None, database_url=""),
+    )
     response = _client().get("/v1/quotes/PETR4", params={"limit": 5001})
     assert response.status_code == 422
+
+
+def test_quotes_without_database_url_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "marketdata.api.deps.get_settings",
+        lambda: Settings(_env_file=None, database_url=""),
+    )
+    response = _client().get("/v1/quotes/PETR4")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "DATABASE_URL is not configured"
 
 
 def test_instruments_empty_q_returns_400() -> None:
