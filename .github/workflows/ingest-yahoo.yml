@@ -1,0 +1,71 @@
+# Yahoo Finance EOD — unofficial POC (ADR-0013). No daily schedule.
+# Enable only via workflow_dispatch. Do not add cron unless YAHOO_PROVIDER_ENABLED
+# is an explicit operator policy. See docs/INGEST_SCHEDULE.md.
+name: Ingest Yahoo
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Reference date YYYY-MM-DD (defaults to today UTC)"
+        required: false
+
+concurrency:
+  group: ingest-yahoo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_ENV: production
+      APP_TIMEZONE: America/Sao_Paulo
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OBJECT_STORAGE_BACKEND: ${{ vars.OBJECT_STORAGE_BACKEND || 'local' }}
+      LOCAL_STORAGE_PATH: ${{ vars.LOCAL_STORAGE_PATH || './data' }}
+      OBJECT_STORAGE_ENDPOINT: ${{ vars.OBJECT_STORAGE_ENDPOINT }}
+      OBJECT_STORAGE_BUCKET: ${{ vars.OBJECT_STORAGE_BUCKET }}
+      OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY }}
+      OBJECT_STORAGE_SECRET_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_KEY }}
+      OBJECT_STORAGE_REGION: ${{ vars.OBJECT_STORAGE_REGION || 'auto' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Require DATABASE_URL
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is not set. Refusing to ingest — results would not be persisted to PostgreSQL."
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Resolve reference date
+        id: refdate
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_DATE:-}" ]; then
+            printf 'date=%s\n' "$INPUT_DATE" >> "$GITHUB_OUTPUT"
+          else
+            printf 'date=%s\n' "$(date -u +%F)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ingest Yahoo
+        run: uv run marketdata ingest yahoo --date "${{ steps.refdate.outputs.date }}"

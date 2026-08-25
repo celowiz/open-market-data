@@ -1,0 +1,79 @@
+# B3 BVBG.186/187/028 — 21:00 America/Sao_Paulo weekdays (after ~20:30 BRT files).
+# UTC: 0 0 * * 2-6 (Tue–Sat 00:00 UTC = Mon–Fri 21:00 BRT). See docs/INGEST_SCHEDULE.md.
+#
+# --date is the BRT trading date, not the UTC calendar date. Scheduled runs use
+# `uv run python -m marketdata.ingestion.schedule`. Prefer an explicit
+# workflow_dispatch date for reruns.
+name: Ingest B3
+
+on:
+  schedule:
+    - cron: "0 0 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Reference date YYYY-MM-DD (empty = B3 trading date from schedule helper)"
+        required: false
+
+concurrency:
+  group: ingest-b3
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      APP_ENV: production
+      APP_TIMEZONE: America/Sao_Paulo
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OBJECT_STORAGE_BACKEND: ${{ vars.OBJECT_STORAGE_BACKEND || 'local' }}
+      LOCAL_STORAGE_PATH: ${{ vars.LOCAL_STORAGE_PATH || './data' }}
+      OBJECT_STORAGE_ENDPOINT: ${{ vars.OBJECT_STORAGE_ENDPOINT }}
+      OBJECT_STORAGE_BUCKET: ${{ vars.OBJECT_STORAGE_BUCKET }}
+      OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY }}
+      OBJECT_STORAGE_SECRET_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_KEY }}
+      OBJECT_STORAGE_REGION: ${{ vars.OBJECT_STORAGE_REGION || 'auto' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Require DATABASE_URL
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is not set. Refusing to ingest — results would not be persisted to PostgreSQL."
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Resolve B3 trading date
+        id: refdate
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_DATE:-}" ]; then
+            printf 'date=%s\n' "$INPUT_DATE" >> "$GITHUB_OUTPUT"
+            echo "B3 --date from workflow_dispatch: $INPUT_DATE"
+            exit 0
+          fi
+          DATE="$(uv run python -m marketdata.ingestion.schedule)"
+          printf 'date=%s\n' "$DATE" >> "$GITHUB_OUTPUT"
+          echo "B3 --date from marketdata.ingestion.schedule: $DATE"
+
+      - name: Ingest B3
+        run: uv run marketdata ingest b3 --date "${{ steps.refdate.outputs.date }}"

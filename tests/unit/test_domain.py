@@ -46,8 +46,8 @@ def test_instrument_quote_keeps_decimal() -> None:
     assert quote.price_type is PriceType.FUND_NAV
 
 
-def test_source_public_api_requires_policy_and_flag() -> None:
-    blocked = Source(
+def test_source_public_api_follows_flag_dataset_still_requires_policy() -> None:
+    yahoo = Source(
         name="yahoo",
         display_name="Yahoo Finance",
         official=False,
@@ -56,8 +56,8 @@ def test_source_public_api_requires_policy_and_flag() -> None:
         public_api_enabled=True,
         public_dataset_enabled=True,
     )
-    assert blocked.allows_public_api() is False
-    assert blocked.allows_public_dataset() is False
+    assert yahoo.allows_public_api() is True
+    assert yahoo.allows_public_dataset() is False
 
     allowed = Source(
         name="cvm",
@@ -70,3 +70,14 @@ def test_source_public_api_requires_policy_and_flag() -> None:
     )
     assert allowed.allows_public_api() is True
     assert allowed.allows_public_dataset() is True
+
+    gated = Source(
+        name="gated",
+        display_name="Gated",
+        official=False,
+        redistribution_policy=RedistributionPolicy.PUBLIC,
+        ingestion_enabled=True,
+        public_api_enabled=False,
+        public_dataset_enabled=False,
+    )
+    assert gated.allows_public_api() is False

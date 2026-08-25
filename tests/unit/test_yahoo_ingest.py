@@ -103,7 +103,7 @@ def test_yahoo_ingest_persists_unofficial_close(db_session, tmp_path) -> None:
     assert source is not None
     assert source.official is False
     assert source.redistribution_policy == RedistributionPolicy.UNKNOWN.value
-    assert source.public_api_enabled is False
+    assert source.public_api_enabled is True
     assert source.public_dataset_enabled is False
     assert source.ingestion_enabled is True
     assert (tmp_path / "raw" / "yahoo" / "year=2026" / "month=08" / "AAPL-2026-08-21.json").exists()
@@ -131,9 +131,7 @@ def test_yahoo_ingest_persists_unofficial_close(db_session, tmp_path) -> None:
 
 
 @pytest.mark.db
-def test_yahoo_quotes_are_omitted_from_public_api_while_b3_petr4_remains(
-    db_session, tmp_path
-) -> None:
+def test_yahoo_quotes_are_visible_on_public_api_alongside_b3_petr4(db_session, tmp_path) -> None:
     storage = LocalFileObjectStorage(tmp_path)
     ingest_yahoo(
         db_session,
@@ -162,15 +160,21 @@ def test_yahoo_quotes_are_omitted_from_public_api_while_b3_petr4_remains(
     db_session.commit()
 
     client = TestClient(create_app())
-    hidden = client.get("/v1/quotes/AAPL")
-    assert hidden.status_code == 404
-    assert hidden.json()["detail"] == "instrument not found"
-    hidden_source = client.get("/v1/quotes/AAPL", params={"source": "yahoo"})
-    assert hidden_source.status_code == 404
-
-    visible = client.get("/v1/quotes/PETR4")
+    visible = client.get("/v1/quotes/AAPL")
     assert visible.status_code == 200
-    body = visible.json()
+    apple = visible.json()
+    assert apple["quotes"]
+    assert apple["quotes"][0]["price_type"] == "CLOSE"
+    assert apple["quotes"][0]["source"] == "yahoo"
+    assert Decimal(apple["quotes"][0]["price"]) == Decimal("185.64")
+
+    by_source = client.get("/v1/quotes/AAPL", params={"source": "yahoo"})
+    assert by_source.status_code == 200
+    assert by_source.json()["quotes"]
+
+    petr4 = client.get("/v1/quotes/PETR4")
+    assert petr4.status_code == 200
+    body = petr4.json()
     assert body["quotes"]
     assert body["quotes"][0]["price_type"] == "LAST"
     assert body["quotes"][0]["source"] == "b3"

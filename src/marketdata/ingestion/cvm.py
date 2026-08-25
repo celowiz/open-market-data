@@ -1,19 +1,41 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from datetime import date
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from marketdata.config import get_settings
 from marketdata.domain.enums import IngestionRunStatus
+from marketdata.ingestion.checkpoint import (
+    BackfillCheckpoint,
+    load_checkpoint,
+    save_checkpoint,
+    should_resume,
+)
 from marketdata.providers.cvm import (
+    CvmDailyRecord,
     CvmParseError,
     CvmProvider,
     extract_csv_from_zip,
+    iter_csv_members_for_month,
+    iter_informe_diario,
     months_covering,
-    parse_informe_diario,
+    months_in_range,
+    uses_monthly_dados,
 )
-from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
+from marketdata.storage.models import (
+    InstrumentIdentifierRow,
+    InstrumentQuoteRow,
+    InstrumentRow,
+    RawArtifactRow,
+)
+from marketdata.storage.object_store import (
+    LocalFileObjectStorage,
+    ObjectStorage,
+    build_object_storage,
+)
 from marketdata.storage.repositories import (
     finish_ingestion_run,
     get_or_create_cvm_source,
@@ -23,6 +45,88 @@ from marketdata.storage.repositories import (
     upsert_fund_nav_quote,
 )
 
+CVM_CHECKPOINT_PROVIDER = "cvm"
+_DEFAULT_FLUSH_EVERY = 1000
+_TRANSIENT_ROWS = (InstrumentQuoteRow, InstrumentRow, InstrumentIdentifierRow)
+
+
+def _month_token(year: int, month: int) -> str:
+    return f"{year:04d}-{month:02d}"
+
+
+def _monthly_object_key(year: int, month: int) -> str:
+    return f"raw/cvm/year={year:04d}/month={month:02d}/inf_diario_fi_{year:04d}{month:02d}.zip"
+
+
+def _hist_object_key(year: int) -> str:
+    return f"raw/cvm/hist/inf_diario_fi_{year:04d}.zip"
+
+
+def _expunge_transient_rows(session: Session, *, keep: tuple[object, ...]) -> None:
+    keep_ids = {id(obj) for obj in keep if obj is not None}
+    for obj in list(session):
+        if id(obj) in keep_ids:
+            continue
+        if isinstance(obj, _TRANSIENT_ROWS):
+            session.expunge(obj)
+
+
+def _persist_cvm_records(
+    session: Session,
+    records: Iterable[CvmDailyRecord],
+    *,
+    source_id: UUID,
+    artifact: RawArtifactRow,
+    ingestion_run_id: UUID,
+    flush_every: int = _DEFAULT_FLUSH_EVERY,
+    keep: tuple[object, ...] = (),
+) -> tuple[int, int, int, int]:
+    """Upsert fund NAV quotes, flushing and committing every ``flush_every`` rows.
+
+    The caller owns the session lifecycle. Batched commits keep HIST months from
+    retaining every ORM object at once.
+    """
+    inserted = updated = skipped = rejected = 0
+    pending = 0
+    retain = (artifact, *keep)
+    batch = flush_every if flush_every > 0 else _DEFAULT_FLUSH_EVERY
+    for record in records:
+        if record.quota_value <= 0:
+            rejected += 1
+            continue
+        instrument = get_or_create_fund_instrument(session, source_id=source_id, record=record)
+        action = upsert_fund_nav_quote(
+            session,
+            instrument_id=instrument.id,
+            source_id=source_id,
+            record=record,
+            artifact=artifact,
+            ingestion_run_id=ingestion_run_id,
+        )
+        if action == "inserted":
+            inserted += 1
+        elif action == "updated":
+            updated += 1
+        else:
+            skipped += 1
+        pending += 1
+        if pending >= batch:
+            session.flush()
+            session.commit()
+            _expunge_transient_rows(session, keep=retain)
+            pending = 0
+    if pending:
+        session.flush()
+        session.commit()
+        _expunge_transient_rows(session, keep=retain)
+    return inserted, updated, skipped, rejected
+
+
+def _records_in_range(csv_text: str, start: date, end: date) -> Iterator[CvmDailyRecord]:
+    for record in iter_informe_diario(csv_text):
+        if start <= record.reference_date <= end:
+            yield record
+
 
 def ingest_cvm(
     session: Session,
@@ -31,6 +135,7 @@ def ingest_cvm(
     lookback_days: int | None = None,
     storage: LocalFileObjectStorage | None = None,
     provider: CvmProvider | None = None,
+    flush_every: int = _DEFAULT_FLUSH_EVERY,
 ) -> dict[str, int | str]:
     settings = get_settings()
     days = settings.recent_reprocess_days if lookback_days is None else lookback_days
@@ -42,14 +147,14 @@ def ingest_cvm(
     )
     inserted = updated = skipped = rejected = 0
     artifacts = 0
+    parsed = 0
     try:
         for year, month in months_covering(reference_date, days):
             response = cvm.fetch_month(year, month)
             payload = response.content
-            key = (
-                f"raw/cvm/year={year:04d}/month={month:02d}/inf_diario_fi_{year:04d}{month:02d}.zip"
+            uri = object_store.store(
+                _monthly_object_key(year, month), payload, content_type="application/zip"
             )
-            uri = object_store.store(key, payload, content_type="application/zip")
             artifact = store_raw_artifact(
                 session,
                 source_id=source.id,
@@ -69,33 +174,26 @@ def ingest_cvm(
             artifacts += 1
             try:
                 csv_text = extract_csv_from_zip(payload)
-                records = parse_informe_diario(csv_text)
+                records = iter_informe_diario(csv_text)
             except CvmParseError:
                 rejected += 1
                 continue
-            run.records_parsed += len(records)
-            for record in records:
-                if record.quota_value <= 0:
-                    rejected += 1
-                    continue
-                instrument = get_or_create_fund_instrument(
-                    session, source_id=source.id, record=record
-                )
-                action = upsert_fund_nav_quote(
-                    session,
-                    instrument_id=instrument.id,
-                    source_id=source.id,
-                    record=record,
-                    artifact=artifact,
-                    ingestion_run_id=run.id,
-                )
-                if action == "inserted":
-                    inserted += 1
-                elif action == "updated":
-                    updated += 1
-                else:
-                    skipped += 1
+            ins, upd, skip, rej = _persist_cvm_records(
+                session,
+                records,
+                source_id=source.id,
+                artifact=artifact,
+                ingestion_run_id=run.id,
+                flush_every=flush_every,
+                keep=(run, source, artifact),
+            )
+            parsed += ins + upd + skip + rej
+            inserted += ins
+            updated += upd
+            skipped += skip
+            rejected += rej
         run.artifacts_downloaded = artifacts
+        run.records_parsed = parsed
         run.records_inserted = inserted
         run.records_updated = updated
         run.records_rejected = rejected
@@ -112,6 +210,249 @@ def ingest_cvm(
             "status": run.status,
         }
     except Exception:
+        finish_ingestion_run(run, status=IngestionRunStatus.FAILED)
+        session.flush()
+        raise
+
+
+def _save_cvm_checkpoint(
+    store: ObjectStorage,
+    *,
+    start: date,
+    end: date,
+    last_completed: str | None,
+    status: str,
+) -> None:
+    save_checkpoint(
+        store,
+        BackfillCheckpoint(
+            provider=CVM_CHECKPOINT_PROVIDER,
+            start=start.isoformat(),
+            end=end.isoformat(),
+            last_completed=last_completed,
+            status=status,
+        ),
+    )
+
+
+def _load_hist_year(
+    *,
+    year: int,
+    cvm: CvmProvider,
+    object_store: ObjectStorage,
+    cache: dict[int, tuple[bytes, str]],
+) -> tuple[bytes, str, str, int | None, str | None, str | None, str | None]:
+    """Return ZIP bytes and provenance, fetching each HIST year at most once."""
+    key = _hist_object_key(year)
+    if year in cache:
+        payload, uri = cache[year]
+        return payload, uri, cvm.hist_year_url(year), 200, "application/zip", None, None
+    source_url = cvm.hist_year_url(year)
+    http_status: int | None = 200
+    content_type: str | None = "application/zip"
+    etag: str | None = None
+    last_modified: str | None = None
+    if object_store.exists(key):
+        payload = object_store.retrieve(key)
+    else:
+        response = cvm.fetch_hist_year(year)
+        payload = response.content
+        if response.request is not None:
+            source_url = str(response.request.url)
+        http_status = response.status_code
+        content_type = response.headers.get("content-type")
+        etag = response.headers.get("etag")
+        last_modified = response.headers.get("last-modified")
+    uri = object_store.store(key, payload, content_type="application/zip")
+    cache[year] = (payload, uri)
+    return payload, uri, source_url, http_status, content_type, etag, last_modified
+
+
+def backfill_cvm(
+    session: Session,
+    *,
+    start: date,
+    end: date,
+    storage: LocalFileObjectStorage | None = None,
+    provider: CvmProvider | None = None,
+    resume: bool = True,
+    max_months: int | None = None,
+    as_of: date | None = None,
+    flush_every: int = _DEFAULT_FLUSH_EVERY,
+) -> dict[str, int | str]:
+    """Backfill Informe Diário months in ``[start, end]``.
+
+    Months inside the rolling 12-month DADOS/ window (relative to ``as_of``,
+    defaulting to today) use monthly ZIPs. Older months use that year's HIST
+    ZIP once, cached at ``raw/cvm/hist/inf_diario_fi_{YYYY}.zip``.
+    Daily ``lookback`` is not applied.
+    """
+    months = months_in_range(start, end)
+    cvm = provider or CvmProvider()
+    object_store = storage or build_object_storage()
+    window_as_of = as_of or date.today()
+    existing = load_checkpoint(object_store, CVM_CHECKPOINT_PROVIDER)
+    resuming = should_resume(existing, start, end, resume=resume)
+    last_completed = existing.last_completed if resuming and existing is not None else None
+    _save_cvm_checkpoint(
+        object_store,
+        start=start,
+        end=end,
+        last_completed=last_completed,
+        status="running",
+    )
+    source = get_or_create_cvm_source(session)
+    run = start_ingestion_run(session, provider=cvm.name, source_id=source.id, reference_date=end)
+    inserted = updated = skipped = rejected = 0
+    artifacts = 0
+    parsed = 0
+    processed = 0
+    truncated = False
+    hist_cache: dict[int, tuple[bytes, str]] = {}
+    hist_artifacts: dict[int, RawArtifactRow] = {}
+    try:
+        for year, month in months:
+            token = _month_token(year, month)
+            if last_completed is not None and token <= last_completed:
+                continue
+            if max_months is not None and processed >= max_months:
+                truncated = True
+                break
+            try:
+                if uses_monthly_dados(year, month, window_as_of):
+                    response = cvm.fetch_month(year, month)
+                    payload = response.content
+                    uri = object_store.store(
+                        _monthly_object_key(year, month),
+                        payload,
+                        content_type="application/zip",
+                    )
+                    artifact = store_raw_artifact(
+                        session,
+                        source_id=source.id,
+                        ingestion_run_id=run.id,
+                        source_url=str(response.request.url)
+                        if response.request is not None
+                        else cvm.month_url(year, month),
+                        payload=payload,
+                        storage_uri=uri,
+                        filename=f"inf_diario_fi_{year:04d}{month:02d}.zip",
+                        content_type=response.headers.get("content-type"),
+                        http_status=response.status_code,
+                        etag=response.headers.get("etag"),
+                        last_modified=response.headers.get("last-modified"),
+                        reference_date=date(year, month, 1),
+                    )
+                    artifacts += 1
+                    csv_texts = [extract_csv_from_zip(payload)]
+                else:
+                    if hist_cache and year not in hist_cache:
+                        hist_cache.clear()
+                        hist_artifacts.clear()
+                    payload, uri, source_url, http_status, content_type, etag, last_modified = (
+                        _load_hist_year(
+                            year=year,
+                            cvm=cvm,
+                            object_store=object_store,
+                            cache=hist_cache,
+                        )
+                    )
+                    if year not in hist_artifacts:
+                        artifact = store_raw_artifact(
+                            session,
+                            source_id=source.id,
+                            ingestion_run_id=run.id,
+                            source_url=source_url,
+                            payload=payload,
+                            storage_uri=uri,
+                            filename=f"inf_diario_fi_{year:04d}.zip",
+                            content_type=content_type,
+                            http_status=http_status,
+                            etag=etag,
+                            last_modified=last_modified,
+                            reference_date=date(year, month, 1),
+                        )
+                        hist_artifacts[year] = artifact
+                        artifacts += 1
+                    artifact = hist_artifacts[year]
+                    csv_texts = [
+                        text for _name, text in iter_csv_members_for_month(payload, year, month)
+                    ]
+            except CvmParseError:
+                rejected += 1
+                last_completed = token
+                processed += 1
+                _save_cvm_checkpoint(
+                    object_store,
+                    start=start,
+                    end=end,
+                    last_completed=last_completed,
+                    status="running",
+                )
+                continue
+            for csv_text in csv_texts:
+                try:
+                    ins, upd, skip, rej = _persist_cvm_records(
+                        session,
+                        _records_in_range(csv_text, start, end),
+                        source_id=source.id,
+                        artifact=artifact,
+                        ingestion_run_id=run.id,
+                        flush_every=flush_every,
+                        keep=(run, source, artifact),
+                    )
+                except CvmParseError:
+                    rejected += 1
+                    continue
+                parsed += ins + upd + skip + rej
+                inserted += ins
+                updated += upd
+                skipped += skip
+                rejected += rej
+            last_completed = token
+            processed += 1
+            _save_cvm_checkpoint(
+                object_store,
+                start=start,
+                end=end,
+                last_completed=last_completed,
+                status="running",
+            )
+        checkpoint_status = "running" if truncated else "succeeded"
+        run_status = IngestionRunStatus.PARTIAL if truncated else IngestionRunStatus.SUCCEEDED
+        _save_cvm_checkpoint(
+            object_store,
+            start=start,
+            end=end,
+            last_completed=last_completed,
+            status=checkpoint_status,
+        )
+        run.artifacts_downloaded = artifacts
+        run.records_parsed = parsed
+        run.records_inserted = inserted
+        run.records_updated = updated
+        run.records_rejected = rejected
+        run.records_normalized = inserted + updated + skipped
+        finish_ingestion_run(run, status=run_status)
+        session.flush()
+        return {
+            "run_id": str(run.id),
+            "artifacts": artifacts,
+            "inserted": inserted,
+            "updated": updated,
+            "skipped": skipped,
+            "rejected": rejected,
+            "status": run.status,
+            "months": processed,
+        }
+    except Exception:
+        _save_cvm_checkpoint(
+            object_store,
+            start=start,
+            end=end,
+            last_completed=last_completed,
+            status="failed",
+        )
         finish_ingestion_run(run, status=IngestionRunStatus.FAILED)
         session.flush()
         raise

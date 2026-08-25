@@ -6,6 +6,13 @@ from sqlalchemy.orm import Session
 
 from marketdata.api.access import instrument_visible_on_public_api, public_quotes_stmt
 from marketdata.api.deps import get_db
+from marketdata.api.query import (
+    DEFAULT_HISTORY_LIMIT,
+    MAX_HISTORY_LIMIT,
+    apply_history_window,
+    load_history_page,
+    parse_history_window,
+)
 from marketdata.api.routes.funds import QuoteResponse, _to_quote
 from marketdata.storage.models import InstrumentQuoteRow
 from marketdata.storage.repositories import resolve_instrument_id
@@ -17,6 +24,7 @@ class QuotesResponse(BaseModel):
     instrument_id: str
     identifier: str
     quotes: list[QuoteResponse]
+    next_cursor: date | None = None
 
 
 def _visible_instrument(session: Session, identifier: str, source_name: str | None):
@@ -32,28 +40,39 @@ def _visible_instrument(session: Session, identifier: str, source_name: str | No
 @router.get("/quotes/{identifier}/history", response_model=QuotesResponse)
 def list_quotes(
     identifier: str,
-    session: Session = Depends(get_db),
     date_filter: date | None = Query(default=None, alias="date"),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    cursor: date | None = Query(default=None),
     price_type: str | None = Query(default=None),
     source: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=1000),
+    limit: int = Query(default=DEFAULT_HISTORY_LIMIT, ge=1, le=MAX_HISTORY_LIMIT),
+    session: Session = Depends(get_db),
 ) -> QuotesResponse:
+    window = parse_history_window(start=start, end=end, date_filter=date_filter, cursor=cursor)
     instrument_id = _visible_instrument(session, identifier, source)
     stmt = public_quotes_stmt(instrument_id, source_name=source)
-    if date_filter is not None:
-        stmt = stmt.where(InstrumentQuoteRow.reference_date == date_filter)
+    stmt = apply_history_window(stmt, InstrumentQuoteRow.reference_date, window)
     if price_type is not None:
         stmt = stmt.where(InstrumentQuoteRow.price_type == price_type)
-    stmt = stmt.order_by(
-        InstrumentQuoteRow.reference_date.desc(),
-        InstrumentQuoteRow.price_type,
-        InstrumentQuoteRow.revision.desc(),
+    rows, next_cursor = load_history_page(
+        session,
+        stmt,
+        date_attr="reference_date",
+        distinct_on=(InstrumentQuoteRow.reference_date, InstrumentQuoteRow.price_type),
+        order_by=(
+            InstrumentQuoteRow.reference_date.desc(),
+            InstrumentQuoteRow.price_type.asc(),
+            InstrumentQuoteRow.revision.desc(),
+            InstrumentQuoteRow.id.asc(),
+        ),
+        limit=limit,
     )
-    rows = session.scalars(stmt.limit(limit)).all()
     return QuotesResponse(
         instrument_id=str(instrument_id),
         identifier=identifier,
         quotes=[_to_quote(session, row) for row in rows],
+        next_cursor=next_cursor,
     )
 
 

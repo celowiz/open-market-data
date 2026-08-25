@@ -65,8 +65,22 @@ class LocalFileObjectStorage:
         return self._root / relative
 
 
-def build_object_storage(root: Path | None = None) -> LocalFileObjectStorage:
+def build_object_storage(root: Path | None = None) -> ObjectStorage:
     from marketdata.config import get_settings
 
-    base = root if root is not None else get_settings().local_storage_path
-    return LocalFileObjectStorage(Path(base))
+    settings = get_settings()
+    backend = (settings.object_storage_backend or "local").strip().lower()
+    if backend == "local":
+        base = root if root is not None else settings.local_storage_path
+        return LocalFileObjectStorage(Path(base))
+    if backend == "s3":
+        from marketdata.storage.s3_store import S3ObjectStorage
+
+        return S3ObjectStorage(
+            bucket=settings.object_storage_bucket,
+            endpoint_url=settings.object_storage_endpoint,
+            access_key=settings.object_storage_access_key,
+            secret_key=settings.object_storage_secret_key,
+            region=settings.object_storage_region,
+        )
+    raise ValueError(f"unknown object storage backend: {backend!r}")

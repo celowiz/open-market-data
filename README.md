@@ -17,25 +17,36 @@ Initial focus is the Brazilian financial market.
 
 ## Status
 
-Core providers (CVM, Tesouro, BCB, B3 equities and derivatives) ingest **one
-reference date** (CVM: a monthly ZIP window) into local filesystem object
-storage and PostgreSQL. Historical backfill (`marketdata backfill`) is
-**Phase 12**. A Next.js Data Explorer is **Phase 13**.
+Phases 0–13 of [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
+are implemented in this repository.
 
-The public API and bulk datasets are not generally available yet. See
-[`docs/ROADMAP.md`](docs/ROADMAP.md).
+- **Phases 0–10:** complete (providers, Parquet for ODbL sources, coverage).
+- **Phase 11:** complete for artifacts, **not provisioned**. Dockerfile,
+  GitHub Actions ingest/publish/backfill workflows, and
+  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) exist. This phase did **not**
+  create Neon, Railway, Cloudflare R2, or Vercel projects.
+- **Phase 12:** `marketdata backfill` for CVM, Tesouro, BCB, B3 (optional
+  COTAHIST), and Yahoo. Yahoo is currently visible on the public API.
+  B3 and Yahoo are never published as Parquet.
+- **Phase 13:** local Next.js Data Explorer in `apps/explorer`, consuming
+  FastAPI `/v1` only (never `DATABASE_URL`).
+
+See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Architecture
 
 Ingestion writes immutable raw artifacts to object storage (local filesystem
-today, S3-compatible later), normalizes into PostgreSQL, and serves `/v1`
-from the database only.
+by default; optional S3-compatible via `uv sync --extra s3`), normalizes into
+PostgreSQL, and serves `/v1` from the database only. The Explorer is a
+read-only browser app against that API.
 
 See:
 
 - [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) — product specification
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — local run, container, secrets map
+- [`docs/INGEST_SCHEDULE.md`](docs/INGEST_SCHEDULE.md) — BRT→UTC cron
 - [`docs/LICENSING.md`](docs/LICENSING.md) and [`DATA_LICENSES.md`](DATA_LICENSES.md)
 
 ## Quickstart
@@ -45,8 +56,16 @@ Python 3.12+ and [uv](https://docs.astral.sh/uv/):
 ```bash
 uv sync
 cp .env.example .env
-uv run marketdata --help
-uv run uvicorn marketdata.api.main:app --reload
+```
+
+Set `DATABASE_URL` to local PostgreSQL. Keep
+`CORS_ALLOWED_ORIGINS=http://localhost:3000` for the Explorer. Object storage
+defaults to `./data`; no AWS credentials are required.
+
+```bash
+docker compose up -d postgres
+uv run alembic upgrade head
+uv run uvicorn marketdata.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Health check (once the API is running):
@@ -55,22 +74,49 @@ Health check (once the API is running):
 curl http://127.0.0.1:8000/v1/health
 ```
 
-After PostgreSQL is configured and quotes are ingested:
+Daily ingest (one reference date; CVM: a monthly ZIP window):
 
 ```bash
-uv run marketdata coverage --date 2026-08-21
-curl "http://127.0.0.1:8000/v1/coverage?date=2026-08-21"
+uv run marketdata ingest all --date 2026-08-24
+```
+
+Historical backfill is a different command. Prefer cheap sources first; start
+CVM with 2025, not every HIST year. See the operator playbook in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+Optional S3-compatible object storage (Cloudflare R2 later):
+
+```bash
+uv sync --extra s3
+```
+
+Then set `OBJECT_STORAGE_BACKEND=s3` and the `OBJECT_STORAGE_*` variables.
+Do not create buckets from this repository.
+
+Coverage (after quotes are ingested):
+
+```bash
+uv run marketdata coverage --date 2026-08-24
+curl "http://127.0.0.1:8000/v1/coverage?date=2026-08-24"
 ```
 
 Coverage scores a CSV universe against stored quotes. It does not fetch
 providers. See [`docs/COVERAGE.md`](docs/COVERAGE.md).
 
-PostgreSQL is required for migrations and later ingestion, not for the health
-endpoint or unit tests.
+### Data Explorer
+
+Requires the API on `http://127.0.0.1:8000` and CORS as above. Never put
+`DATABASE_URL` in Next.js.
 
 ```bash
-uv run alembic upgrade head
+cd apps/explorer
+npm install
+npm run dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000). Yahoo quotes appear on
+`/v1` when the source flag is on. There is no B3 Parquet download.
 
 ## License
 

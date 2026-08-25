@@ -1,4 +1,5 @@
-from datetime import date
+import time
+from datetime import date, timedelta
 
 import httpx
 from sqlalchemy import select
@@ -10,6 +11,12 @@ from marketdata.domain.enums import (
     IngestionRunStatus,
     PriceType,
     RedistributionPolicy,
+)
+from marketdata.ingestion.checkpoint import (
+    BackfillCheckpoint,
+    load_checkpoint,
+    save_checkpoint,
+    should_resume,
 )
 from marketdata.providers.b3 import (
     BDI_CREDIT_MASTER_TABLE,
@@ -28,8 +35,14 @@ from marketdata.providers.b3 import (
     pregao_url,
     validate_b3_zip,
 )
+from marketdata.providers.cotahist import (
+    CotahistQuoteRecord,
+    cotahist_year_url,
+    fetch_cotahist_year,
+    parse_cotahist_zip,
+)
 from marketdata.storage.models import InstrumentQuoteRow, InstrumentRow
-from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
+from marketdata.storage.object_store import ObjectStorage, build_object_storage
 from marketdata.storage.repositories import (
     attach_identifier,
     finish_ingestion_run,
@@ -52,7 +65,32 @@ def ingest_b3(
     session: Session,
     *,
     reference_date: date,
-    storage: LocalFileObjectStorage | None = None,
+    storage: ObjectStorage | None = None,
+    provider: B3Provider | None = None,
+    price_payload: bytes | None = None,
+    master_payload: bytes | None = None,
+    derivatives_payload: bytes | None = None,
+    credit_trades_payload: bytes | None = None,
+    credit_master_payload: bytes | None = None,
+) -> dict[str, int | str]:
+    return _ingest_b3_day(
+        session,
+        reference_date=reference_date,
+        storage=storage,
+        provider=provider,
+        price_payload=price_payload,
+        master_payload=master_payload,
+        derivatives_payload=derivatives_payload,
+        credit_trades_payload=credit_trades_payload,
+        credit_master_payload=credit_master_payload,
+    )
+
+
+def _ingest_b3_day(
+    session: Session,
+    *,
+    reference_date: date,
+    storage: ObjectStorage | None = None,
     provider: B3Provider | None = None,
     price_payload: bytes | None = None,
     master_payload: bytes | None = None,
@@ -565,3 +603,266 @@ def _credit_absence_date(trades_payload: bytes | None, *, fallback: date) -> dat
     if trades_payload is None:
         return fallback
     return otc_payload_report_date(trades_payload) or fallback
+
+
+def _is_empty_b3_day_error(exc: BaseException) -> bool:
+    """Backfill-only: empty/holiday Pesquisa por Pregão ZIP is not a run failure."""
+    return isinstance(exc, B3ParseError) and "not a usable zip" in str(exc).lower()
+
+
+def _iter_calendar_days(start: date, end: date):
+    day = start
+    step = timedelta(days=1)
+    while day <= end:
+        yield day
+        day += step
+
+
+def _save_b3_checkpoint(
+    store, start: date, end: date, last_completed: date | None, status: str
+) -> None:
+    save_checkpoint(
+        store,
+        BackfillCheckpoint(
+            provider="b3",
+            start=start.isoformat(),
+            end=end.isoformat(),
+            last_completed=last_completed.isoformat() if last_completed else None,
+            status=status,
+        ),
+    )
+
+
+def _prefer_vista_cotahist(
+    existing: CotahistQuoteRecord, incoming: CotahistQuoteRecord
+) -> CotahistQuoteRecord:
+    if existing.extra.get("TPMERC") != "010" and incoming.extra.get("TPMERC") == "010":
+        return incoming
+    return existing
+
+
+def _ensure_b3_source(session: Session):
+    source = get_or_create_source(
+        session,
+        name="b3",
+        display_name="B3",
+        official=True,
+        homepage=B3_HOMEPAGE,
+        documentation_url=B3_HOMEPAGE,
+        data_license="UNKNOWN",
+        redistribution_policy=RedistributionPolicy.API_ONLY,
+        public_api_enabled=True,
+        public_dataset_enabled=False,
+    )
+    source.redistribution_policy = RedistributionPolicy.API_ONLY.value
+    source.public_api_enabled = True
+    source.public_dataset_enabled = False
+    return source
+
+
+def _ingest_cotahist_year(
+    session: Session,
+    *,
+    year: int,
+    start: date,
+    end: date,
+    storage: ObjectStorage | None,
+    payload: bytes | None = None,
+) -> dict[str, int]:
+    object_store = storage or build_object_storage()
+    source = _ensure_b3_source(session)
+    run = start_ingestion_run(
+        session,
+        provider="b3",
+        source_id=source.id,
+        reference_date=min(end, date(year, 12, 31)),
+    )
+    inserted = updated = skipped = rejected = 0
+    try:
+        if payload is None:
+            response = fetch_cotahist_year(year)
+            zip_bytes = response.content
+            source_url = (
+                str(response.request.url)
+                if response.request is not None
+                else cotahist_year_url(year)
+            )
+            http_status = response.status_code
+        else:
+            zip_bytes = payload
+            source_url = cotahist_year_url(year)
+            http_status = 200
+        storage_key = f"raw/b3/cotahist/year={year:04d}/COTAHIST_A{year}.ZIP"
+        storage_uri = object_store.store(storage_key, zip_bytes, content_type="application/zip")
+        artifact = store_raw_artifact(
+            session,
+            source_id=source.id,
+            ingestion_run_id=run.id,
+            source_url=source_url,
+            payload=zip_bytes,
+            storage_uri=storage_uri,
+            filename=f"COTAHIST_A{year}.ZIP",
+            content_type="application/zip",
+            http_status=http_status,
+            etag=None,
+            last_modified=None,
+            reference_date=min(end, date(year, 12, 31)),
+        )
+        by_key: dict[tuple[str, date], CotahistQuoteRecord] = {}
+        for record in parse_cotahist_zip(zip_bytes):
+            if record.reference_date < start or record.reference_date > end:
+                continue
+            key = (record.ticker, record.reference_date)
+            existing = by_key.get(key)
+            by_key[key] = record if existing is None else _prefer_vista_cotahist(existing, record)
+        for index, record in enumerate(by_key.values(), start=1):
+            instrument = get_or_create_instrument_by_key(
+                session,
+                source_id=source.id,
+                source_key=record.ticker,
+                asset_class=AssetClass.EQUITY,
+                instrument_type="listed",
+                name=record.ticker,
+                currency=record.currency or "BRL",
+            )
+            attach_identifier(
+                session,
+                instrument_id=instrument.id,
+                identifier_type=IdentifierType.TICKER,
+                identifier_value=record.ticker,
+                source_id=source.id,
+            )
+            if record.isin:
+                attach_identifier(
+                    session,
+                    instrument_id=instrument.id,
+                    identifier_type=IdentifierType.ISIN,
+                    identifier_value=record.isin,
+                    source_id=source.id,
+                )
+            action = upsert_quote(
+                session,
+                instrument_id=instrument.id,
+                source_id=source.id,
+                reference_date=record.reference_date,
+                value=record.last_price,
+                price_type=PriceType.LAST,
+                artifact=artifact,
+                ingestion_run_id=run.id,
+                currency=record.currency or "BRL",
+                unit="BRL",
+                extra=record.extra,
+                is_official=True,
+            )
+            if action == "inserted":
+                inserted += 1
+            elif action == "updated":
+                updated += 1
+            else:
+                skipped += 1
+            if index % 1000 == 0:
+                session.flush()
+        run.artifacts_downloaded = 1
+        run.records_parsed = len(by_key)
+        run.records_inserted = inserted
+        run.records_updated = updated
+        run.records_rejected = rejected
+        run.records_normalized = inserted + updated + skipped
+        finish_ingestion_run(run, status=IngestionRunStatus.SUCCEEDED)
+        session.flush()
+        return {
+            "inserted": inserted,
+            "updated": updated,
+            "skipped": skipped,
+            "rejected": rejected,
+        }
+    except Exception:
+        finish_ingestion_run(run, status=IngestionRunStatus.FAILED)
+        session.flush()
+        raise
+
+
+def backfill_b3(
+    session,
+    *,
+    start: date,
+    end: date,
+    storage: ObjectStorage | None = None,
+    provider: B3Provider | None = None,
+    delay_seconds: float = 0.5,
+    include_cotahist: bool = False,
+    resume: bool = True,
+) -> dict[str, int | str]:
+    if end < start:
+        raise ValueError("backfill_b3 end must be on or after start")
+    object_store = storage or build_object_storage()
+    effective_delay = 0.0 if provider is not None else delay_seconds
+    checkpoint = load_checkpoint(object_store, "b3")
+    resume_after: date | None = None
+    if should_resume(checkpoint, start, end, resume=resume) and checkpoint is not None:
+        if checkpoint.last_completed:
+            resume_after = date.fromisoformat(checkpoint.last_completed)
+    inserted = updated = skipped = rejected = artifacts = empty_days = 0
+    last_completed: date | None = resume_after
+    try:
+        for day in _iter_calendar_days(start, end):
+            if resume_after is not None and day <= resume_after:
+                continue
+            if day.weekday() >= 5:
+                last_completed = day
+                _save_b3_checkpoint(object_store, start, end, last_completed=day, status="running")
+                continue
+            try:
+                day_result = _ingest_b3_day(
+                    session,
+                    reference_date=day,
+                    storage=object_store,
+                    provider=provider,
+                )
+            except B3ParseError as exc:
+                if not _is_empty_b3_day_error(exc):
+                    raise
+                empty_days += 1
+            else:
+                inserted += int(day_result["inserted"])
+                updated += int(day_result["updated"])
+                skipped += int(day_result["skipped"])
+                rejected += int(day_result["rejected"])
+                artifacts += int(day_result.get("artifacts", 0))
+            last_completed = day
+            _save_b3_checkpoint(object_store, start, end, last_completed=day, status="running")
+            if effective_delay > 0 and day < end:
+                time.sleep(effective_delay)
+        if include_cotahist:
+            years = list(range(start.year, end.year + 1))
+            for index, year in enumerate(years):
+                year_result = _ingest_cotahist_year(
+                    session,
+                    year=year,
+                    start=start,
+                    end=end,
+                    storage=object_store,
+                )
+                inserted += int(year_result["inserted"])
+                updated += int(year_result["updated"])
+                skipped += int(year_result["skipped"])
+                rejected += int(year_result["rejected"])
+                artifacts += 1
+                if effective_delay > 0 and index < len(years) - 1:
+                    time.sleep(effective_delay)
+        completed = last_completed or end
+        _save_b3_checkpoint(object_store, start, end, last_completed=completed, status="succeeded")
+        return {
+            "status": "succeeded",
+            "inserted": inserted,
+            "updated": updated,
+            "skipped": skipped,
+            "rejected": rejected,
+            "empty_days": empty_days,
+            "artifacts": artifacts,
+        }
+    except Exception:
+        _save_b3_checkpoint(
+            object_store, start, end, last_completed=last_completed, status="failed"
+        )
+        raise

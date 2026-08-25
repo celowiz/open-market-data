@@ -7,7 +7,8 @@ historical GitHub READMEs. Outdated assumptions found during planning are
 called out explicitly.
 
 Timezone for publication and "safe ingest" clocks is **America/Sao_Paulo**.
-GitHub Actions cron uses UTC; document conversions when schedules are added.
+GitHub Actions cron uses UTC; conversions are in
+[`INGEST_SCHEDULE.md`](INGEST_SCHEDULE.md).
 
 HTTP clients must send a clear User-Agent, timeouts, retries, and conditional
 GET headers when the source provides ETag / Last-Modified.
@@ -96,8 +97,9 @@ Official policy (dataset page):
 - Current month and previous month: daily Mon–Sat ~08:00 BRT
 - M-2 through M-11: weekly reapresentações
 - Rolling window is 12 months; older files live under HIST and are frozen.
-  Phase 2 daily ingest uses monthly `DADOS/` ZIPs only. Yearly
-  `HIST/inf_diario_fi_{YYYY}.zip` is **Phase 12** backfill.
+  Daily ingest uses monthly `DADOS/` ZIPs. Yearly
+  `HIST/inf_diario_fi_{YYYY}.zip` is `marketdata backfill cvm`. Start with
+  2025; do not dump every HIST year in one operator session.
 
 Administrators have about one business day to file (ICVM 555 Art. 59).
 Missing D-1 is not always an error.
@@ -192,7 +194,7 @@ not ingest it as `LAST`.
 | BVBG.087.01 | Index / BDR / IOPV |
 | BDI `ConsolidatedRecords` | OTC credit prints (DEB / CRI / CRA Último Preço) |
 | BDI `InstrumentRegistration` | OTC cadastro for the CREDIT universe |
-| COTAHIST | Equities **Phase 12** backfill; price-correction flag; no derivative settlement |
+| COTAHIST | Equities historical backfill (`backfill b3 --cotahist`); price-correction flag; no derivative settlement |
 
 Format: XML inside nested ZIP (ISO 20022-style BVMF messages), except COTAHIST
 (fixed-width text in ZIP) and BDI OTC tables (JSON from the table export POST).
@@ -256,7 +258,8 @@ Tipo Titulo;Data Vencimento;Data Base;Taxa Compra Manha;Taxa Venda Manha;PU Comp
 - Daily morning snapshot since January 2002
 - Identity: map `Tipo Titulo` to `title_type`, plus `Data Vencimento`
 - Phase 3 `ingest tesouro --date` keeps only that `Data Base`. Loading the
-  full CSV (or a `--start`/`--end` slice) is **Phase 12** `backfill tesouro`.
+  full CSV (or a `--start`/`--end` slice) is `marketdata backfill tesouro`
+  (one HTTP download, not one GET per calendar day).
 
 | Marketing name | title_type |
 |---|---|
@@ -285,8 +288,8 @@ License: ODbL 1.0.
 | PTAX OData | `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/` |
 
 **Constraint since 2026-03-26:** historical JSON/CSV queries are limited to
-**10-year windows**. Backfills must be chunked. Phase 4 ingest still fetches a
-single `--date`; multi-year SGS load is **Phase 12** `backfill bcb`.
+**10-year windows**. Backfills must be chunked. Daily ingest still fetches a
+single `--date`; multi-year SGS load is `marketdata backfill bcb`.
 
 Avoid legacy SOAP SGS for new code.
 
@@ -316,7 +319,8 @@ Adapter: `yfinance` behind `YahooProvider`.
 
 - EOD field: Close, not Adj Close
 - `is_official = false`
-- Public API and public datasets disabled until redistribution is reviewed
+- Public API is enabled (`public_api_enabled=true`); public datasets stay off.
+  Range persist is `marketdata backfill yahoo`.
 
 ---
 
@@ -331,15 +335,11 @@ PYield and pyettj ANBIMA modules are discovery references only.
 
 ---
 
-## Provider schedule notes (later)
+## Provider schedule notes
 
-Each enabled provider should document:
-
-- expected publication time
-- safe ingestion time
-- retry strategy
-
-Do not invent a single universal cron hour.
+Per-provider publication clocks, BRT→UTC cron, and B3 trading-date rules:
+[`INGEST_SCHEDULE.md`](INGEST_SCHEDULE.md). `backfill.yml` has no daily
+schedule.
 
 ---
 
@@ -348,3 +348,5 @@ Do not invent a single universal cron hour.
 - [`OPEN_SOURCE_REVIEW.md`](OPEN_SOURCE_REVIEW.md)
 - [`LICENSING.md`](LICENSING.md)
 - [`PRICE_SEMANTICS.md`](PRICE_SEMANTICS.md)
+- [`INGEST_SCHEDULE.md`](INGEST_SCHEDULE.md)
+- [`DEPLOYMENT.md`](DEPLOYMENT.md)

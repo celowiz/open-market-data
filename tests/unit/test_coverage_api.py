@@ -113,12 +113,12 @@ def _seed_quotes(session) -> None:
         documentation_url="https://finance.yahoo.com/",
         data_license="UNKNOWN",
         redistribution_policy=RedistributionPolicy.UNKNOWN,
-        public_api_enabled=False,
+        public_api_enabled=True,
         public_dataset_enabled=False,
     )
     yahoo.official = False
     yahoo.redistribution_policy = RedistributionPolicy.UNKNOWN.value
-    yahoo.public_api_enabled = False
+    yahoo.public_api_enabled = True
     yahoo.public_dataset_enabled = False
     yahoo.ingestion_enabled = True
 
@@ -214,7 +214,7 @@ def _by_instrument(payload: dict) -> dict:
 
 
 @pytest.mark.db
-def test_public_coverage_prices_b3_and_restricts_yahoo(db_session, tmp_path: Path) -> None:
+def test_public_coverage_prices_b3_and_yahoo(db_session, tmp_path: Path) -> None:
     _seed_quotes(db_session)
     client = _client(_seed_universe(tmp_path))
     response = client.get("/v1/coverage", params={"date": REF.isoformat()})
@@ -230,10 +230,10 @@ def test_public_coverage_prices_b3_and_restricts_yahoo(db_session, tmp_path: Pat
     assert rows["DI1F27"]["status"] == "PRICED"
     assert rows["DI1F27"]["price_type"] == "OFFICIAL_SETTLEMENT"
     assert Decimal(rows["DI1F27"]["price"]) == Decimal("98642.12")
-    assert rows["AAPL"]["status"] == "RESTRICTED"
-    assert rows["AAPL"]["missing_reason"] == "REDISTRIBUTION_RESTRICTED"
-    assert rows["AAPL"]["price"] is None
-    assert body["priced"] == 2
+    assert rows["AAPL"]["status"] == "PRICED"
+    assert rows["AAPL"]["price"] == "185.64"
+    assert rows["AAPL"]["price_type"] == "CLOSE"
+    assert body["priced"] == 3
 
 
 @pytest.mark.db
@@ -270,7 +270,7 @@ def test_cli_local_counts_yahoo_close(db_session, tmp_path: Path) -> None:
 
 
 @pytest.mark.db
-def test_cli_public_flag_restricts_yahoo(db_session, tmp_path: Path) -> None:
+def test_cli_public_flag_prices_yahoo(db_session, tmp_path: Path) -> None:
     _seed_quotes(db_session)
     universe = _seed_universe(tmp_path) / "config" / "instruments.example.csv"
     result = runner.invoke(
@@ -278,6 +278,5 @@ def test_cli_public_flag_restricts_yahoo(db_session, tmp_path: Path) -> None:
         ["coverage", "--date", REF.isoformat(), "--universe", str(universe), "--public"],
     )
     assert result.exit_code == 0, result.output
-    assert "AAPL  RESTRICTED" in result.output
-    assert "REDISTRIBUTION_RESTRICTED" in result.output
-    assert "185.64" not in result.output.split("AAPL")[1].split("\n")[0]
+    assert "AAPL  PRICED  CLOSE  185.64" in result.output
+    assert "PETR4  PRICED  LAST  32.51" in result.output

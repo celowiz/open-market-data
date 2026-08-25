@@ -1,0 +1,43 @@
+# Virtualenv and local object store
+.venv/
+venv/
+data/
+
+# Secrets (never bake into the API image)
+.env
+.env.*
+!.env.example
+
+# Test and linter caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Cursor / IDE
+.cursor/
+.vscode/
+.idea/
+
+# Git and CI (not needed to build the runtime image)
+.git/
+.github/
+
+# Tests and frontend (API image does not run them)
+tests/
+apps/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs / OS
+*.log
+.DS_Store
+Thumbs.db

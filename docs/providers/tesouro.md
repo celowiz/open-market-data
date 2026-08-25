@@ -7,9 +7,13 @@ returned 404 during planning). PYield is not used as a price source.
 uv run marketdata ingest tesouro --date 2026-08-21
 ```
 
-That command filters the official CSV to one `Data Base`. Full history since
-2002 is **Phase 12**: `marketdata backfill tesouro --start 2002-01-01 --end
-YYYY-MM-DD` (one download, persist every day in range).
+Daily ingest filters the official CSV to one `Data Base`. Historical range
+ingest downloads that CSV **once** and persists every `Data Base` in
+`--start`/`--end` (inclusive):
+
+```bash
+uv run marketdata backfill tesouro --start 2002-01-01 --end 2026-08-24
+```
 
 Identity is `title_type:maturity_date`, for example `LTN:2029-01-01`.
 `PU Base Manha` maps to `PU_BASE`.

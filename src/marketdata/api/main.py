@@ -1,15 +1,21 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from marketdata import __version__
 from marketdata.api.routes.coverage import router as coverage_router
 from marketdata.api.routes.datasets import router as datasets_router
 from marketdata.api.routes.funds import router as funds_router
 from marketdata.api.routes.health import router as health_router
+from marketdata.api.routes.instruments import router as instruments_router
 from marketdata.api.routes.quotes import router as quotes_router
 from marketdata.api.routes.series import router as series_router
 from marketdata.api.routes.sources import router as sources_router
 from marketdata.config import get_settings
 from marketdata.providers.bootstrap import register_default_providers
+
+
+def _cors_origins(raw: str) -> list[str]:
+    return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 def create_app() -> FastAPI:
@@ -25,6 +31,14 @@ def create_app() -> FastAPI:
         redoc_url=redoc_url,
         openapi_url=openapi_url,
     )
+    origins = _cors_origins(settings.cors_allowed_origins)
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["GET"],
+            allow_headers=["*"],
+        )
     app.include_router(health_router, prefix=settings.api_v1_prefix)
     app.include_router(sources_router, prefix=settings.api_v1_prefix)
     app.include_router(funds_router, prefix=settings.api_v1_prefix)
@@ -32,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(series_router, prefix=settings.api_v1_prefix)
     app.include_router(coverage_router, prefix=settings.api_v1_prefix)
     app.include_router(datasets_router, prefix=settings.api_v1_prefix)
+    app.include_router(instruments_router, prefix=settings.api_v1_prefix)
     return app
 
 

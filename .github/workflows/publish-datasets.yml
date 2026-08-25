@@ -1,0 +1,96 @@
+# Public ODbL Parquet snapshots — after weekday ODbL ingests.
+# UTC: 30 1 * * 2-6 (Tue–Sat 01:30 UTC = Mon–Fri 22:30 BRT). See docs/INGEST_SCHEDULE.md.
+#
+# Requires PUBLIC_DATASET_PUBLICATION_ENABLED=true (GitHub Actions variable).
+# B3 and Yahoo must not be published as Parquet (ADR-0013, ADR-0014).
+name: Publish datasets
+
+on:
+  schedule:
+    - cron: "30 1 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Reference date YYYY-MM-DD (defaults to today UTC)"
+        required: false
+
+concurrency:
+  group: publish-datasets
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      APP_ENV: production
+      APP_TIMEZONE: America/Sao_Paulo
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OBJECT_STORAGE_BACKEND: ${{ vars.OBJECT_STORAGE_BACKEND || 'local' }}
+      LOCAL_STORAGE_PATH: ${{ vars.LOCAL_STORAGE_PATH || './data' }}
+      OBJECT_STORAGE_ENDPOINT: ${{ vars.OBJECT_STORAGE_ENDPOINT }}
+      OBJECT_STORAGE_BUCKET: ${{ vars.OBJECT_STORAGE_BUCKET }}
+      OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY }}
+      OBJECT_STORAGE_SECRET_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_KEY }}
+      OBJECT_STORAGE_REGION: ${{ vars.OBJECT_STORAGE_REGION || 'auto' }}
+      PUBLIC_DATASET_PUBLICATION_ENABLED: ${{ vars.PUBLIC_DATASET_PUBLICATION_ENABLED || 'false' }}
+      PUBLIC_DATA_BASE_URL: ${{ vars.PUBLIC_DATA_BASE_URL }}
+      PUBLIC_DATASET_FORMAT: parquet
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Require DATABASE_URL
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is not set. Refusing to publish — datasets would not be built from PostgreSQL."
+            exit 1
+          fi
+
+      - name: Require publication flag
+        run: |
+          set -euo pipefail
+          flag="$(printf '%s' "${PUBLIC_DATASET_PUBLICATION_ENABLED:-}" | tr '[:upper:]' '[:lower:]')"
+          if [ "$flag" != "true" ] && [ "$flag" != "1" ]; then
+            echo "::error::PUBLIC_DATASET_PUBLICATION_ENABLED must be true (GitHub Actions variable). Refusing to publish."
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Resolve snapshot date
+        id: refdate
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_DATE:-}" ]; then
+            printf 'date=%s\n' "$INPUT_DATE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Cron is 01:30 UTC (22:30 BRT). Snapshot the BRT calendar date that
+          # was just ingested, not the already-rolled UTC date.
+          DATE="$(python3 <<'PY'
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          print(datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat())
+          PY
+          )"
+          printf 'date=%s\n' "$DATE" >> "$GITHUB_OUTPUT"
+
+      - name: Publish datasets
+        run: uv run marketdata publish datasets --date "${{ steps.refdate.outputs.date }}"

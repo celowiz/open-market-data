@@ -25,22 +25,23 @@ GET /v1/coverage?date=YYYY-MM-DD&universe=example|operator
 `operator` is gitignored `config/instruments.csv` (404 if missing). There is no
 `/v1/yahoo` route.
 
-The API always uses **public** mode. The CLI defaults to **local** mode
-(Yahoo `CLOSE` may count as priced). `--public` applies the same gate as the API.
+The API always uses **public** mode. The CLI defaults to **local** mode.
+`--public` applies the same gate as the API (`public_api_enabled`).
 
 ## Local vs public
 
 Public coverage reuses [`src/marketdata/api/access.py`](../src/marketdata/api/access.py).
-A Yahoo-only name stays in the universe but is `RESTRICTED` with
-`missing_reason=REDISTRIBUTION_RESTRICTED` and `price=null`. B3 names may be
-`PRICED` under current `API_ONLY` flags. Coverage does not write Parquet.
-ODbL bulk files are a separate command; see [`DATASETS.md`](DATASETS.md).
+A source with `public_api_enabled=false` stays in the universe but is
+`RESTRICTED` with `missing_reason=REDISTRIBUTION_RESTRICTED` and `price=null`.
+Yahoo and B3 names may be `PRICED` under current operational flags. Coverage
+does not write Parquet. ODbL bulk files are a separate command; see
+[`DATASETS.md`](DATASETS.md).
 
 ## Expected observations
 
 - B3 equity → `LAST`
 - B3 future → `OFFICIAL_SETTLEMENT` (never last trade as settlement)
-- Yahoo equity → `CLOSE` (local/POC only)
+- Yahoo equity → `CLOSE`
 
 Never fabricate a price. Never carry yesterday’s last forward as today.
 `NO_TRADE` is the coverage spelling of `NO_PUBLIC_PRICE` in

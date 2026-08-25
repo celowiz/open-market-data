@@ -1,3 +1,4 @@
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
 
@@ -17,8 +18,10 @@ app = typer.Typer(
 )
 ingest_app = typer.Typer(help="Ingest a market-data provider.")
 publish_app = typer.Typer(help="Publish public datasets.")
+backfill_app = typer.Typer(help="Historical range ingest (not the daily cron).")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(publish_app, name="publish")
+app.add_typer(backfill_app, name="backfill")
 
 
 @app.callback()
@@ -50,6 +53,66 @@ def _session() -> Session:
     if not settings.database_url:
         raise typer.BadParameter("DATABASE_URL is required")
     return create_session_factory(create_db_engine(settings))()
+
+
+_RESULT_KEYS = (
+    "run_id",
+    "inserted",
+    "updated",
+    "skipped",
+    "rejected",
+    "artifacts",
+    "empty_days",
+    "months",
+    "status",
+)
+
+
+def _echo_result(label: str, result: Mapping[str, object]) -> None:
+    parts = [label]
+    for key in _RESULT_KEYS:
+        if key in result:
+            parts.append(f"{key}={result[key]}")
+    typer.echo(" ".join(parts))
+
+
+def _with_session(work: Callable[[Session], Mapping[str, object]]) -> Mapping[str, object]:
+    session = _session()
+    try:
+        result = work(session)
+        session.commit()
+        return result
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def _run_jobs(
+    session: Session,
+    jobs: Sequence[tuple[str, Callable[[Session], Mapping[str, object]]]],
+) -> list[str]:
+    failed: list[str] = []
+    for label, work in jobs:
+        try:
+            result = work(session)
+            session.commit()
+            _echo_result(label, result)
+        except Exception as exc:
+            session.rollback()
+            typer.echo(f"{label} failed: {exc}")
+            failed.append(label)
+    return failed
+
+
+_START_OPTION = typer.Option(..., "--start", help="Inclusive start date YYYY-MM-DD")
+_END_OPTION = typer.Option(..., "--end", help="Inclusive end date YYYY-MM-DD")
+_RESUME_OPTION = typer.Option(
+    True,
+    "--resume/--force",
+    help="Resume from a matching checkpoint. --force starts the range fresh.",
+)
 
 
 @ingest_app.command("cvm")
@@ -182,6 +245,210 @@ def ingest_yahoo_command(
         f"inserted={result['inserted']} updated={result['updated']} "
         f"skipped={result['skipped']}"
     )
+
+
+@ingest_app.command("all")
+def ingest_all_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest CVM, Tesouro, BCB, B3, and Yahoo (if enabled) for one date."""
+    from marketdata.ingestion.b3 import ingest_b3
+    from marketdata.ingestion.bcb import ingest_bcb
+    from marketdata.ingestion.cvm import ingest_cvm
+    from marketdata.ingestion.tesouro import ingest_tesouro
+    from marketdata.ingestion.yahoo import ingest_yahoo
+
+    reference = date.fromisoformat(date_value)
+    settings = get_settings()
+    jobs: list[tuple[str, Callable[[Session], Mapping[str, object]]]] = [
+        ("CVM ingest", lambda session: ingest_cvm(session, reference_date=reference)),
+        ("Tesouro ingest", lambda session: ingest_tesouro(session, reference_date=reference)),
+        ("BCB ingest", lambda session: ingest_bcb(session, reference_date=reference)),
+        ("B3 ingest", lambda session: ingest_b3(session, reference_date=reference)),
+    ]
+    if settings.yahoo_provider_enabled:
+        jobs.append(
+            ("Yahoo ingest", lambda session: ingest_yahoo(session, reference_date=reference))
+        )
+    else:
+        typer.echo("Yahoo ingest skipped (yahoo_provider_enabled=false)")
+    session = _session()
+    try:
+        failed = _run_jobs(session, jobs)
+    finally:
+        session.close()
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@backfill_app.command("cvm")
+def backfill_cvm_command(
+    start_value: str = _START_OPTION,
+    end_value: str = _END_OPTION,
+    max_months: int | None = typer.Option(
+        None,
+        "--max-months",
+        help="Optional safety cap on months processed.",
+    ),
+    resume: bool = _RESUME_OPTION,
+) -> None:
+    """Backfill CVM Informe Diario months for --start/--end."""
+    from marketdata.ingestion.cvm import backfill_cvm
+
+    start = date.fromisoformat(start_value)
+    end = date.fromisoformat(end_value)
+    result = _with_session(
+        lambda session: backfill_cvm(
+            session,
+            start=start,
+            end=end,
+            resume=resume,
+            max_months=max_months,
+        )
+    )
+    _echo_result("CVM backfill", result)
+
+
+@backfill_app.command("tesouro")
+def backfill_tesouro_command(
+    start_value: str = _START_OPTION,
+    end_value: str = _END_OPTION,
+    resume: bool = _RESUME_OPTION,
+) -> None:
+    """Backfill Tesouro Direto quotes from one CKAN CSV for --start/--end."""
+    from marketdata.ingestion.tesouro import backfill_tesouro
+
+    start = date.fromisoformat(start_value)
+    end = date.fromisoformat(end_value)
+    result = _with_session(
+        lambda session: backfill_tesouro(session, start=start, end=end, resume=resume)
+    )
+    _echo_result("Tesouro backfill", result)
+
+
+@backfill_app.command("bcb")
+def backfill_bcb_command(
+    start_value: str = _START_OPTION,
+    end_value: str = _END_OPTION,
+    resume: bool = _RESUME_OPTION,
+) -> None:
+    """Backfill BCB SGS series for --start/--end using 10-year chunks."""
+    from marketdata.ingestion.bcb import backfill_bcb
+
+    start = date.fromisoformat(start_value)
+    end = date.fromisoformat(end_value)
+    result = _with_session(
+        lambda session: backfill_bcb(session, start=start, end=end, resume=resume)
+    )
+    _echo_result("BCB backfill", result)
+
+
+@backfill_app.command("b3")
+def backfill_b3_command(
+    start_value: str = _START_OPTION,
+    end_value: str = _END_OPTION,
+    cotahist: bool = typer.Option(
+        False,
+        "--cotahist",
+        help="Also ingest annual COTAHIST equity history (LAST only).",
+    ),
+    delay_seconds: float = typer.Option(
+        0.5,
+        "--delay-seconds",
+        help="Sleep between live B3 HTTP days.",
+    ),
+    resume: bool = _RESUME_OPTION,
+) -> None:
+    """Backfill B3 trading days for --start/--end; weekends and empty ZIPs are skipped."""
+    from marketdata.ingestion.b3 import backfill_b3
+
+    start = date.fromisoformat(start_value)
+    end = date.fromisoformat(end_value)
+    result = _with_session(
+        lambda session: backfill_b3(
+            session,
+            start=start,
+            end=end,
+            delay_seconds=delay_seconds,
+            include_cotahist=cotahist,
+            resume=resume,
+        )
+    )
+    _echo_result("B3 backfill", result)
+
+
+@backfill_app.command("yahoo")
+def backfill_yahoo_command(
+    start_value: str = _START_OPTION,
+    end_value: str = _END_OPTION,
+    symbols: list[str] | None = _YAHOO_SYMBOL_OPTION,
+) -> None:
+    """Backfill unofficial Yahoo Finance history (local store; not public API)."""
+    from marketdata.ingestion.yahoo import backfill_yahoo
+
+    start = date.fromisoformat(start_value)
+    end = date.fromisoformat(end_value)
+    result = _with_session(
+        lambda session: backfill_yahoo(
+            session,
+            start=start,
+            end=end,
+            symbols=symbols or None,
+        )
+    )
+    _echo_result("Yahoo backfill", result)
+
+
+@backfill_app.command("all")
+def backfill_all_command(
+    start_value: str = _START_OPTION,
+    end_value: str = _END_OPTION,
+    resume: bool = _RESUME_OPTION,
+) -> None:
+    """Backfill tesouro, bcb, cvm, b3, then yahoo (if enabled)."""
+    from marketdata.ingestion.b3 import backfill_b3
+    from marketdata.ingestion.bcb import backfill_bcb
+    from marketdata.ingestion.cvm import backfill_cvm
+    from marketdata.ingestion.tesouro import backfill_tesouro
+    from marketdata.ingestion.yahoo import backfill_yahoo
+
+    start = date.fromisoformat(start_value)
+    end = date.fromisoformat(end_value)
+    settings = get_settings()
+    jobs: list[tuple[str, Callable[[Session], Mapping[str, object]]]] = [
+        (
+            "Tesouro backfill",
+            lambda session: backfill_tesouro(session, start=start, end=end, resume=resume),
+        ),
+        (
+            "BCB backfill",
+            lambda session: backfill_bcb(session, start=start, end=end, resume=resume),
+        ),
+        (
+            "CVM backfill",
+            lambda session: backfill_cvm(session, start=start, end=end, resume=resume),
+        ),
+        (
+            "B3 backfill",
+            lambda session: backfill_b3(session, start=start, end=end, resume=resume),
+        ),
+    ]
+    if settings.yahoo_provider_enabled:
+        jobs.append(
+            (
+                "Yahoo backfill",
+                lambda session: backfill_yahoo(session, start=start, end=end),
+            )
+        )
+    else:
+        typer.echo("Yahoo backfill skipped (yahoo_provider_enabled=false)")
+    session = _session()
+    try:
+        failed = _run_jobs(session, jobs)
+    finally:
+        session.close()
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @app.command("explain")

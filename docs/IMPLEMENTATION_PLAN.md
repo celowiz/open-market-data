@@ -619,6 +619,11 @@ is more meaningful after Phase 12, but a one-day universe still works.
 
 ## Phase 11 — Official deploy and scheduled ingest
 
+**Status:** Complete for artifacts, not provisioned. Dockerfile, ingest/publish
+workflows, `backfill.yml` (`workflow_dispatch` only), and
+[`DEPLOYMENT.md`](DEPLOYMENT.md) exist. This phase did **not** create Neon,
+Railway, Cloudflare R2, or Vercel projects.
+
 **Objective:** CI already exists; add ingest workflows, portable Dockerfile,
 Railway + Neon with **explicit user approval**, optional R2 when enabled.
 
@@ -637,6 +642,9 @@ COTAHIST (all Phase 12). Next.js Explorer is Phase 13.
 ---
 
 ## Phase 12 — Historical backfill
+
+**Status:** Complete (CLI + offline unit tests). Operator live backfill is
+documented, not executed for all HIST years in CI.
 
 **Objective:** Fill PostgreSQL (local or a Neon branch via `DATABASE_URL`) with
 multi-year series so `/v1` history routes return real price paths, not a
@@ -722,6 +730,10 @@ then optional COTAHIST.
 ---
 
 ## Phase 13 — Next.js Data Explorer
+
+**Status:** Complete for the local app (`apps/explorer`). Vercel is not
+provisioned. Explorer CI is `.github/workflows/explorer.yml` (`npm ci` +
+`npm run build`; no secrets).
 
 **Objective:** A public Data Explorer that lets a person pick a few instruments
 or series and see the **historical price path** already stored by Phase 12.

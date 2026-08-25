@@ -39,6 +39,11 @@ marketdata = "marketdata.cli.main:app"
 Homepage = "https://github.com/celowiz/open-market-data"
 Documentation = "https://github.com/celowiz/open-market-data/tree/main/docs"
 
+[project.optional-dependencies]
+s3 = [
+  "boto3>=1.34",
+]
+
 [dependency-groups]
 dev = [
   "pyright>=1.1",

@@ -1,3 +1,4 @@
+# Python quality (ruff, pyright, pytest). Explorer CI is explorer.yml.
 name: CI
 
 on:

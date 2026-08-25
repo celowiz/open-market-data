@@ -33,7 +33,7 @@ def _yahoo_source() -> SourceView:
     return SourceView(
         name="yahoo",
         ingestion_enabled=True,
-        public_api_enabled=False,
+        public_api_enabled=True,
         redistribution_policy=RedistributionPolicy.UNKNOWN.value,
     )
 
@@ -157,7 +157,7 @@ def test_futures_settlement_is_priced_last_is_not_used_as_settlement() -> None:
     assert priced.results[0].price_type == PriceType.OFFICIAL_SETTLEMENT.value
 
 
-def test_yahoo_close_is_priced_locally_and_restricted_publicly() -> None:
+def test_yahoo_close_is_priced_locally_and_publicly() -> None:
     aapl = uuid4()
     store = InMemoryCoverageStore()
     store.add_source(_yahoo_source())
@@ -185,11 +185,43 @@ def test_yahoo_close_is_priced_locally_and_restricted_publicly() -> None:
     public = evaluate_coverage(
         rows, reference_date=REF, store=store, mode=CoverageMode.PUBLIC, today=REF
     )
+    assert public.results[0].status is CoverageStatus.PRICED
+    assert public.results[0].price == Decimal("185.64")
+    assert public.priced == 1
+
+
+def test_flag_off_source_is_restricted_publicly() -> None:
+    aapl = uuid4()
+    store = InMemoryCoverageStore()
+    store.add_source(
+        SourceView(
+            name="yahoo",
+            ingestion_enabled=True,
+            public_api_enabled=False,
+            redistribution_policy=RedistributionPolicy.UNKNOWN.value,
+        )
+    )
+    store.add_instrument(aapl)
+    store.add_identifier(aapl, IdentifierType.YAHOO_SYMBOL, "AAPL", "yahoo")
+    store.add_identifier(aapl, IdentifierType.TICKER, "AAPL", "yahoo")
+    store.add_quote(
+        StoredQuote(
+            instrument_id=aapl,
+            reference_date=REF,
+            value=Decimal("185.64"),
+            price_type=PriceType.CLOSE,
+            source_name="yahoo",
+            quality_status=QualityStatus.OK.value,
+        )
+    )
+    rows = [row for row in load_universe(FIXTURE) if row.ticker == "AAPL"]
+    public = evaluate_coverage(
+        rows, reference_date=REF, store=store, mode=CoverageMode.PUBLIC, today=REF
+    )
     assert public.results[0].status is CoverageStatus.RESTRICTED
     assert public.results[0].missing_reason is MissingReason.REDISTRIBUTION_RESTRICTED
     assert public.results[0].price is None
     assert public.priced == 0
-    assert public.universe_size == 1
 
 
 def test_unknown_ticker_is_mapping_error() -> None:

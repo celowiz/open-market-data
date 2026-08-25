@@ -3,18 +3,12 @@ from uuid import UUID
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
-from marketdata.domain.enums import PUBLIC_REDISTRIBUTION_POLICIES, RedistributionPolicy
 from marketdata.storage.models import InstrumentQuoteRow, SourceRow
-
-PUBLIC_API_POLICY_VALUES = tuple(policy.value for policy in PUBLIC_REDISTRIBUTION_POLICIES)
 
 
 def source_allows_public_api(*, public_api_enabled: bool, redistribution_policy: str) -> bool:
-    try:
-        policy = RedistributionPolicy(redistribution_policy)
-    except ValueError:
-        return False
-    return public_api_enabled and policy in PUBLIC_REDISTRIBUTION_POLICIES
+    _ = redistribution_policy
+    return public_api_enabled
 
 
 def source_row_allows_public_api(row: SourceRow) -> bool:
@@ -33,7 +27,6 @@ def public_quotes_stmt(
         .where(
             InstrumentQuoteRow.instrument_id == instrument_id,
             SourceRow.public_api_enabled.is_(True),
-            SourceRow.redistribution_policy.in_(PUBLIC_API_POLICY_VALUES),
         )
     )
     if source_name is not None:

@@ -115,7 +115,8 @@ Validated August 2026 against official portals. This is not legal advice.
 - Data owner: Yahoo / underlying exchanges
 - Official: no
 - Redistribution: **`UNKNOWN`**
-- Flags: `ingestion_enabled` may be true for POC; `public_api_enabled=false`;
+- Flags: `ingestion_enabled` may be true for POC; `public_api_enabled=true`
+  (temporary operational choice); `public_dataset_enabled=false`
   `public_dataset_enabled=false`
 - Enforce in code, not only in docs. See
   [`adr/0013-yahoo-gating.md`](adr/0013-yahoo-gating.md).

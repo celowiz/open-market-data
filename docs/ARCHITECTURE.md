@@ -20,12 +20,13 @@ Code, class names, and public APIs are English. Documentation is English.
 - Remain self-hostable: local PostgreSQL and local filesystem object storage must work.
 - Keep the official deployment cloud-neutral: Neon, Railway, and Cloudflare R2 are deployment choices, not domain dependencies.
 
-## Non-goals (MVP Phases 0–11)
+## Non-goals (still out of MVP)
 
-The following stay out of the core provider/deploy track:
+Phases 11–13 are implemented in-repo: deploy **artifacts** (not provisioned
+cloud projects), `marketdata backfill`, and a local Next.js Explorer on `/v1`.
 
-- Next.js Data Explorer (**Phase 13**, after historical backfill)
-- Historical `marketdata backfill` CLI, CVM `HIST/`, COTAHIST (**Phase 12**)
+The following stay out of MVP:
+
 - DuckDB-Wasm
 - MCP server
 - SDKs
@@ -35,9 +36,10 @@ The following stay out of the core provider/deploy track:
 - ClickHouse, Airflow, Kafka, Kubernetes, Celery, Redis
 - Direct public PostgreSQL access
 - Custodian price feeds
+- Creating Neon, Railway, R2, or Vercel projects from this repository
 
-The first product is daily EOD market data, not a trading terminal.
-Phases 12–13 add stored history and a read-only Explorer on `/v1`.
+The first product is daily EOD market data plus stored history and a read-only
+Explorer, not a trading terminal.
 
 ---
 
@@ -46,7 +48,7 @@ Phases 12–13 add stored history and a read-only Explorer on `/v1`.
 ```text
                   GitHub Public Repository
                            │
-                    GitHub Actions (later)
+              GitHub Actions (CI + ingest + backfill dispatch)
                            │
                     Python Ingestion
                            │
@@ -55,24 +57,25 @@ Phases 12–13 add stored history and a read-only Explorer on `/v1`.
           ▼                                 ▼
  Object storage                      PostgreSQL
  RAW + curated Parquet               Serving database
- (local filesystem first;            (local first; Neon later)
-  S3/R2 later)
+ (local filesystem default;          (local first; Neon is a
+  optional S3/R2 extra)               later operator choice)
           │                                 │
           │                                 ▼
           │                              FastAPI /v1
-          │                              (Railway later)
+          │                              CORS from CORS_ALLOWED_ORIGINS
           └────────────────┬────────────────┘
-                           │
-                      CDN / WAF later
                            │
              ┌─────────────┴─────────────┐
              ▼                           ▼
-           Public API              Public datasets
+      Public API + Explorer         Public datasets
+      (Next.js → /v1 only;          (ODbL Parquet; no B3)
+       never DATABASE_URL)
 ```
 
-A future Next.js Data Explorer (**Phase 13**) must consume the public FastAPI
-API. It must not query PostgreSQL directly. It is only useful after **Phase 12**
-has backfilled multi-date quotes and series.
+The Data Explorer (`apps/explorer`) consumes FastAPI `/v1` only. It must not
+query PostgreSQL. Yahoo quotes may appear on `/v1` while `public_api_enabled`
+is true; they are never published as Parquet. B3 quotes may appear on `/v1`
+(`API_ONLY`) but are never published as Parquet.
 
 ```mermaid
 flowchart TB
@@ -166,10 +169,10 @@ Rules:
 - Object storage is behind a small interface. Domain, ingestion, and dataset
   publication depend on the interface, not on R2.
 - Daily ingest (`marketdata ingest … --date`) and historical backfill
-  (`marketdata backfill … --start --end`, Phase 12) are different commands.
-  Backfill must checkpoint, rate-limit, and use source-specific history files
+  (`marketdata backfill … --start --end`) are different commands.
+  Backfill checkpoints, rate-limits, and uses source-specific history files
   (CVM `HIST/` yearly ZIPs, Tesouro full CSV, BCB 10-year chunks, optional
-  B3 COTAHIST).
+  B3 COTAHIST). `backfill.yml` is `workflow_dispatch` only.
 
 ---
 
@@ -221,12 +224,15 @@ Those flags are data, not comments. Publication code must check them.
 
 ## Object storage
 
-Cloudflare R2 is the intended production object storage, but R2 is not enabled yet.
+Cloudflare R2 is the intended production object storage, but R2 is not enabled
+and this repository does not create buckets.
 
-Initial implementation: `LocalFileObjectStorage` writing under `LOCAL_STORAGE_PATH`
-(default `./data`).
+Default: `LocalFileObjectStorage` writing under `LOCAL_STORAGE_PATH`
+(default `./data`). No AWS credentials are required.
 
-Future implementation: `S3ObjectStorage` for any S3-compatible backend, including R2.
+Optional: `S3ObjectStorage` (`OBJECT_STORAGE_BACKEND=s3`) after
+`uv sync --extra s3`. Domain and ingestion code depend on the storage
+interface, not on boto3.
 
 Suggested object key layout (not frozen if a better partition scheme appears):
 
@@ -248,12 +254,14 @@ backend. See [`DATASETS.md`](DATASETS.md).
 
 - Versioned from day one: `/v1/`
 - FastAPI, OpenAPI at `/docs`, `/redoc`, `/openapi.json`
+- CORS when `CORS_ALLOWED_ORIGINS` is non-empty (`allow_methods=["GET"]`)
 - No live HTTP to market-data sources during a query
 - Responses include provenance: source, official, reference_date, retrieved_at, price_type
 - Monetary values serialized as strings/decimals, not binary floats
 - Identifier resolution must accept ticker, ISIN, CNPJ, and source-specific IDs
-- Pagination with default and maximum limits
-- No arbitrary SQL endpoint
+- Pagination: default `limit` 500, max 5000; optional `start` / `end` / `cursor`
+- Instrument search: `GET /v1/instruments?q=` (public-API-visible only)
+- No arbitrary SQL endpoint. Yahoo remains 404 on public quotes.
 
 Small queries go to the API. Large historical extracts go to Parquet
 (`marketdata publish datasets`; listing at `GET /v1/datasets`).
@@ -262,17 +270,19 @@ Small queries go to the API. Large historical extracts go to Parquet
 
 ## Local development versus official deployment
 
-| Concern | Local / self-host | Official instance (later) |
+| Concern | Local / self-host | Official instance (operator, not created here) |
 |---|---|---|
 | Database | PostgreSQL via `DATABASE_URL` | Neon PostgreSQL via `DATABASE_URL` |
-| Object storage | Filesystem | S3-compatible (R2 preferred) |
-| API process | `uvicorn` | Railway running the same app |
-| Daily ingestion | `marketdata ingest … --date` | GitHub Actions (Phase 11) calling the CLI |
-| Historical backfill | `marketdata backfill` (Phase 12) | Same CLI; `DATABASE_URL` may be a Neon branch |
-| Data Explorer | `next dev` → local `/v1` (Phase 13) | Vercel → public FastAPI only |
+| Object storage | Filesystem (`./data`) | S3-compatible (R2 preferred) after `uv sync --extra s3` |
+| API process | `uvicorn` | Railway running the repository `Dockerfile` |
+| Daily ingestion | `marketdata ingest … --date` | GitHub Actions calling the CLI |
+| Historical backfill | `marketdata backfill --start --end` | Same CLI; `backfill.yml` is dispatch-only |
+| Data Explorer | `cd apps/explorer && npm run dev` → `http://127.0.0.1:8000` | Vercel → public FastAPI only (not provisioned) |
 | Docs site | MkDocs locally (later) | GitHub Pages (later) |
 
-The application must not import Neon, Railway, or Cloudflare SDKs in domain code.
+Phase 11 shipped the Dockerfile and workflows. It did **not** create Neon,
+Railway, R2, or Vercel projects. The application must not import those SDKs
+in domain code.
 
 ---
 
@@ -293,6 +303,8 @@ The application must not import Neon, Railway, or Cloudflare SDKs in domain code
 - [`DATASETS.md`](DATASETS.md)
 - [`PRICE_SEMANTICS.md`](PRICE_SEMANTICS.md)
 - [`LICENSING.md`](LICENSING.md)
+- [`DEPLOYMENT.md`](DEPLOYMENT.md)
+- [`INGEST_SCHEDULE.md`](INGEST_SCHEDULE.md)
 - [`ROADMAP.md`](ROADMAP.md)
 - [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 - [`adr/`](adr/)

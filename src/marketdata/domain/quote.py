@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from marketdata.domain.enums import (
     PUBLIC_DATASET_POLICIES,
-    PUBLIC_REDISTRIBUTION_POLICIES,
     PriceType,
     QualityStatus,
     RedistributionPolicy,
@@ -30,9 +29,7 @@ class Source(BaseModel):
     notes: str | None = None
 
     def allows_public_api(self) -> bool:
-        return (
-            self.public_api_enabled and self.redistribution_policy in PUBLIC_REDISTRIBUTION_POLICIES
-        )
+        return self.public_api_enabled
 
     def allows_public_dataset(self) -> bool:
         return self.public_dataset_enabled and self.redistribution_policy in PUBLIC_DATASET_POLICIES

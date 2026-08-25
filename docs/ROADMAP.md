@@ -30,17 +30,16 @@ for sources that may be redistributed.
 | 8 | Brazilian credit public prints where available | Complete |
 | 9 | Public Parquet + manifests for ODbL sources | Complete |
 | 10 | Coverage engine and `/v1/coverage` | Complete |
-| 11 | Scheduled GitHub Actions, Railway/Neon deploy, optional R2 | After core providers |
-| 12 | Historical backfill CLI (CVM HIST, Tesouro full CSV, BCB ranges, B3/COTAHIST) | Planned (after Phase 6) |
-| 13 | Next.js Data Explorer on Vercel (charts of Phase 12 series via `/v1` only) | Planned (after Phase 12) |
+| 11 | Scheduled GitHub Actions, Dockerfile, deploy docs (no cloud projects created) | Complete for artifacts, not provisioned |
+| 12 | Historical backfill CLI (CVM HIST, Tesouro full CSV, BCB ranges, B3/COTAHIST) | Complete (CLI + unit tests; operator live load is local) |
+| 13 | Next.js Data Explorer (`apps/explorer`; charts of Phase 12 series via `/v1` only) | Complete (local; Vercel not provisioned) |
 
 CVM remains the first functional vertical after Foundation.
 
-Phases 12 and 13 are a **paired track**: backfill populates Neon/PostgreSQL
+Phases 12 and 13 are a **paired track**: backfill populates PostgreSQL
 history so `/v1` can return price series; the Explorer is how people look at
-those series. They are numbered after 11 so existing ADR/phase citations stay
-stable. Phase 12 may start as soon as Phases 2–6 are done (they are); it does
-not wait for Yahoo, credit, Parquet, or official deploy.
+those series. Official Neon/Railway/Vercel hosting remains an operator step
+with explicit approval. Local PostgreSQL + `./data` + `next dev` is enough.
 
 ### MVP success criteria (from project brief)
 
@@ -88,13 +87,15 @@ item). It still must not query PostgreSQL directly.
 ## Infrastructure sequence
 
 1. Local PostgreSQL + filesystem object storage (required from Phase 1)
-2. GitHub Actions CI (Phase 1)
-3. GitHub Actions ingest schedules (Phase 11)
-4. Neon + Railway for the official instance (Phase 11, user approval)
-5. Historical backfill into that Postgres via `marketdata backfill` (Phase 12;
-   may target a Neon **dev branch** before Phase 11 if `DATABASE_URL` is set)
-6. Next.js Explorer on Vercel against FastAPI (Phase 13)
-7. Cloudflare R2 only after R2 is enabled and approved
+2. GitHub Actions CI (Phase 1) and Explorer CI (`.github/workflows/explorer.yml`)
+3. GitHub Actions ingest schedules and `backfill.yml` dispatch (Phase 11 artifacts)
+4. Neon + Railway for the official instance (operator approval; **not created**
+   in Phase 11)
+5. Historical backfill via `marketdata backfill` (Phase 12) into local Postgres
+   or a Neon URL the operator already has
+6. Local Next.js Explorer (`apps/explorer`) against FastAPI; Vercel later with
+   approval
+7. Cloudflare R2 only after R2 is enabled and approved (`uv sync --extra s3`)
 8. Custom domains `api.` / `data.` when a domain is chosen
 
 Cloud services must not block local development.

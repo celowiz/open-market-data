@@ -7,6 +7,13 @@ from sqlalchemy.orm import Session
 
 from marketdata.api.access import instrument_visible_on_public_api, public_quotes_stmt
 from marketdata.api.deps import get_db
+from marketdata.api.query import (
+    DEFAULT_HISTORY_LIMIT,
+    MAX_HISTORY_LIMIT,
+    apply_history_window,
+    load_history_page,
+    parse_history_window,
+)
 from marketdata.domain.enums import PriceType
 from marketdata.domain.errors import decimal_json
 from marketdata.storage.models import InstrumentQuoteRow, RawArtifactRow, SourceRow
@@ -32,6 +39,7 @@ class FundQuotesResponse(BaseModel):
     instrument_id: str
     identifier: str
     quotes: list[QuoteResponse]
+    next_cursor: date | None = None
 
 
 def _source_name(session: Session, source_id) -> str:
@@ -62,38 +70,38 @@ def _to_quote(session: Session, row: InstrumentQuoteRow) -> QuoteResponse:
 @router.get("/funds/{identifier}/quotes", response_model=FundQuotesResponse)
 def fund_quotes(
     identifier: str,
-    session: Session = Depends(get_db),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
     date_filter: date | None = Query(default=None, alias="date"),
-    limit: int = Query(default=100, ge=1, le=1000),
+    cursor: date | None = Query(default=None),
+    limit: int = Query(default=DEFAULT_HISTORY_LIMIT, ge=1, le=MAX_HISTORY_LIMIT),
+    session: Session = Depends(get_db),
 ) -> FundQuotesResponse:
+    window = parse_history_window(start=start, end=end, date_filter=date_filter, cursor=cursor)
     instrument_id = resolve_instrument_id(session, identifier)
     if instrument_id is None or not instrument_visible_on_public_api(session, instrument_id):
         raise HTTPException(status_code=404, detail="instrument not found")
     stmt = public_quotes_stmt(instrument_id).where(
         InstrumentQuoteRow.price_type == PriceType.FUND_NAV.value,
     )
-    if date_filter is not None:
-        stmt = stmt.where(InstrumentQuoteRow.reference_date == date_filter)
-    if start is not None:
-        stmt = stmt.where(InstrumentQuoteRow.reference_date >= start)
-    if end is not None:
-        stmt = stmt.where(InstrumentQuoteRow.reference_date <= end)
-    stmt = stmt.order_by(
-        InstrumentQuoteRow.reference_date.desc(), InstrumentQuoteRow.revision.desc()
+    stmt = apply_history_window(stmt, InstrumentQuoteRow.reference_date, window)
+    rows, next_cursor = load_history_page(
+        session,
+        stmt,
+        date_attr="reference_date",
+        distinct_on=(InstrumentQuoteRow.reference_date,),
+        order_by=(
+            InstrumentQuoteRow.reference_date.desc(),
+            InstrumentQuoteRow.revision.desc(),
+            InstrumentQuoteRow.id.asc(),
+        ),
+        limit=limit,
     )
-    rows = session.scalars(stmt.limit(limit)).all()
-    # Keep the highest revision per date.
-    seen: set[date] = set()
-    quotes: list[QuoteResponse] = []
-    for row in rows:
-        if row.reference_date in seen:
-            continue
-        seen.add(row.reference_date)
-        quotes.append(_to_quote(session, row))
     return FundQuotesResponse(
-        instrument_id=str(instrument_id), identifier=identifier, quotes=quotes
+        instrument_id=str(instrument_id),
+        identifier=identifier,
+        quotes=[_to_quote(session, row) for row in rows],
+        next_cursor=next_cursor,
     )
 
 

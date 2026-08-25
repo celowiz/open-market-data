@@ -10,15 +10,16 @@ CLI must not import it.
 
 ```text
 ingestion_enabled: true
-public_api_enabled: false
+public_api_enabled: true
 public_dataset_enabled: false
 redistribution_policy: UNKNOWN
 is_official: false
 ```
 
-`yfinance` is Apache-2.0; Yahoo data is not licensed for redistribution. Public
-`/v1/quotes` omits this source via the existing API access gate (ADR-0013). Do
-not publish Parquet. Do not commit Yahoo bulk extracts.
+`yfinance` is Apache-2.0; Yahoo data is not licensed for redistribution. The
+public API currently serves this source when `public_api_enabled` is true
+(temporary, for local testing). Do not publish Parquet. Do not commit Yahoo
+bulk extracts.
 
 See [`LICENSING.md`](../LICENSING.md), [`DATA_LICENSES.md`](../../DATA_LICENSES.md),
 and [`adr/0013-yahoo-gating.md`](../adr/0013-yahoo-gating.md).
@@ -48,18 +49,43 @@ uv run marketdata ingest yahoo --date 2026-08-21 --symbol AAPL --symbol MSFT
 Empty history (weekend or holiday) skips that symbol and does not fabricate a
 close.
 
-## API
+## Historical backfill (local / POC)
 
-Public routes must not return Yahoo:
+Range backfill is **one `fetch_history` call per symbol**, not one HTTP call per
+calendar day. `public_api_enabled` is true so quotes appear on `/v1`. Yahoo must
+not be published as Parquet.
 
-```text
-GET /v1/quotes/AAPL          → 404
-GET /v1/quotes/AAPL?source=yahoo → 404
+```bash
+uv run marketdata backfill yahoo --start 2020-01-01 --end 2026-08-24
+uv run marketdata backfill yahoo --start 2020-01-01 --end 2026-08-24 --symbol AAPL
 ```
 
-Inspect locally with the database or `marketdata explain AAPL --date YYYY-MM-DD`.
+Behavior:
+
+- Default symbols match daily ingest (`AAPL` unless `--symbol` is passed).
+- The `[start, end]` window is inclusive. Ingestion calls
+  `YahooProvider.fetch_history(symbol, start=start, end=end + 1 day)` so the
+  last session is included the same way as daily ingest (yfinance `end` is
+  exclusive).
+- Persists `Close` as `CLOSE`. Never `Adj Close`.
+- Raw JSON: `raw/yahoo/backfill/{symbol}/{start}_{end}.json` with `close` stored
+  as a decimal string (not a binary float).
+- Object-storage checkpoint: `state/backfill/yahoo.json` (`provider="yahoo"`),
+  updated after each symbol and marked `succeeded` at the end.
+- Database upserts flush every 1000 quotes.
+
+Tests inject `history_rows` to stay offline (no Yahoo HTTP).
+
+## API
+
+Public routes return Yahoo when the source flag is on:
+
+```text
+GET /v1/quotes/AAPL          → 200 (CLOSE)
+GET /v1/quotes/AAPL?source=yahoo → 200
+```
+
 There is no `/v1/yahoo` route.
 
-Local `marketdata coverage` may count Yahoo `CLOSE` as priced. `GET /v1/coverage`
-keeps Yahoo-only names in the universe but marks them
-`REDISTRIBUTION_RESTRICTED` with `price=null`. See [`COVERAGE.md`](../COVERAGE.md).
+Local `marketdata coverage` and `GET /v1/coverage` may count Yahoo `CLOSE` as
+priced while `public_api_enabled` is true. See [`COVERAGE.md`](../COVERAGE.md).
