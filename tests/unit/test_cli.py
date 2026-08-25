@@ -7,6 +7,11 @@ from marketdata.cli.main import app
 runner = CliRunner()
 
 
+def _plain(output: str) -> str:
+    # Rich may insert ANSI inside flags (e.g. between the hyphens of --date).
+    return click.unstyle(output)
+
+
 def test_cli_help() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
@@ -38,8 +43,7 @@ def test_cli_ingest_help_includes_yahoo() -> None:
 def test_cli_coverage_help() -> None:
     result = runner.invoke(app, ["coverage", "--help"])
     assert result.exit_code == 0
-    # Rich may insert ANSI inside flags (e.g. between the hyphens of --date).
-    output = click.unstyle(result.output)
+    output = _plain(result.output)
     assert "--date" in output
     assert "--universe" in output
     assert "--public" in output
@@ -61,9 +65,10 @@ def test_cli_publish_help_lists_datasets() -> None:
 def test_cli_publish_datasets_help() -> None:
     result = runner.invoke(app, ["publish", "datasets", "--help"])
     assert result.exit_code == 0
-    assert "--date" in result.output
-    assert "--dry-run" in result.output
-    assert "--dataset" in result.output
+    output = _plain(result.output)
+    assert "--date" in output
+    assert "--dry-run" in output
+    assert "--dataset" in output
 
 
 def test_cli_publish_has_no_b3_command() -> None:
