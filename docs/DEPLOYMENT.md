@@ -86,6 +86,35 @@ Files land under `data/public/...` on the local filesystem backend.
 
 Do not commit `.env` or anything under `data/`.
 
+### $0 scratch universe (opt-in)
+
+Default B3 ingest still persists the **full** BVBG.186 LAST file. For a cheap
+scratch database (Neon Free), persist only IBOV+SMLL equities from the
+coverage CSV:
+
+```text
+# in .env
+INGEST_UNIVERSE=scratch
+```
+
+`scratch` reads `config/instruments.csv` if present, else
+`config/instruments.example.csv`. An explicit
+`B3_EQUITY_UNIVERSE_PATH=/path/to/universe.csv` (same columns as the example
+file) wins over `INGEST_UNIVERSE`. Tickers outside the B3 equity rows are
+skipped, not errored.
+
+Then run B3 only (and optionally BCB). Do **not** run CVM or Tesouro jobs on
+Neon Free: `CVM_PROVIDER_ENABLED` / `TESOURO_PROVIDER_ENABLED` exist in
+Settings but are currently ignored by ingest/backfill (only
+`yahoo_provider_enabled` is wired). Omit those CLI jobs. Do **not** pass
+`--cotahist`. BVBG.187 futures stay on (existing MVP regex; not filtered by
+the equity allowlist).
+
+```bash
+uv run marketdata ingest b3 --date YYYY-MM-DD
+uv run marketdata ingest bcb --date YYYY-MM-DD
+```
+
 ---
 
 ## Operator backfill playbook (cheap → expensive)

@@ -7,6 +7,11 @@ and will go stale until someone updates it by hand.
 Copy it to `instruments.csv` (gitignored) for a local operator universe, or
 pass `--universe PATH`.
 
+The same files can opt-in filter B3 BVBG.186 LAST ingest:
+`INGEST_UNIVERSE=scratch` (operator file if present, else this example) or
+`B3_EQUITY_UNIVERSE_PATH`. Only B3 `equity` rows are used. Default ingest is
+still the full 186 file. See [`docs/INGEST_SCHEDULE.md`](../docs/INGEST_SCHEDULE.md).
+
 ## Snapshot
 
 - Date recorded in the CSV header (`snapshot_date`).
