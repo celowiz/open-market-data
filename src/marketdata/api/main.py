@@ -1,7 +1,11 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from marketdata import __version__
+from marketdata.api.deps import bind_database, dispose_database
 from marketdata.api.routes.coverage import router as coverage_router
 from marketdata.api.routes.datasets import router as datasets_router
 from marketdata.api.routes.funds import router as funds_router
@@ -18,6 +22,15 @@ def _cors_origins(raw: str) -> list[str]:
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    bind_database(app)
+    try:
+        yield
+    finally:
+        dispose_database(app)
+
+
 def create_app() -> FastAPI:
     register_default_providers()
     settings = get_settings()
@@ -30,6 +43,7 @@ def create_app() -> FastAPI:
         docs_url=docs_url,
         redoc_url=redoc_url,
         openapi_url=openapi_url,
+        lifespan=lifespan,
     )
     origins = _cors_origins(settings.cors_allowed_origins)
     if origins:
@@ -47,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(coverage_router, prefix=settings.api_v1_prefix)
     app.include_router(datasets_router, prefix=settings.api_v1_prefix)
     app.include_router(instruments_router, prefix=settings.api_v1_prefix)
+    bind_database(app)
     return app
 
 

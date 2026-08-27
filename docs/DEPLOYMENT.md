@@ -342,6 +342,7 @@ Used when `OBJECT_STORAGE_BACKEND=s3`. Leave empty for local filesystem.
 | `DATABASE_POOL_SIZE` | `5` |
 | `DATABASE_MAX_OVERFLOW` | `10` |
 | `DATABASE_POOL_TIMEOUT` | `30` |
+| `DATABASE_POOL_RECYCLE` | `300` (Neon idle timeout; `pool_pre_ping` is always on) |
 | `API_V1_PREFIX` | `/v1` |
 | `API_HOST` | `127.0.0.1` (local uvicorn only) |
 | `API_PORT` | `8000` (local uvicorn only) |
