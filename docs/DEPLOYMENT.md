@@ -359,7 +359,11 @@ Workflows live under `.github/workflows/`. They call the CLI; they do not
 download provider files in YAML (ADR-0006). They never log `DATABASE_URL`.
 
 If `DATABASE_URL` is missing, ingest/publish/backfill jobs **fail immediately**
-with an error message. They will not scrape public websites into nowhere.
+with an error message. They will not scrape public websites into nowhere. Add
+it only as a GitHub Actions **secret** (Settings → Secrets and variables →
+Actions). Do not commit the value, paste it in docs, or clone-and-push it.
+This repository currently has no Actions secrets; scheduled jobs stay red
+until that secret exists.
 
 | GitHub name | Type | Application env | Required |
 |---|---|---|---|
@@ -376,13 +380,17 @@ with an error message. They will not scrape public websites into nowhere.
 
 Do not put secret values in workflow YAML. Do not commit `.env`.
 
-`ingest-yahoo.yml` is **workflow_dispatch only** (no cron). `backfill.yml` is
-**workflow_dispatch only** (no daily cron). Prefer either the per-provider
-ingest schedules **or** `ingest-all.yml`, not both.
+`ingest-cvm.yml` and `ingest-all.yml` are **workflow_dispatch only** (no daily
+cron). Scratch ingest skips CVM. Daily scheduled ingest is the per-provider
+crons (BCB, B3, Tesouro). Do not enable an `ingest-all.yml` schedule together
+with those crons.
 
-`ingest-all.yml` calls `marketdata ingest all`. `backfill.yml` calls
-`marketdata backfill <provider> --start --end`. GitHub-hosted jobs cap at
-6 hours; a full CVM HIST span should run locally.
+`ingest-yahoo.yml` is **workflow_dispatch only** (no cron). `backfill.yml` is
+**workflow_dispatch only** (no daily cron).
+
+`ingest-all.yml` calls `marketdata ingest all` when dispatched. `backfill.yml`
+calls `marketdata backfill <provider> --start --end`. GitHub-hosted jobs cap
+at 6 hours; a full CVM HIST span should run locally.
 
 Optional S3 extra (not required for local filesystem):
 

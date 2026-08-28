@@ -1,13 +1,13 @@
-# Combined daily ingest — 21:30 America/Sao_Paulo weekdays.
-# UTC: 30 0 * * 2-6 (Tue–Sat 00:30 UTC = Mon–Fri 21:30 BRT). See docs/INGEST_SCHEDULE.md.
+# Combined ingest — workflow_dispatch only. No daily cron.
 #
-# Do not enable this schedule together with the per-provider ingest-* crons.
-# CLI: marketdata ingest all --date (wired by Agent J-cli).
+# Official daily path is the per-provider crons (BCB, B3, Tesouro).
+# Do not enable a schedule here together with those crons — that double-ingests.
+# Keep this workflow for operator one-shot runs.
+# CLI: marketdata ingest all --date
+# See docs/INGEST_SCHEDULE.md.
 name: Ingest all
 
 on:
-  schedule:
-    - cron: "30 0 * * 2-6"
   workflow_dispatch:
     inputs:
       date:

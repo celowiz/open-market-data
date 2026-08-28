@@ -1,10 +1,11 @@
-# CVM Informe Diário — 09:30 America/Sao_Paulo Mon–Sat.
-# UTC: 30 12 * * 1-6  (BRT = UTC−3, no DST). See docs/INGEST_SCHEDULE.md.
+# CVM Informe Diário — workflow_dispatch only. No daily cron.
+#
+# Scratch ingest universe skips CVM: Informe Diário / HIST volume is too large
+# for Neon Free daily ingest. Keep this workflow for operator reruns.
+# See docs/INGEST_SCHEDULE.md.
 name: Ingest CVM
 
 on:
-  schedule:
-    - cron: "30 12 * * 1-6"
   workflow_dispatch:
     inputs:
       date:
