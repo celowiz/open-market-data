@@ -124,3 +124,34 @@ uv run marketdata backfill <cvm|tesouro|bcb|b3|yahoo|all> --start YYYY-MM-DD --e
 
 `ingest all` and `backfill` are live CLI commands. The YAML calls those exact
 names. `backfill.yml` must never gain a `schedule:` block.
+
+---
+
+## Scratch universe (opt-in, BVBG.186 LAST only)
+
+Default B3 ingest is **unchanged**: the full BVBG.186 LAST file is persisted.
+BVBG.187 futures keep the existing MVP ticker regex.
+
+To persist only B3 equities listed in the coverage CSV (IBOV+SMLL in the
+example seed):
+
+```text
+INGEST_UNIVERSE=scratch
+```
+
+`scratch` reads `config/instruments.csv` if present, else
+`config/instruments.example.csv`. Or set an explicit file
+(`B3_EQUITY_UNIVERSE_PATH`); that wins over `INGEST_UNIVERSE`. Tickers not in
+the B3 equity rows are skipped (not persisted), not errored.
+
+For a $0-scratch / Neon Free run:
+
+- Do **not** run CVM or Tesouro jobs. `CVM_PROVIDER_ENABLED` and
+  `TESOURO_PROVIDER_ENABLED` exist in Settings but are currently ignored by
+  ingest/backfill (only `yahoo_provider_enabled` is wired). Omit those
+  commands instead of expecting the flags to skip them.
+- Do **not** enable COTAHIST (`--cotahist`).
+- Keep `marketdata ingest b3` (186 filtered + 187 as-is). Prefer BCB if you
+  still want a cheap official series.
+
+See [`.env.example`](../.env.example) and [`DEPLOYMENT.md`](DEPLOYMENT.md).

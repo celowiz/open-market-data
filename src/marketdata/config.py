@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     recent_reprocess_days: int = Field(default=90)
     ingestion_max_concurrency: int = 4
+    ingest_universe: str = ""
+    b3_equity_universe_path: str = ""
 
     api_host: str = "127.0.0.1"
     api_port: int = 8000

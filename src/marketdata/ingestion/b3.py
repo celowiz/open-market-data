@@ -19,6 +19,10 @@ from marketdata.ingestion.checkpoint import (
     save_checkpoint,
     should_resume,
 )
+from marketdata.ingestion.universe import (
+    b3_equity_allowlist,
+    should_persist_b3_equity_last,
+)
 from marketdata.providers.b3 import (
     BDI_CREDIT_MASTER_TABLE,
     BDI_CREDIT_TRADES_TABLE,
@@ -149,10 +153,14 @@ def _ingest_b3_day(
         )
         artifacts += 1
         quotes = parse_price_report(price_bytes)
+        allowlist = b3_equity_allowlist()
         instrument_ids: dict[str, UUID] = {}
         existing_quotes = load_quote_keys(session, source_id=source.id, on_date=reference_date)
         pending_quotes: list[InstrumentQuoteRow] = []
         for record in quotes:
+            if not should_persist_b3_equity_last(record.ticker, allowlist):
+                skipped += 1
+                continue
             created = record.ticker not in instrument_ids
             instrument_id = cached_instrument_id(
                 instrument_ids,
