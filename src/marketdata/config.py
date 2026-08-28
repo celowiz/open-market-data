@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     database_pool_size: int = 5
     database_max_overflow: int = 10
     database_pool_timeout: int = 30
+    database_pool_recycle: int = 300
 
     object_storage_backend: str = "local"
     local_storage_path: Path = Path("./data")
