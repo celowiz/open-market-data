@@ -78,6 +78,12 @@ source flags: B3 is `API_ONLY` (no public dataset), Yahoo is not redistributable
 operator-triggered. GitHub-hosted jobs cap at 6 hours; a full CVM HIST span
 should run locally or on a self-hosted runner.
 
+Tesouro daily ingest (`ingest-tesouro.yml`) and Tesouro backfill both honor
+`TESOURO_CURRENT_TITLES_ONLY` (default `true`): only titles present on the
+latest `Data Base` date in the CKAN CSV are persisted, with their full
+history. Set `false` to persist the entire CSV, including matured titles.
+See [`DEPLOYMENT.md`](DEPLOYMENT.md#tesouro-currently-traded-titles).
+
 Secrets and durable object storage: [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ---

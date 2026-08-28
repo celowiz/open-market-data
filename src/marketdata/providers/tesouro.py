@@ -68,6 +68,30 @@ def tesouro_instrument_key(title_type: str, maturity: date) -> str:
     return f"{title_type}:{maturity.isoformat()}"
 
 
+def tesouro_record_key(record: TesouroQuoteRecord) -> str:
+    return tesouro_instrument_key(record.title_type, record.maturity_date)
+
+
+def current_tesouro_title_keys(records: list[TesouroQuoteRecord]) -> set[str]:
+    """Instrument keys present on the latest Data Base date in `records`."""
+    if not records:
+        return set()
+    latest = max(record.reference_date for record in records)
+    return {tesouro_record_key(record) for record in records if record.reference_date == latest}
+
+
+def filter_current_tesouro_titles(records: list[TesouroQuoteRecord]) -> list[TesouroQuoteRecord]:
+    """Keep full history of titles that appear on the latest Data Base date.
+
+    Rows whose identity is absent from that latest-day set (matured / off-book)
+    are dropped. The latest day is taken from the records passed in, which
+    should be the full CKAN CSV so a date-windowed backfill still uses today's
+    traded set.
+    """
+    keys = current_tesouro_title_keys(records)
+    return [record for record in records if tesouro_record_key(record) in keys]
+
+
 def parse_tesouro_csv(text: str, *, reference_date: date | None = None) -> list[TesouroQuoteRecord]:
     reader = csv.DictReader(io.StringIO(text), delimiter=";")
     records: list[TesouroQuoteRecord] = []

@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     cvm_provider_enabled: bool = True
     b3_provider_enabled: bool = True
     tesouro_provider_enabled: bool = True
+    tesouro_current_titles_only: bool = True
     bcb_provider_enabled: bool = True
     yahoo_provider_enabled: bool = True
     anbima_provider_enabled: bool = False

@@ -131,7 +131,9 @@ cp .env.example .env   # DATABASE_URL + CORS_ALLOWED_ORIGINS=http://localhost:30
 uv sync
 uv run alembic upgrade head
 
-# 1. Tesouro: one CSV, history since 2002
+# 1. Tesouro: one CSV, history since 2002. Default TESOURO_CURRENT_TITLES_ONLY=true
+#    keeps currently traded titles only (latest Data Base date, full history of
+#    those titles) so Neon Free stays in budget. Set false for the old full CSV.
 uv run marketdata backfill tesouro --start 2002-01-01 --end 2026-08-24
 
 # 2. BCB: five series, 10-year chunks
@@ -173,6 +175,18 @@ uv sync --extra s3
 ```
 
 Local filesystem remains the default and needs no AWS credentials.
+
+### Tesouro currently traded titles
+
+Daily ingest and backfill persist only titles that appear on the latest
+`Data Base` date in the Tesouro Transparente CKAN CSV (on the order of ~58
+titles today). Full history of those titles is kept. Rows whose identity is
+absent from that latest-day set (matured / off-book) are skipped.
+
+Controlled by `TESOURO_CURRENT_TITLES_ONLY` (default `true`) so the project
+fits Neon Free. Set `TESOURO_CURRENT_TITLES_ONLY=false` to restore the old
+full-CSV persist (all titles, including matured). This setting is
+forward-looking ingest only; it does not delete quotes already stored.
 
 ---
 

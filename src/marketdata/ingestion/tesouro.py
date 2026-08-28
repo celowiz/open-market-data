@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from marketdata.config import get_settings
 from marketdata.domain.enums import AssetClass, IngestionRunStatus, RedistributionPolicy
 from marketdata.ingestion.checkpoint import (
     BackfillCheckpoint,
@@ -13,6 +14,7 @@ from marketdata.ingestion.checkpoint import (
 from marketdata.providers.tesouro import (
     TesouroProvider,
     TesouroQuoteRecord,
+    filter_current_tesouro_titles,
     parse_tesouro_csv,
     tesouro_instrument_key,
 )
@@ -29,6 +31,38 @@ from marketdata.storage.repositories import (
 )
 
 _TESOURO_FLUSH_EVERY = 1000
+
+
+def tesouro_records_for_persist(
+    text: str,
+    *,
+    reference_date: date | None = None,
+    start: date | None = None,
+    end: date | None = None,
+    current_titles_only: bool | None = None,
+) -> list[TesouroQuoteRecord]:
+    """Parse the CKAN CSV and select quote rows that should be persisted.
+
+    When current-titles-only is on, the live set is the identities that appear
+    on the latest Data Base date in the *full* CSV. Historical rows for those
+    titles are kept; matured / off-book identities are skipped. Daily
+    ``reference_date`` and backfill ``start``/``end`` filters apply afterwards.
+    """
+    records = parse_tesouro_csv(text, reference_date=None)
+    if current_titles_only is None:
+        current_titles_only = get_settings().tesouro_current_titles_only
+    if current_titles_only:
+        records = filter_current_tesouro_titles(records)
+    if reference_date is not None:
+        records = [record for record in records if record.reference_date == reference_date]
+    if start is not None or end is not None:
+        records = [
+            record
+            for record in records
+            if (start is None or record.reference_date >= start)
+            and (end is None or record.reference_date <= end)
+        ]
+    return records
 
 
 def _tesouro_source(session: Session) -> SourceRow:
@@ -158,7 +192,7 @@ def ingest_tesouro(
             reference_date=reference_date,
         )
         text = payload.decode("latin-1")
-        records = parse_tesouro_csv(text, reference_date=reference_date)
+        records = tesouro_records_for_persist(text, reference_date=reference_date)
         run.records_parsed = len(records)
         inserted, updated, skipped = _upsert_tesouro_records(
             session,
@@ -248,11 +282,7 @@ def backfill_tesouro(
             reference_date=end,
         )
         text = payload.decode("latin-1")
-        records = [
-            record
-            for record in parse_tesouro_csv(text, reference_date=None)
-            if start <= record.reference_date <= end
-        ]
+        records = tesouro_records_for_persist(text, start=start, end=end)
         run.records_parsed = len(records)
         inserted, updated, skipped = _upsert_tesouro_records(
             session,
