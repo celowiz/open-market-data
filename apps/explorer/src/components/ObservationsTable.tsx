@@ -8,23 +8,23 @@ export function ObservationsTable({
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table className="min-w-full text-left text-sm">
-        <caption className="sr-only">Series observations</caption>
+        <caption className="sr-only">Observações da série</caption>
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">
-              Date
+              Data
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Value
+              Valor
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Unit
+              Unidade
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Source
+              Fonte
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Revision
+              Revisão
             </th>
           </tr>
         </thead>

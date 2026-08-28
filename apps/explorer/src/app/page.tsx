@@ -2,26 +2,33 @@
 
 import Link from "next/link";
 
+import { useApiStatus } from "@/components/ApiStatusProvider";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ExampleCards } from "@/components/ExampleCards";
 import { InstrumentSearch } from "@/components/InstrumentSearch";
+import { OfflineState } from "@/components/OfflineState";
 import { EmptyState, LoadingState } from "@/components/Status";
 import { SourcesTable } from "@/components/SourcesTable";
 import { fetchSources } from "@/lib/api";
+import { copy } from "@/lib/copy";
 import { useClientFetch } from "@/lib/use-client-fetch";
 
 export default function HomePage() {
-  const sources = useClientFetch("sources", () => fetchSources());
+  const api = useApiStatus();
+  const sources = useClientFetch("sources", () => fetchSources(), {
+    enabled: api.status === "ok",
+  });
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-8">
       <section>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Public market data explorer
+          Explorador de dados de mercado públicos
         </h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Browse quotes, series, funds, coverage, and published dataset manifests from the local
-          FastAPI. This app does not talk to PostgreSQL, CVM, or B3 directly.
+          Consulte cotações, séries, fundos, cobertura e manifestos de conjuntos de dados
+          publicados pela API FastAPI /v1. Este aplicativo não se conecta ao PostgreSQL, à CVM
+          nem à B3 diretamente.
         </p>
       </section>
 
@@ -29,10 +36,11 @@ export default function HomePage() {
 
       <section aria-labelledby="examples-heading" className="flex flex-col gap-3">
         <h2 id="examples-heading" className="text-xl font-semibold text-slate-900">
-          Example identifiers
+          Identificadores de exemplo
         </h2>
         <p className="text-sm text-slate-600">
-          Each card calls the live API. A 404 shows the API error body — never a made-up price.
+          Cada cartão consulta a API ao vivo. Um 404 mostra o corpo do erro — nunca um preço
+          inventado.
         </p>
         <ExampleCards />
       </section>
@@ -40,25 +48,26 @@ export default function HomePage() {
       <section aria-labelledby="sources-heading" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="sources-heading" className="text-xl font-semibold text-slate-900">
-            Public sources
+            Fontes públicas
           </h2>
           <Link href="/sources" className="text-sm font-medium text-teal-800 hover:underline">
-            Full sources table
+            Tabela completa de fontes
           </Link>
         </div>
         <p className="text-sm text-slate-600">
-          From <code className="font-mono text-xs">GET /v1/sources</code>. Sources with
-          public API enabled appear here, including Yahoo.
+          De <code className="font-mono text-xs">GET /v1/sources</code>. Aparecem as fontes com API
+          pública habilitada, inclusive Yahoo.
         </p>
-        {sources.status === "loading" ? <LoadingState label="Loading sources…" /> : null}
+        {api.status === "unreachable" ? <OfflineState /> : null}
+        {api.status !== "unreachable" &&
+        (api.status === "loading" || sources.status === "loading") ? (
+          <LoadingState label="Carregando fontes…" />
+        ) : null}
         {sources.status === "error" ? <ErrorBanner error={sources.error} /> : null}
         {sources.status === "success" && sources.data.length === 0 ? (
           <EmptyState>
-            <p>No public sources are visible yet.</p>
-            <p className="mt-2">
-              Seed providers, run <code className="font-mono text-xs">marketdata backfill</code>,
-              and start uvicorn on <code className="font-mono text-xs">127.0.0.1:8000</code>.
-            </p>
+            <p>Nenhuma fonte pública está visível ainda.</p>
+            <p className="mt-2 text-xs text-slate-500">{copy.common.backfillSecondary}</p>
           </EmptyState>
         ) : null}
         {sources.status === "success" && sources.data.length > 0 ? (
@@ -68,14 +77,14 @@ export default function HomePage() {
 
       <section aria-labelledby="datasets-heading" className="rounded-lg border border-slate-200 bg-white p-4">
         <h2 id="datasets-heading" className="text-xl font-semibold text-slate-900">
-          Datasets
+          Conjuntos de dados
         </h2>
         <p className="mt-2 text-sm text-slate-600">
-          Public Parquet manifests (ODbL / attribution) live on the{" "}
+          Manifestos Parquet públicos (ODbL / atribuição) ficam na página de{" "}
           <Link href="/datasets" className="font-medium text-teal-800 hover:underline">
-            datasets
-          </Link>{" "}
-          page. B3 files are not offered for download.
+            conjuntos de dados
+          </Link>
+          . Arquivos da B3 não são oferecidos para download.
         </p>
       </section>
     </div>

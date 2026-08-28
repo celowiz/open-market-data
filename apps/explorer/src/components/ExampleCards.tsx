@@ -2,24 +2,26 @@
 
 import Link from "next/link";
 
-import { LoadingState } from "@/components/Status";
+import { useApiStatus } from "@/components/ApiStatusProvider";
+import { OfflineState } from "@/components/OfflineState";
+import { SkeletonBlock } from "@/components/Status";
 import {
   fetchFundLatest,
   fetchQuoteLatest,
   fetchSeriesLatest,
   formatApiError,
+  isNotFoundError,
 } from "@/lib/api";
+import { copy } from "@/lib/copy";
+import {
+  BRAZIL_HOME_EXAMPLES,
+  HOME_EXAMPLES,
+  SECONDARY_HOME_EXAMPLES,
+  type HomeExample,
+} from "@/lib/examples";
 import { useClientFetch } from "@/lib/use-client-fetch";
 
-type ExampleKind = "quote" | "series" | "fund";
-
-type Example = {
-  kind: ExampleKind;
-  title: string;
-  identifier: string;
-  href: string;
-  description: string;
-};
+export { HOME_EXAMPLES };
 
 type LatestValue = {
   date: string;
@@ -27,52 +29,7 @@ type LatestValue = {
   extra: string;
 };
 
-export const HOME_EXAMPLES: Example[] = [
-  {
-    kind: "quote",
-    title: "Tesouro",
-    identifier: "LTN:2029-01-01",
-    href: `/quotes/${encodeURIComponent("LTN:2029-01-01")}`,
-    description: "Government bond quote (title + maturity).",
-  },
-  {
-    kind: "series",
-    title: "BCB",
-    identifier: "BCB:CDI_DAILY",
-    href: `/series/${encodeURIComponent("BCB:CDI_DAILY")}`,
-    description: "CDI daily market series observation.",
-  },
-  {
-    kind: "fund",
-    title: "CVM",
-    identifier: "00017024000153",
-    href: `/funds/${encodeURIComponent("00017024000153")}`,
-    description: "Fund unit value by CNPJ.",
-  },
-  {
-    kind: "quote",
-    title: "B3 equity",
-    identifier: "PETR4",
-    href: `/quotes/${encodeURIComponent("PETR4")}`,
-    description: "Exchange equity last/close quote.",
-  },
-  {
-    kind: "quote",
-    title: "B3 future",
-    identifier: "DI1F27",
-    href: `/quotes/${encodeURIComponent("DI1F27")}`,
-    description: "DI future official settlement.",
-  },
-  {
-    kind: "quote",
-    title: "Yahoo",
-    identifier: "AAPL",
-    href: `/quotes/${encodeURIComponent("AAPL")}`,
-    description: "Unofficial global equity close (local API).",
-  },
-];
-
-async function loadLatest(example: Example): Promise<LatestValue> {
+async function loadLatest(example: HomeExample): Promise<LatestValue> {
   if (example.kind === "series") {
     const row = await fetchSeriesLatest(example.identifier);
     return {
@@ -97,14 +54,12 @@ async function loadLatest(example: Example): Promise<LatestValue> {
   };
 }
 
-function ExampleCard({ example }: { example: Example }) {
-  const state = useClientFetch(`${example.kind}:${example.identifier}`, () =>
-    loadLatest(example),
-  );
-  const notFound =
-    state.status === "error" &&
-    (formatApiError(state.error).includes("404") ||
-      formatApiError(state.error).toLowerCase().includes("not found"));
+function ExampleCard({ example }: { example: HomeExample }) {
+  const api = useApiStatus();
+  const state = useClientFetch(`${example.kind}:${example.identifier}`, () => loadLatest(example), {
+    enabled: api.status === "ok",
+  });
+  const notFound = state.status === "error" && isNotFoundError(state.error);
 
   return (
     <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -112,8 +67,9 @@ function ExampleCard({ example }: { example: Example }) {
       <p className="mt-1 font-mono text-sm text-teal-800">{example.identifier}</p>
       <p className="mt-2 text-sm text-slate-600">{example.description}</p>
       <div className="mt-3 min-h-[4.5rem]">
-        {state.status === "loading" ? (
-          <LoadingState label="Fetching latest from /v1…" />
+        {api.status === "unreachable" ? <OfflineState compact /> : null}
+        {api.status !== "unreachable" && (api.status === "loading" || state.status === "loading") ? (
+          <SkeletonBlock label="Carregando último valor…" />
         ) : null}
         {state.status === "success" ? (
           <p>
@@ -132,7 +88,7 @@ function ExampleCard({ example }: { example: Example }) {
             title={formatApiError(state.error)}
           >
             {formatApiError(state.error)}
-            {notFound ? " — no synthetic price." : null}
+            {notFound ? ` — ${copy.common.noSynthetic}.` : null}
           </p>
         ) : null}
       </div>
@@ -140,7 +96,7 @@ function ExampleCard({ example }: { example: Example }) {
         href={example.href}
         className="mt-auto pt-3 text-sm font-medium text-teal-800 hover:underline"
       >
-        Open history
+        {copy.common.openHistory}
       </Link>
     </article>
   );
@@ -148,10 +104,26 @@ function ExampleCard({ example }: { example: Example }) {
 
 export function ExampleCards() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {HOME_EXAMPLES.map((example) => (
-        <ExampleCard key={example.identifier} example={example} />
-      ))}
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {BRAZIL_HOME_EXAMPLES.map((example) => (
+          <ExampleCard key={example.identifier} example={example} />
+        ))}
+      </div>
+      {SECONDARY_HOME_EXAMPLES.length > 0 ? (
+        <aside className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-slate-700">Yahoo (não oficial)</h3>
+          <p className="text-xs text-slate-500">
+            Fonte secundária, fora do primeiro conjunto de exemplos brasileiros. Sem download em
+            lote.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {SECONDARY_HOME_EXAMPLES.map((example) => (
+              <ExampleCard key={example.identifier} example={example} />
+            ))}
+          </div>
+        </aside>
+      ) : null}
     </div>
   );
 }

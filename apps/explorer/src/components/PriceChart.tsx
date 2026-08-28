@@ -11,34 +11,86 @@ import {
   YAxis,
 } from "recharts";
 
+import { addUtcDays, utcDayDiff } from "@/lib/dates";
+
 export type ChartRow = {
   date: string;
   raw: string;
 };
 
-function toPoints(rows: ChartRow[]): Array<{ date: string; value: number; raw: string }> {
-  return rows
-    .map((row) => {
-      const value = Number(row.raw);
-      if (!Number.isFinite(value)) {
-        return null;
+export type ChartSeries = {
+  key: string;
+  label: string;
+  color?: string;
+  rows: ChartRow[];
+};
+
+const DEFAULT_COLORS = ["#0f766e", "#1e293b", "#b45309", "#3730a3", "#9f1239"];
+
+function withGaps(rows: ChartRow[]): Array<{ date: string; raw: string | null }> {
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const out: Array<{ date: string; raw: string | null }> = [];
+  for (let index = 0; index < sorted.length; index += 1) {
+    const current = sorted[index];
+    if (index > 0) {
+      const previous = sorted[index - 1];
+      if (utcDayDiff(previous.date, current.date) > 1) {
+        out.push({ date: addUtcDays(previous.date, 1), raw: null });
       }
-      return { date: row.date, value, raw: row.raw };
-    })
-    .filter((row): row is { date: string; value: number; raw: string } => row !== null)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    }
+    out.push({ date: current.date, raw: current.raw });
+  }
+  return out;
 }
 
 export function PriceChart({
   rows,
-  label,
+  label = "Valor",
+  series,
 }: {
-  rows: ChartRow[];
-  label: string;
+  rows?: ChartRow[];
+  label?: string;
+  series?: ChartSeries[];
 }) {
-  const data = useMemo(() => toPoints(rows), [rows]);
+  const resolved = useMemo<ChartSeries[]>(() => {
+    if (series && series.length > 0) {
+      return series;
+    }
+    return [{ key: "value", label, rows: rows ?? [] }];
+  }, [label, rows, series]);
 
-  if (data.length === 0) {
+  const data = useMemo(() => {
+    const dates = new Set<string>();
+    const byKey = new Map<string, Map<string, number | null>>();
+    for (const item of resolved) {
+      const map = new Map<string, number | null>();
+      for (const row of withGaps(item.rows)) {
+        dates.add(row.date);
+        if (row.raw === null) {
+          map.set(row.date, null);
+          continue;
+        }
+        const value = Number(row.raw);
+        if (Number.isFinite(value)) {
+          map.set(row.date, value);
+        }
+      }
+      byKey.set(item.key, map);
+    }
+    return [...dates]
+      .sort((a, b) => a.localeCompare(b))
+      .map((date) => {
+        const point: Record<string, string | number | null> = { date };
+        for (const item of resolved) {
+          const map = byKey.get(item.key);
+          point[item.key] = map?.has(date) ? (map.get(date) ?? null) : null;
+        }
+        return point;
+      });
+  }, [resolved]);
+
+  const hasAny = data.some((row) => resolved.some((item) => typeof row[item.key] === "number"));
+  if (!hasAny) {
     return null;
   }
 
@@ -50,21 +102,29 @@ export function PriceChart({
           <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={24} />
           <YAxis tick={{ fontSize: 11 }} width={72} domain={["auto", "auto"]} />
           <Tooltip
-            formatter={(_value, _name, item) => {
-              const raw = (item as { payload?: { raw?: string } }).payload?.raw;
-              return [raw ?? String(_value), label];
+            formatter={(value, name, item) => {
+              const date = (item as { payload?: { date?: string } }).payload?.date;
+              const match =
+                resolved.find((entry) => entry.key === name) ??
+                resolved.find((entry) => entry.label === name);
+              const raw = match?.rows.find((row) => row.date === date)?.raw;
+              return [raw ?? String(value), match?.label ?? String(name)];
             }}
             labelFormatter={(date) => String(date)}
           />
-          <Line
-            type="monotone"
-            dataKey="value"
-            name={label}
-            stroke="#0f766e"
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={false}
-          />
+          {resolved.map((item, index) => (
+            <Line
+              key={item.key}
+              type="linear"
+              dataKey={item.key}
+              name={item.label}
+              stroke={item.color ?? DEFAULT_COLORS[index % DEFAULT_COLORS.length]}
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>
