@@ -6,7 +6,7 @@ export async function generateMetadata({
   params: Promise<{ name: string }>;
 }): Promise<Metadata> {
   const { name } = await params;
-  return { title: decodeURIComponent(name) };
+  return { title: { absolute: `${decodeURIComponent(name)} · Open Market Data` } };
 }
 
 export default function DatasetDetailLayout({ children }: LayoutProps<"/datasets/[name]">) {
