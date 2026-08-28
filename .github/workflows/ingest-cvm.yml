@@ -1,8 +1,8 @@
 # CVM Informe Diário — workflow_dispatch only. No daily cron.
 #
-# Scratch ingest universe skips CVM: Informe Diário / HIST volume is too large
-# for Neon Free daily ingest. Keep this workflow for operator reruns.
-# See docs/INGEST_SCHEDULE.md.
+# Persist is filtered by CVM_CLASSES (default Multimercado,Ações). Keep this
+# workflow for operator reruns. DATABASE_URL is an Actions secret (no value
+# in git). See docs/INGEST_SCHEDULE.md.
 name: Ingest CVM
 
 on:
@@ -27,6 +27,7 @@ jobs:
       APP_ENV: production
       APP_TIMEZONE: America/Sao_Paulo
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CVM_CLASSES: ${{ vars.CVM_CLASSES || 'Multimercado,Ações' }}
       OBJECT_STORAGE_BACKEND: ${{ vars.OBJECT_STORAGE_BACKEND || 'local' }}
       LOCAL_STORAGE_PATH: ${{ vars.LOCAL_STORAGE_PATH || './data' }}
       OBJECT_STORAGE_ENDPOINT: ${{ vars.OBJECT_STORAGE_ENDPOINT }}

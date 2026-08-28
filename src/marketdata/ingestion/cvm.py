@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from calendar import monthrange
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import date
 from uuid import UUID
 
@@ -17,6 +17,7 @@ from marketdata.ingestion.checkpoint import (
     should_resume,
 )
 from marketdata.providers.cvm import (
+    CvmCadastroClass,
     CvmDailyRecord,
     CvmParseError,
     CvmProvider,
@@ -25,6 +26,9 @@ from marketdata.providers.cvm import (
     iter_informe_diario,
     months_covering,
     months_in_range,
+    parse_cadastro_zip,
+    parse_cvm_class_allowlist,
+    should_persist_cvm_class,
     uses_monthly_dados,
 )
 from marketdata.storage.models import (
@@ -51,10 +55,55 @@ from marketdata.storage.repositories import (
 CVM_CHECKPOINT_PROVIDER = "cvm"
 _DEFAULT_FLUSH_EVERY = 1000
 _TRANSIENT_ROWS = (InstrumentQuoteRow, InstrumentRow, InstrumentIdentifierRow)
+_UNSET: object = object()
+_CADASTRO_OBJECT_KEY = "raw/cvm/cadastro/registro_fundo_classe.zip"
 
 
 def _month_token(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
+
+
+def _resolve_class_allowlist(class_allowlist: object) -> frozenset[str] | None:
+    if class_allowlist is _UNSET:
+        return parse_cvm_class_allowlist(get_settings().cvm_classes)
+    if class_allowlist is None:
+        return None
+    if isinstance(class_allowlist, frozenset):
+        return class_allowlist
+    raise TypeError("class_allowlist must be frozenset[str] | None")
+
+
+def _store_cadastro(
+    session: Session,
+    *,
+    cvm: CvmProvider,
+    object_store: ObjectStorage,
+    source_id: UUID,
+    ingestion_run_id: UUID,
+    keep: tuple[object, ...],
+) -> tuple[dict[str, CvmCadastroClass], RawArtifactRow]:
+    response = cvm.fetch_cadastro()
+    payload = response.content
+    uri = object_store.store(_CADASTRO_OBJECT_KEY, payload, content_type="application/zip")
+    artifact = store_raw_artifact(
+        session,
+        source_id=source_id,
+        ingestion_run_id=ingestion_run_id,
+        source_url=str(response.request.url)
+        if response.request is not None
+        else cvm.cadastro_url(),
+        payload=payload,
+        storage_uri=uri,
+        filename="registro_fundo_classe.zip",
+        content_type=response.headers.get("content-type"),
+        http_status=response.status_code,
+        etag=response.headers.get("etag"),
+        last_modified=response.headers.get("last-modified"),
+        reference_date=None,
+    )
+    lookup = parse_cadastro_zip(payload)
+    _expunge_transient_rows(session, keep=(*keep, artifact))
+    return lookup, artifact
 
 
 def _month_date_bounds(year: int, month: int) -> tuple[date, date]:
@@ -90,6 +139,8 @@ def _persist_cvm_records(
     keep: tuple[object, ...] = (),
     identity_start: date | None = None,
     identity_end: date | None = None,
+    cadastro: Mapping[str, CvmCadastroClass] | None = None,
+    class_allowlist: frozenset[str] | None = None,
 ) -> tuple[int, int, int, int]:
     """Insert fund NAV quotes, flushing and committing every ``flush_every`` rows.
 
@@ -101,6 +152,7 @@ def _persist_cvm_records(
     retain = (artifact, *keep)
     batch = flush_every if flush_every > 0 else _DEFAULT_FLUSH_EVERY
     fund_ids: dict[str, UUID] = {}
+    lookup = cadastro or {}
     existing = load_quote_keys(
         session,
         source_id=source_id,
@@ -122,10 +174,20 @@ def _persist_cvm_records(
         if record.quota_value <= 0:
             rejected += 1
             continue
+        joined = lookup.get(record.cnpj_fundo_classe)
+        classe = joined.classe if joined is not None else None
+        if not should_persist_cvm_class(classe, class_allowlist):
+            skipped += 1
+            continue
         source_key = f"{record.cnpj_fundo_classe}:{record.subclass_id or ''}"
         instrument_id = fund_ids.get(source_key)
         if instrument_id is None:
-            instrument = get_or_create_fund_instrument(session, source_id=source_id, record=record)
+            instrument = get_or_create_fund_instrument(
+                session,
+                source_id=source_id,
+                record=record,
+                cadastro=joined,
+            )
             instrument_id = instrument.id
             fund_ids[source_key] = instrument_id
         identity = (instrument_id, record.reference_date, PriceType.FUND_NAV.value)
@@ -175,9 +237,11 @@ def ingest_cvm(
     storage: LocalFileObjectStorage | None = None,
     provider: CvmProvider | None = None,
     flush_every: int = _DEFAULT_FLUSH_EVERY,
+    class_allowlist: object = _UNSET,
 ) -> dict[str, int | str]:
     settings = get_settings()
     days = settings.recent_reprocess_days if lookback_days is None else lookback_days
+    allowlist = _resolve_class_allowlist(class_allowlist)
     cvm = provider or CvmProvider()
     object_store = storage or build_object_storage()
     source = get_or_create_cvm_source(session)
@@ -188,6 +252,15 @@ def ingest_cvm(
     artifacts = 0
     parsed = 0
     try:
+        cadastro, cadastro_artifact = _store_cadastro(
+            session,
+            cvm=cvm,
+            object_store=object_store,
+            source_id=source.id,
+            ingestion_run_id=run.id,
+            keep=(run, source),
+        )
+        artifacts += 1
         for year, month in months_covering(reference_date, days):
             response = cvm.fetch_month(year, month)
             payload = response.content
@@ -224,9 +297,11 @@ def ingest_cvm(
                 artifact=artifact,
                 ingestion_run_id=run.id,
                 flush_every=flush_every,
-                keep=(run, source, artifact),
+                keep=(run, source, artifact, cadastro_artifact),
                 identity_start=_month_date_bounds(year, month)[0],
                 identity_end=_month_date_bounds(year, month)[1],
+                cadastro=cadastro,
+                class_allowlist=allowlist,
             )
             parsed += ins + upd + skip + rej
             inserted += ins
@@ -320,6 +395,7 @@ def backfill_cvm(
     max_months: int | None = None,
     as_of: date | None = None,
     flush_every: int = _DEFAULT_FLUSH_EVERY,
+    class_allowlist: object = _UNSET,
 ) -> dict[str, int | str]:
     """Backfill Informe Diário months in ``[start, end]``.
 
@@ -329,6 +405,7 @@ def backfill_cvm(
     Daily ``lookback`` is not applied.
     """
     months = months_in_range(start, end)
+    allowlist = _resolve_class_allowlist(class_allowlist)
     cvm = provider or CvmProvider()
     object_store = storage or build_object_storage()
     window_as_of = as_of or date.today()
@@ -352,6 +429,15 @@ def backfill_cvm(
     hist_cache: dict[int, tuple[bytes, str]] = {}
     hist_artifacts: dict[int, RawArtifactRow] = {}
     try:
+        cadastro, cadastro_artifact = _store_cadastro(
+            session,
+            cvm=cvm,
+            object_store=object_store,
+            source_id=source.id,
+            ingestion_run_id=run.id,
+            keep=(run, source),
+        )
+        artifacts += 1
         for year, month in months:
             token = _month_token(year, month)
             if last_completed is not None and token <= last_completed:
@@ -454,9 +540,11 @@ def backfill_cvm(
                         artifact=artifact,
                         ingestion_run_id=run.id,
                         flush_every=flush_every,
-                        keep=(run, source, artifact),
+                        keep=(run, source, artifact, cadastro_artifact),
                         identity_start=max(start, _month_date_bounds(year, month)[0]),
                         identity_end=min(end, _month_date_bounds(year, month)[1]),
+                        cadastro=cadastro,
+                        class_allowlist=allowlist,
                     )
                 except CvmParseError:
                     rejected += 1

@@ -103,10 +103,9 @@ INGEST_UNIVERSE=scratch
 file) wins over `INGEST_UNIVERSE`. Tickers outside the B3 equity rows are
 skipped, not errored.
 
-Then run B3 only (and optionally BCB). Do **not** run CVM or Tesouro jobs on
-Neon Free: `CVM_PROVIDER_ENABLED` / `TESOURO_PROVIDER_ENABLED` exist in
-Settings but are currently ignored by ingest/backfill (only
-`yahoo_provider_enabled` is wired). Omit those CLI jobs. Do **not** pass
+Then run B3 (and optionally BCB). CVM dispatch is class-filtered
+(`CVM_CLASSES=Multimercado,Ações`); `ingest-cvm.yml` stays dispatch-only.
+Tesouro honors `TESOURO_CURRENT_TITLES_ONLY` (default true). Do **not** pass
 `--cotahist`. BVBG.187 futures stay on (existing MVP regex; not filtered by
 the equity allowlist).
 
@@ -372,6 +371,7 @@ Used when `OBJECT_STORAGE_BACKEND=s3`. Leave empty for local filesystem.
 | `PUBLIC_DATASET_FORMAT` | `parquet` |
 | `PUBLIC_DATA_BASE_URL` | Public CDN/base URL for dataset manifests |
 | `CVM_PROVIDER_ENABLED` | `true` |
+| `CVM_CLASSES` | `Multimercado,Ações` (empty in Settings = persist all) |
 | `B3_PROVIDER_ENABLED` | `true` |
 | `TESOURO_PROVIDER_ENABLED` | `true` |
 | `BCB_PROVIDER_ENABLED` | `true` |
@@ -421,13 +421,14 @@ until that secret exists.
 | `LOCAL_STORAGE_PATH` | variable | `LOCAL_STORAGE_PATH` | No (default `./data` on the runner) |
 | `PUBLIC_DATASET_PUBLICATION_ENABLED` | variable | `PUBLIC_DATASET_PUBLICATION_ENABLED` | **Yes = `true`** for `publish-datasets.yml` |
 | `PUBLIC_DATA_BASE_URL` | variable | `PUBLIC_DATA_BASE_URL` | Recommended when publishing |
+| `CVM_CLASSES` | variable | `CVM_CLASSES` | No (CVM jobs default `Multimercado,Ações`) |
 
 Do not put secret values in workflow YAML. Do not commit `.env`.
 
 `ingest-cvm.yml` and `ingest-all.yml` are **workflow_dispatch only** (no daily
-cron). Scratch ingest skips CVM. Daily scheduled ingest is the per-provider
-crons (BCB, B3, Tesouro). Do not enable an `ingest-all.yml` schedule together
-with those crons.
+cron). CVM persist is filtered by `CVM_CLASSES`. Daily scheduled ingest is the
+per-provider crons (BCB, B3, Tesouro). Do not enable an `ingest-all.yml`
+schedule together with those crons.
 
 `ingest-yahoo.yml` is **workflow_dispatch only** (no cron). `backfill.yml` is
 **workflow_dispatch only** (no daily cron).

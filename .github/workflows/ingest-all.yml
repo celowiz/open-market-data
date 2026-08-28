@@ -29,6 +29,7 @@ jobs:
       APP_ENV: production
       APP_TIMEZONE: America/Sao_Paulo
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CVM_CLASSES: ${{ vars.CVM_CLASSES || 'Multimercado,Ações' }}
       OBJECT_STORAGE_BACKEND: ${{ vars.OBJECT_STORAGE_BACKEND || 'local' }}
       LOCAL_STORAGE_PATH: ${{ vars.LOCAL_STORAGE_PATH || './data' }}
       OBJECT_STORAGE_ENDPOINT: ${{ vars.OBJECT_STORAGE_ENDPOINT }}

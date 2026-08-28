@@ -1,0 +1,8 @@
+ID_Registro_Fundo;ID_Registro_Classe;CNPJ_Classe;Codigo_CVM;Data_Registro;Data_Constituicao;Data_Inicio;Tipo_Classe;Denominacao_Social;Situacao;Data_Inicio_Situacao;Classificacao;Indicador_Desempenho;Classe_Cotas;Classificacao_Anbima;Tributacao_Longo_Prazo;Entidade_Investimento;Permitido_Aplicacao_CemPorCento_Exterior;Classe_ESG;Forma_Condominio;Exclusivo;Publico_Alvo;Patrimonio_Liquido;Data_Patrimonio_Liquido;CNPJ_Auditor;Auditor;CNPJ_Custodiante;Custodiante;CNPJ_Controlador;Controlador
+1;101;11.111.111/0001-11;1;2024-01-01;2024-01-01;2024-01-01;Classes de Cotas de Fundos FIF;Fundo Multimercado Fixture;Em Funcionamento Normal;2024-01-01;Multimercado;;;;;;;;;;;;;
+2;102;22.222.222/0001-22;2;2024-01-01;2024-01-01;2024-01-01;Classes de Cotas de Fundos FIF;Fundo Acoes Fixture;Em Funcionamento Normal;2024-01-01;Ações;;;;;;;;;;;;;
+3;103;33.333.333/0001-33;3;2024-01-01;2024-01-01;2024-01-01;Classes de Cotas de Fundos FIF;Fundo Renda Fixa Fixture;Em Funcionamento Normal;2024-01-01;Renda Fixa;;;;;;;;;;;;;
+4;104;44.444.444/0001-44;4;2024-01-01;2024-01-01;2024-01-01;Classes de Cotas de Fundos FII;Fundo Imobiliario Fixture;Em Funcionamento Normal;2024-01-01;;;;;;;;;;;;;;
+5;105;55.555.555/0001-55;5;2024-01-01;2024-01-01;2024-01-01;Classes de Cotas de Fundos FIDC;Fundo FIDC Fixture;Em Funcionamento Normal;2024-01-01;;;;;;;;;;;;;;
+6;106;77.777.777/0001-77;6;2024-01-01;2024-01-01;2024-01-01;Classes de Cotas de Fundos FIF;Fundo Duplicado Cancelado;Cancelado;2024-01-01;Multimercado;;;;;;;;;;;;;
+6;107;77.777.777/0001-77;6;2024-01-01;2024-01-01;2024-01-01;Classes de Cotas de Fundos FIDC;Fundo Duplicado Ativo;Em Funcionamento Normal;2024-01-01;;;;;;;;;;;;;;

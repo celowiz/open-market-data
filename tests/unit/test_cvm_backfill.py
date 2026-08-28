@@ -60,6 +60,9 @@ class _FakeCvm(CvmProvider):
             raise AssertionError(f"unexpected HIST fetch for {year}")
         return _FakeResponse(payload, self.hist_year_url(year))
 
+    def fetch_cadastro(self, *, client=None) -> _FakeResponse:
+        return _FakeResponse(_empty_cadastro_zip(), self.cadastro_url())
+
 
 def _informe_csv(reference: date, quota: str) -> str:
     row = f"CLASSES - FIF;{CNPJ};;{reference.isoformat()};100.00;{quota};100.00;0.00;0.00;1"
@@ -72,6 +75,11 @@ def _zip_members(members: dict[str, str]) -> bytes:
         for name, text in members.items():
             archive.writestr(name, text.encode("latin-1"))
     return buffer.getvalue()
+
+
+def _empty_cadastro_zip() -> bytes:
+    header = "CNPJ_Classe;Classificacao;Tipo_Classe;Denominacao_Social;Situacao\n"
+    return _zip_members({"registro_classe.csv": header})
 
 
 @pytest.fixture
