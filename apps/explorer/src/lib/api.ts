@@ -22,6 +22,7 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -106,7 +107,7 @@ function detailMessage(body: unknown): string | null {
   }
 }
 
-function isNetworkFailure(error: unknown): boolean {
+export function isNetworkFailure(error: unknown): boolean {
   if (error instanceof TypeError) {
     return true;
   }
@@ -230,9 +231,7 @@ export async function lookupInstrumentName(
   const match =
     data.instruments.find((item) =>
       item.identifiers.some((id) => id.toLowerCase() === needle),
-    ) ??
-    data.instruments.find((item) => item.name.toLowerCase() === needle) ??
-    data.instruments[0];
+    ) ?? data.instruments.find((item) => item.name.toLowerCase() === needle);
   return match?.name ?? null;
 }
 

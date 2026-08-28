@@ -7,12 +7,10 @@ import { useApiStatus } from "@/components/ApiStatusProvider";
 import { DateRangeForm, type DateRangeValue } from "@/components/DateRangeForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
-import { OfflineState } from "@/components/OfflineState";
 import { PriceChart, type ChartSeries } from "@/components/PriceChart";
 import { EmptyState, LoadingState } from "@/components/Status";
-import { fetchSeriesObservations, formatApiError } from "@/lib/api";
+import { fetchSeriesObservations } from "@/lib/api";
 import { DEFAULT_COMPARE_SERIES, KNOWN_BCB_SERIES } from "@/lib/bcb-series";
-import { copy } from "@/lib/copy";
 import { defaultHistoryRange } from "@/lib/dates";
 import { useHistoryPages } from "@/lib/use-history-pages";
 
@@ -143,7 +141,7 @@ function ComparePageInner() {
 
   const groups = new Map<string, ChartSeries[]>();
   for (const pane of panes) {
-    if (pane.history.status !== "success" || pane.history.items.length === 0) {
+    if (pane.history.items.length === 0) {
       continue;
     }
     const unit = pane.history.firstPage?.unit ?? pane.history.items[0]?.unit ?? "unknown";
@@ -201,14 +199,16 @@ function ComparePageInner() {
         onEndChange={setEnd}
         onSubmit={applyFilters}
         disabled={!apiReady}
-        disabledHint={copy.offline.formHint}
       />
 
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && loading ? <LoadingState label="Carregando séries…" /> : null}
-      {anyError ? <ErrorBanner error={anyError.history.error} /> : null}
+      {panes.map((pane) =>
+        pane.history.status === "error" ? (
+          <ErrorBanner key={pane.code} error={pane.history.error} label={pane.code} />
+        ) : null,
+      )}
 
-      {apiReady && !loading
+      {apiReady && groups.size > 0
         ? [...groups.entries()].map(([unit, series]) => (
             <section key={unit} className="flex flex-col gap-2">
               <h2 className="text-sm font-semibold text-slate-900">
@@ -224,14 +224,6 @@ function ComparePageInner() {
           <p>Nenhuma observação carregada para as séries selecionadas.</p>
         </EmptyState>
       ) : null}
-
-      {panes.map((pane) =>
-        pane.history.status === "error" ? (
-          <p key={pane.code} className="text-sm text-red-800" role="alert">
-            {pane.code}: {formatApiError(pane.history.error)}
-          </p>
-        ) : null,
-      )}
 
       <LoadMoreButton
         hasMore={hasMore}

@@ -2,7 +2,6 @@
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import { OfflineState } from "@/components/OfflineState";
 import { EmptyState, LoadingState } from "@/components/Status";
 import { SourcesTable } from "@/components/SourcesTable";
 import { fetchSources } from "@/lib/api";
@@ -25,7 +24,6 @@ export default function SourcesPage() {
           API pública habilitada.
         </p>
       </header>
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && (api.status === "loading" || state.status === "loading") ? (
         <LoadingState label="Carregando fontes…" />
       ) : null}

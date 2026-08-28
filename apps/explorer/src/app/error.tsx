@@ -1,7 +1,8 @@
 "use client";
 
-import { formatApiError, isLocalPageOrigin } from "@/lib/api";
+import { formatApiError, getApiBaseUrl, isNetworkFailure } from "@/lib/api";
 import { copy } from "@/lib/copy";
+import { useLocalPageOrigin } from "@/lib/use-local-origin";
 
 export default function Error({
   error,
@@ -10,11 +11,12 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const message = isLocalPageOrigin()
-    ? formatApiError(error)
-    : error instanceof TypeError
-      ? copy.api.publicUnavailable
-      : formatApiError(error);
+  const local = useLocalPageOrigin();
+  const message = isNetworkFailure(error)
+    ? local
+      ? copy.api.localUnreachable(getApiBaseUrl())
+      : copy.api.publicUnavailable
+    : formatApiError(error);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-16">

@@ -7,16 +7,17 @@ import { useApiStatus } from "@/components/ApiStatusProvider";
 import { CoverageChart } from "@/components/CoverageChart";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
-import { OfflineState } from "@/components/OfflineState";
 import { EmptyState, LoadingState } from "@/components/Status";
 import { COVERAGE_PAGE_SIZE, fetchCoverage } from "@/lib/api";
-import { copy } from "@/lib/copy";
+import { offlineFormHint } from "@/lib/copy";
 import { todayIso } from "@/lib/dates";
+import { useLocalPageOrigin } from "@/lib/use-local-origin";
 import { hrefForIdentifier } from "@/lib/links";
 import { useHistoryPages } from "@/lib/use-history-pages";
 
 export default function CoveragePage() {
   const api = useApiStatus();
+  const localOrigin = useLocalPageOrigin();
   const apiReady = api.status === "ok";
   const [dateInput, setDateInput] = useState(todayIso());
   const [universe, setUniverse] = useState<"example" | "operator">("example");
@@ -106,16 +107,15 @@ export default function CoveragePage() {
         </button>
       </form>
       {!apiReady && api.status === "unreachable" ? (
-        <p className="text-sm text-slate-600">{copy.offline.formHint}</p>
+        <p className="text-sm text-slate-600">{offlineFormHint(localOrigin)}</p>
       ) : null}
 
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && history.status === "loading" ? (
         <LoadingState label="Carregando cobertura…" />
       ) : null}
       {history.status === "error" ? <ErrorBanner error={history.error} /> : null}
 
-      {data && history.status === "success" ? (
+      {data && (history.status === "success" || rows.length > 0) ? (
         <>
           <section className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>

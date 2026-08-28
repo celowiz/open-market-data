@@ -3,7 +3,6 @@
 import { useApiStatus } from "@/components/ApiStatusProvider";
 import { DatasetManifestCard } from "@/components/DatasetManifestCard";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import { OfflineState } from "@/components/OfflineState";
 import { EmptyState, LoadingState } from "@/components/Status";
 import { fetchDatasets } from "@/lib/api";
 import { useClientFetch } from "@/lib/use-client-fetch";
@@ -23,7 +22,6 @@ export default function DatasetsPage() {
           catálogos com redistribuição permitida. Não há botão de download da B3.
         </p>
       </header>
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && (api.status === "loading" || state.status === "loading") ? (
         <LoadingState label="Carregando manifestos…" />
       ) : null}

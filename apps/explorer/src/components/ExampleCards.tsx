@@ -3,7 +3,6 @@
 import Link from "next/link";
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
-import { OfflineState } from "@/components/OfflineState";
 import { SkeletonBlock } from "@/components/Status";
 import {
   fetchFundLatest,
@@ -67,7 +66,11 @@ function ExampleCard({ example }: { example: HomeExample }) {
       <p className="mt-1 font-mono text-sm text-teal-800">{example.identifier}</p>
       <p className="mt-2 text-sm text-slate-600">{example.description}</p>
       <div className="mt-3 min-h-[4.5rem]">
-        {api.status === "unreachable" ? <OfflineState compact /> : null}
+        {api.status === "unreachable" ? (
+          <p className="font-mono text-lg tabular-nums text-slate-300" aria-hidden="true">
+            —
+          </p>
+        ) : null}
         {api.status !== "unreachable" && (api.status === "loading" || state.status === "loading") ? (
           <SkeletonBlock label="Carregando último valor…" />
         ) : null}

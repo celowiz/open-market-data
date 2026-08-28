@@ -8,13 +8,11 @@ import { DateRangeForm, type DateRangeValue } from "@/components/DateRangeForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { LatestHeadline } from "@/components/LatestHeadline";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
-import { OfflineState } from "@/components/OfflineState";
 import { PriceChart } from "@/components/PriceChart";
 import { ProvenanceStrip } from "@/components/ProvenanceStrip";
 import { QuotesTable } from "@/components/QuotesTable";
 import { EmptyState, LoadingState } from "@/components/Status";
 import { fetchFundQuotes } from "@/lib/api";
-import { copy } from "@/lib/copy";
 import { defaultHistoryRange, routeParam } from "@/lib/dates";
 import { useHistoryPages } from "@/lib/use-history-pages";
 
@@ -83,16 +81,14 @@ function FundQuotesPage() {
         onEndChange={setEnd}
         onSubmit={applyFilters}
         disabled={!apiReady}
-        disabledHint={copy.offline.formHint}
       />
 
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && history.status === "loading" ? (
         <LoadingState label="Carregando cotas…" />
       ) : null}
       {history.status === "error" ? <ErrorBanner error={history.error} /> : null}
 
-      {history.status === "success" ? (
+      {history.status === "success" || quotes.length > 0 ? (
         <>
           <ProvenanceStrip items={quotes} />
           {quotes.length === 0 ? (

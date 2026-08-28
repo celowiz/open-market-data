@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type HistoryPagesState<TPage, TItem> = {
   key: string;
@@ -28,6 +28,7 @@ export function useHistoryPages<TPage, TItem>(options: {
   loadMore: () => void;
 } {
   const { key, enabled, fetchPage, itemsOf, cursorOf } = options;
+  const loadMoreAbort = useRef<AbortController | null>(null);
   const [tick, setTick] = useState<HistoryPagesState<TPage, TItem>>({
     key,
     status: "loading",
@@ -40,6 +41,8 @@ export function useHistoryPages<TPage, TItem>(options: {
 
   useEffect(() => {
     if (!enabled) {
+      loadMoreAbort.current?.abort();
+      loadMoreAbort.current = null;
       return;
     }
     const controller = new AbortController();
@@ -76,29 +79,48 @@ export function useHistoryPages<TPage, TItem>(options: {
         });
       },
     );
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      loadMoreAbort.current?.abort();
+      loadMoreAbort.current = null;
+    };
     // Identified by `key`; fetchPage/itemsOf/cursorOf are recreated each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, enabled]);
+
+  useEffect(() => {
+    return () => {
+      loadMoreAbort.current?.abort();
+      loadMoreAbort.current = null;
+    };
+  }, []);
 
   const loadMore = useCallback(() => {
     if (!enabled || tick.key !== key || tick.loadingMore || !tick.nextCursor) {
       return;
     }
     const cursor = tick.nextCursor;
+    loadMoreAbort.current?.abort();
+    const controller = new AbortController();
+    loadMoreAbort.current = controller;
     setTick((current) =>
       current.key !== key || current.nextCursor !== cursor
         ? current
-        : { ...current, loadingMore: true },
+        : { ...current, loadingMore: true, error: null },
     );
-    fetchPage(cursor).then(
+    fetchPage(cursor, controller.signal).then(
       (page) => {
+        if (controller.signal.aborted) {
+          return;
+        }
         setTick((prev) => {
           if (prev.key !== key || prev.nextCursor !== cursor) {
             return prev;
           }
           return {
             ...prev,
+            status: "success",
+            error: null,
             items: [...prev.items, ...itemsOf(page)],
             nextCursor: cursorOf(page) ?? null,
             loadingMore: false,
@@ -106,10 +128,18 @@ export function useHistoryPages<TPage, TItem>(options: {
         });
       },
       (error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
-        setTick((prev) => ({ ...prev, loadingMore: false, error }));
+        setTick((prev) => ({
+          ...prev,
+          status: "error",
+          loadingMore: false,
+          error,
+        }));
       },
     );
   }, [cursorOf, enabled, fetchPage, itemsOf, key, tick.key, tick.loadingMore, tick.nextCursor]);

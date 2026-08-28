@@ -26,6 +26,7 @@ export type ChartSeries = {
 };
 
 const DEFAULT_COLORS = ["#0f766e", "#1e293b", "#b45309", "#3730a3", "#9f1239"];
+const OUTAGE_GAP_DAYS = 4;
 
 function withGaps(rows: ChartRow[]): Array<{ date: string; raw: string | null }> {
   const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
@@ -34,7 +35,7 @@ function withGaps(rows: ChartRow[]): Array<{ date: string; raw: string | null }>
     const current = sorted[index];
     if (index > 0) {
       const previous = sorted[index - 1];
-      if (utcDayDiff(previous.date, current.date) > 1) {
+      if (utcDayDiff(previous.date, current.date) > OUTAGE_GAP_DAYS) {
         out.push({ date: addUtcDays(previous.date, 1), raw: null });
       }
     }
@@ -80,10 +81,12 @@ export function PriceChart({
     return [...dates]
       .sort((a, b) => a.localeCompare(b))
       .map((date) => {
-        const point: Record<string, string | number | null> = { date };
+        const point: Record<string, string | number | null | undefined> = { date };
         for (const item of resolved) {
           const map = byKey.get(item.key);
-          point[item.key] = map?.has(date) ? (map.get(date) ?? null) : null;
+          if (map?.has(date)) {
+            point[item.key] = map.get(date);
+          }
         }
         return point;
       });

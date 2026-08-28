@@ -2,8 +2,9 @@
 
 import type { ReactNode } from "react";
 
-import { copy } from "@/lib/copy";
+import { copy, offlineFormHint } from "@/lib/copy";
 import { addUtcMonths, addUtcYears, defaultHistoryRange, todayIso } from "@/lib/dates";
+import { useLocalPageOrigin } from "@/lib/use-local-origin";
 
 export type DateRangeValue = {
   start: string;
@@ -37,6 +38,8 @@ export function DateRangeForm({
 }: DateRangeFormProps) {
   const today = todayIso();
   const fiveYear = defaultHistoryRange(5);
+  const localOrigin = useLocalPageOrigin();
+  const hint = disabledHint ?? (disabled ? offlineFormHint(localOrigin) : undefined);
 
   function applyRange(nextStart: string, nextEnd: string) {
     onStartChange(nextStart);
@@ -134,7 +137,7 @@ export function DateRangeForm({
           </button>
         </div>
       </div>
-      {disabled && disabledHint ? <p className="text-sm text-slate-600">{disabledHint}</p> : null}
+      {disabled && hint ? <p className="text-sm text-slate-600">{hint}</p> : null}
     </form>
   );
 }

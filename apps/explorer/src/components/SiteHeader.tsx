@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
 import { InstrumentSearch } from "@/components/InstrumentSearch";
-import { formatApiError, getApiBaseUrl } from "@/lib/api";
-import { copy } from "@/lib/copy";
+import { getApiBaseUrl } from "@/lib/api";
+import { copy, offlineBannerMessage } from "@/lib/copy";
 import { useLocalPageOrigin } from "@/lib/use-local-origin";
 
 const NAV = [
@@ -37,11 +37,7 @@ export function SiteHeader() {
         : "border-slate-200 bg-slate-50 text-slate-700";
 
   const bannerMessage =
-    api.status === "unreachable"
-      ? revealBase
-        ? formatApiError(api.error)
-        : copy.api.publicBanner
-      : null;
+    api.status === "unreachable" ? offlineBannerMessage(revealBase, getApiBaseUrl()) : null;
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -98,7 +94,16 @@ export function SiteHeader() {
       </div>
       {bannerMessage ? (
         <div role="alert" className="border-t border-amber-200 bg-amber-50">
-          <p className="mx-auto max-w-6xl px-4 py-3 text-sm text-amber-950">{bannerMessage}</p>
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-amber-950">{bannerMessage}</p>
+            <button
+              type="button"
+              onClick={() => api.retry()}
+              className="w-fit rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-100"
+            >
+              {copy.common.retry}
+            </button>
+          </div>
         </div>
       ) : null}
     </header>

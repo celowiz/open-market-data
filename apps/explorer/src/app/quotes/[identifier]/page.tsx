@@ -8,7 +8,6 @@ import { DateRangeForm, type DateRangeValue } from "@/components/DateRangeForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { LatestHeadline } from "@/components/LatestHeadline";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
-import { OfflineState } from "@/components/OfflineState";
 import { PriceChart } from "@/components/PriceChart";
 import { PriceTypeFilters } from "@/components/PriceTypeFilters";
 import { ProvenanceStrip } from "@/components/ProvenanceStrip";
@@ -155,24 +154,25 @@ function QuoteHistoryPage() {
         onEndChange={setEnd}
         onSubmit={applyFilters}
         disabled={!apiReady}
-        disabledHint={copy.offline.formHint}
         extra={
           <>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="price-type" className="text-sm font-medium text-slate-800">
-                {copy.common.priceType}
-              </label>
-              <input
-                id="price-type"
-                name="price_type"
-                type="text"
-                placeholder="LAST, OFFICIAL_SETTLEMENT…"
-                value={priceType}
-                disabled={!apiReady}
-                onChange={(event) => setPriceType(event.target.value)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-              />
-            </div>
+            {tesouro || future ? null : (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="price-type" className="text-sm font-medium text-slate-800">
+                  {copy.common.priceType}
+                </label>
+                <input
+                  id="price-type"
+                  name="price_type"
+                  type="text"
+                  placeholder="LAST, OFFICIAL_SETTLEMENT…"
+                  value={priceType}
+                  disabled={!apiReady}
+                  onChange={(event) => setPriceType(event.target.value)}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                />
+              </div>
+            )}
             <div className="flex flex-col gap-1">
               <label htmlFor="quote-source" className="text-sm font-medium text-slate-800">
                 {copy.common.source}
@@ -192,13 +192,15 @@ function QuoteHistoryPage() {
         }
       />
 
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && history.status === "loading" ? (
         <LoadingState label="Carregando histórico de cotações…" />
       ) : null}
       {history.status === "error" ? <ErrorBanner error={history.error} /> : null}
+      {companionType && companion.status === "error" ? (
+        <ErrorBanner error={companion.error} />
+      ) : null}
 
-      {history.status === "success" ? (
+      {history.status === "success" || quotes.length > 0 ? (
         <>
           <ProvenanceStrip items={quotes} />
           {quotes.length === 0 ? (

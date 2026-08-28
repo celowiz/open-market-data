@@ -1,7 +1,7 @@
 "use client";
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
-import { formatApiError, getApiBaseUrl, isLoopbackApiHost } from "@/lib/api";
+import { getApiBaseUrl, isLoopbackApiHost } from "@/lib/api";
 import { copy } from "@/lib/copy";
 import { useLocalPageOrigin } from "@/lib/use-local-origin";
 
@@ -22,10 +22,7 @@ export default function StatusPage() {
         </p>
       </header>
 
-      <section
-        className="rounded-lg border border-slate-200 bg-white p-4"
-        role={api.status === "unreachable" ? "alert" : undefined}
-      >
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Saúde</h2>
         {api.status === "loading" ? (
           <p className="mt-2 text-sm text-slate-600">{copy.header.statusChecking}</p>
@@ -34,10 +31,18 @@ export default function StatusPage() {
           <p className="mt-2 text-sm text-teal-800">{copy.header.statusOk}</p>
         ) : null}
         {api.status === "unreachable" ? (
-          <p className="mt-2 text-sm text-red-800">
-            {localOrigin ? formatApiError(api.error) : copy.api.publicBanner}
-          </p>
+          <p className="mt-2 text-sm text-slate-600">{copy.header.statusDown}</p>
         ) : null}
+        <p className="mt-3">
+          <button
+            type="button"
+            onClick={() => api.retry()}
+            disabled={api.status === "loading"}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {copy.common.retry}
+          </button>
+        </p>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">

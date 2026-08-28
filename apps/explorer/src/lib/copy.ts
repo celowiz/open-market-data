@@ -29,12 +29,17 @@ export const copy = {
       `Não foi possível alcançar ${base}. Inicie o FastAPI (uvicorn na porta 8000) e defina CORS_ALLOWED_ORIGINS para incluir esta origem do Explorador (http://localhost:3000).`,
     unknown: "Erro desconhecido",
     errorHeading: "Erro da API",
+    healthNotOk: "A API respondeu, mas a verificação de saúde não está ok.",
   },
   offline: {
-    compact: "Indisponível enquanto a API pública estiver fora do ar.",
-    block: "Dados indisponíveis enquanto a API pública estiver fora do ar.",
-    formHint: "O envio fica desativado até a API pública responder.",
-    searchHint: "A busca não funciona enquanto a API pública estiver indisponível.",
+    compactPublic: "Indisponível enquanto a API pública estiver fora do ar.",
+    compactLocal: "Indisponível enquanto o FastAPI local não responder.",
+    formHintPublic: "O envio fica desativado até a API pública responder.",
+    formHintLocal:
+      "O envio fica desativado até o FastAPI (uvicorn na porta 8000) responder.",
+    searchHintPublic: "A busca não funciona enquanto a API pública estiver indisponível.",
+    searchHintLocal:
+      "A busca não funciona até iniciar o FastAPI (uvicorn na porta 8000) e incluir http://localhost:3000 em CORS_ALLOWED_ORIGINS.",
   },
   footer:
     "Este Explorador de Dados lê apenas a API pública FastAPI /v1. Ele nunca se conecta ao PostgreSQL, nunca inventa preços ausentes e não oferece downloads em lote da B3 ou do Yahoo.",
@@ -59,3 +64,19 @@ export const copy = {
     range: "Atalhos de período",
   },
 } as const;
+
+export function offlineFormHint(isLocalOrigin: boolean): string {
+  return isLocalOrigin ? copy.offline.formHintLocal : copy.offline.formHintPublic;
+}
+
+export function offlineSearchHint(isLocalOrigin: boolean): string {
+  return isLocalOrigin ? copy.offline.searchHintLocal : copy.offline.searchHintPublic;
+}
+
+export function offlineBannerMessage(isLocalOrigin: boolean, apiBaseUrl: string): string {
+  return isLocalOrigin ? copy.api.localUnreachable(apiBaseUrl) : copy.api.publicBanner;
+}
+
+export function offlineCompactMessage(isLocalOrigin: boolean): string {
+  return isLocalOrigin ? copy.offline.compactLocal : copy.offline.compactPublic;
+}

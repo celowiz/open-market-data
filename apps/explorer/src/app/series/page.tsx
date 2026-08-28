@@ -3,7 +3,6 @@
 import Link from "next/link";
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
-import { OfflineState } from "@/components/OfflineState";
 import { SkeletonBlock } from "@/components/Status";
 import { fetchSeriesLatest, formatApiError, isNotFoundError } from "@/lib/api";
 import { KNOWN_BCB_SERIES } from "@/lib/bcb-series";
@@ -34,7 +33,11 @@ function SeriesCatalogCard({
         SGS {sgs} · <span className="font-mono">{unit}</span>
       </p>
       <div className="mt-3 min-h-[4.5rem]">
-        {api.status === "unreachable" ? <OfflineState compact /> : null}
+        {api.status === "unreachable" ? (
+          <p className="font-mono text-lg tabular-nums text-slate-300" aria-hidden="true">
+            —
+          </p>
+        ) : null}
         {api.status !== "unreachable" && (api.status === "loading" || latest.status === "loading") ? (
           <SkeletonBlock label="Carregando último valor…" />
         ) : null}

@@ -9,12 +9,10 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { LatestHeadline } from "@/components/LatestHeadline";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { ObservationsTable } from "@/components/ObservationsTable";
-import { OfflineState } from "@/components/OfflineState";
 import { PriceChart } from "@/components/PriceChart";
 import { ProvenanceStrip } from "@/components/ProvenanceStrip";
 import { EmptyState, LoadingState } from "@/components/Status";
 import { fetchSeriesObservations } from "@/lib/api";
-import { copy } from "@/lib/copy";
 import { defaultHistoryRange, routeParam } from "@/lib/dates";
 import { useHistoryPages } from "@/lib/use-history-pages";
 
@@ -90,16 +88,14 @@ function SeriesPage() {
         onEndChange={setEnd}
         onSubmit={applyFilters}
         disabled={!apiReady}
-        disabledHint={copy.offline.formHint}
       />
 
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && history.status === "loading" ? (
         <LoadingState label="Carregando observações…" />
       ) : null}
       {history.status === "error" ? <ErrorBanner error={history.error} /> : null}
 
-      {history.status === "success" ? (
+      {history.status === "success" || observations.length > 0 ? (
         <>
           <ProvenanceStrip
             items={observations.map((row) => ({

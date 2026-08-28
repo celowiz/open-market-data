@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import { useApiStatus } from "@/components/ApiStatusProvider";
 import { DatasetManifestCard } from "@/components/DatasetManifestCard";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import { OfflineState } from "@/components/OfflineState";
 import { LoadingState } from "@/components/Status";
 import { fetchDataset } from "@/lib/api";
 import { routeParam } from "@/lib/dates";
@@ -28,7 +27,6 @@ export default function DatasetDetailPage() {
           <code className="font-mono text-xs">GET /v1/datasets/{"{name}"}</code>
         </p>
       </header>
-      {api.status === "unreachable" ? <OfflineState /> : null}
       {api.status !== "unreachable" && (api.status === "loading" || state.status === "loading") ? (
         <LoadingState label="Carregando manifesto…" />
       ) : null}

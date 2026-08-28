@@ -6,7 +6,6 @@ import { useApiStatus } from "@/components/ApiStatusProvider";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ExampleCards } from "@/components/ExampleCards";
 import { InstrumentSearch } from "@/components/InstrumentSearch";
-import { OfflineState } from "@/components/OfflineState";
 import { EmptyState, LoadingState } from "@/components/Status";
 import { SourcesTable } from "@/components/SourcesTable";
 import { fetchSources } from "@/lib/api";
@@ -58,7 +57,12 @@ export default function HomePage() {
           De <code className="font-mono text-xs">GET /v1/sources</code>. Aparecem as fontes com API
           pública habilitada, inclusive Yahoo.
         </p>
-        {api.status === "unreachable" ? <OfflineState /> : null}
+        {api.status === "unreachable" ? (
+          <div
+            className="h-32 rounded-lg border border-dashed border-slate-200 bg-slate-50"
+            aria-hidden="true"
+          />
+        ) : null}
         {api.status !== "unreachable" &&
         (api.status === "loading" || sources.status === "loading") ? (
           <LoadingState label="Carregando fontes…" />

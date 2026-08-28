@@ -65,7 +65,7 @@ export function LatestHeadline({
   }
   if (latest.status === "error") {
     return (
-      <p role="alert" className="text-sm text-red-800">
+      <p className="text-sm text-red-800">
         {formatApiError(latest.error)}
         {isNotFoundError(latest.error) ? ` — ${copy.common.noSynthetic}.` : null}
       </p>

@@ -5,7 +5,6 @@ import { useEffect, useId, useState } from "react";
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import { OfflineState } from "@/components/OfflineState";
 import { copy } from "@/lib/copy";
 import { HOME_EXAMPLES } from "@/lib/examples";
 import { EmptyState, LoadingState } from "@/components/Status";
@@ -69,15 +68,6 @@ export function InstrumentSearch({
 
   const resultsBlock = (
     <div className={compact ? "absolute z-20 mt-1 w-full" : "mt-4"}>
-      {!apiReady && api.status === "unreachable" ? (
-        compact ? (
-          <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-            <OfflineState compact />
-          </div>
-        ) : (
-          <p className="text-sm text-slate-600">{copy.offline.searchHint}</p>
-        )
-      ) : null}
       {apiReady && !trimmed && !compact ? (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-slate-600">
