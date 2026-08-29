@@ -104,6 +104,8 @@ function FundQuotesPage() {
             <>
               <PriceChart
                 label="Cota (NAV)"
+                priceType={quotes[0]?.price_type ?? "FUND_NAV"}
+                unit={quotes[0]?.unit}
                 rows={quotes.map((quote) => ({ date: quote.date, raw: quote.price }))}
               />
               <QuotesTable quotes={quotes} />

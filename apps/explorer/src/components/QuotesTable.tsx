@@ -1,3 +1,4 @@
+import { formatDisplayValue } from "@/lib/format-display-value";
 import type { QuoteResponse } from "@/lib/types";
 
 export function QuotesTable({ quotes }: { quotes: QuoteResponse[] }) {
@@ -40,7 +41,9 @@ export function QuotesTable({ quotes }: { quotes: QuoteResponse[] }) {
           {quotes.map((quote, index) => (
             <tr key={`${quote.date}-${quote.price_type}-${quote.revision}-${index}`} className="border-t border-slate-100">
               <td className="whitespace-nowrap px-3 py-2 font-mono">{quote.date}</td>
-              <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums">{quote.price}</td>
+              <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums">
+                {formatDisplayValue(quote.price, { priceType: quote.price_type, unit: quote.unit })}
+              </td>
               <td className="px-3 py-2">{quote.currency ?? "—"}</td>
               <td className="px-3 py-2 font-mono">{quote.price_type}</td>
               <td className="px-3 py-2">{quote.source}</td>
