@@ -42,7 +42,7 @@ function roundTo(int: string, frac: string, maxFrac: number): { int: string; fra
     if ((frac[0] ?? "0") < "5") {
       return { int, frac: "" };
     }
-    return { int: (BigInt(int) + 1n).toString(), frac: "" };
+    return { int: (BigInt(int) + BigInt(1)).toString(), frac: "" };
   }
   const head = frac.slice(0, maxFrac);
   const discarded = frac.slice(maxFrac);
@@ -50,7 +50,7 @@ function roundTo(int: string, frac: string, maxFrac: number): { int: string; fra
     return { int, frac: head };
   }
   const digits = `${int}${head}`;
-  const incremented = (BigInt(digits) + 1n).toString();
+  const incremented = (BigInt(digits) + BigInt(1)).toString();
   if (incremented.length > digits.length) {
     return {
       int: incremented.slice(0, incremented.length - maxFrac),
