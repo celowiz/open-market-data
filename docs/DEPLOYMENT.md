@@ -109,6 +109,10 @@ Tesouro honors `TESOURO_CURRENT_TITLES_ONLY` (default true). Do **not** pass
 `--cotahist`. BVBG.187 futures stay on (existing MVP regex; not filtered by
 the equity allowlist).
 
+GitHub Actions `ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml` pass
+`INGEST_UNIVERSE` (and `B3_EQUITY_UNIVERSE_PATH` when set) from repository
+Actions variables. Empty/unset keeps default full BVBG.186 persist.
+
 ```bash
 uv run marketdata ingest b3 --date YYYY-MM-DD
 uv run marketdata ingest bcb --date YYYY-MM-DD
@@ -200,6 +204,12 @@ uvicorn marketdata.api.main:app --host 0.0.0.0 --port ${PORT:-8000}
 
 It does **not** bake `.env`, credentials, or a default ingest command.
 Pass configuration at runtime (`-e`, `--env-file`, or the host's env).
+
+The image copies repository `config/` into `/app/config` (WORKDIR `/app`).
+`coverage_config_dir` defaults to `.`, so `GET /v1/coverage?universe=example`
+resolves `config/instruments.example.csv` inside the container. The operator
+file `config/instruments.csv` is gitignored and listed in `.dockerignore`;
+`universe=operator` remains 404 until that file is supplied at runtime.
 
 ```bash
 docker build -t open-market-data .
@@ -367,6 +377,8 @@ Used when `OBJECT_STORAGE_BACKEND=s3`. Leave empty for local filesystem.
 |---|---|
 | `RECENT_REPROCESS_DAYS` | `90` |
 | `INGESTION_MAX_CONCURRENCY` | `4` |
+| `INGEST_UNIVERSE` | empty (full BVBG.186). `scratch` = coverage CSV |
+| `B3_EQUITY_UNIVERSE_PATH` | empty. Explicit CSV wins over `INGEST_UNIVERSE` |
 | `PUBLIC_DATASET_PUBLICATION_ENABLED` | `false` (must be `true` to publish) |
 | `PUBLIC_DATASET_FORMAT` | `parquet` |
 | `PUBLIC_DATA_BASE_URL` | Public CDN/base URL for dataset manifests |
@@ -422,6 +434,8 @@ until that secret exists.
 | `PUBLIC_DATASET_PUBLICATION_ENABLED` | variable | `PUBLIC_DATASET_PUBLICATION_ENABLED` | **Yes = `true`** for `publish-datasets.yml` |
 | `PUBLIC_DATA_BASE_URL` | variable | `PUBLIC_DATA_BASE_URL` | Recommended when publishing |
 | `CVM_CLASSES` | variable | `CVM_CLASSES` | No (CVM jobs default `Multimercado,Ações`) |
+| `INGEST_UNIVERSE` | variable | `INGEST_UNIVERSE` | No. Empty = persist full B3 BVBG.186. `scratch` filters 186 LAST to the coverage CSV. Wired on `ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml`. |
+| `B3_EQUITY_UNIVERSE_PATH` | variable | `B3_EQUITY_UNIVERSE_PATH` | No. Empty is fine. When set, wins over `INGEST_UNIVERSE`. Same three B3 jobs. |
 
 Do not put secret values in workflow YAML. Do not commit `.env`.
 

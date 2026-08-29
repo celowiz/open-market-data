@@ -177,6 +177,12 @@ INGEST_UNIVERSE=scratch
 (`B3_EQUITY_UNIVERSE_PATH`); that wins over `INGEST_UNIVERSE`. Tickers not in
 the B3 equity rows are skipped (not persisted), not errored.
 
+`ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml` pass both variables from
+repository Actions variables (`vars.INGEST_UNIVERSE`,
+`vars.B3_EQUITY_UNIVERSE_PATH`). Unset/empty keeps default full-file persist.
+The Python default is unchanged: empty `INGEST_UNIVERSE` still persists the
+full BVBG.186. Do not enable COTAHIST. `ingest-cvm.yml` stays dispatch-only.
+
 For a $0-scratch / Neon Free run:
 
 - CVM persist honors `CVM_CLASSES=Multimercado,Ações`. `ingest-cvm.yml` stays
