@@ -1,5 +1,14 @@
 import type { InstrumentSearchItem } from "@/lib/types";
 
+export function hrefForIdentifier(identifier: string, assetClass = ""): string {
+  return hrefForInstrument({
+    instrument_id: identifier,
+    name: identifier,
+    asset_class: assetClass,
+    identifiers: [identifier],
+  });
+}
+
 export function hrefForInstrument(item: InstrumentSearchItem): string {
   if (item.asset_class === "fund") {
     const cnpj = item.identifiers.find((id) => /^\d{14}$/.test(id));
@@ -30,18 +39,18 @@ export function guessOpenTarget(q: string): { href: string; label: string } | nu
   if (/^BCB:/i.test(trimmed)) {
     return {
       href: `/series/${encodeURIComponent(trimmed)}`,
-      label: `Open series ${trimmed}`,
+      label: `Abrir série ${trimmed}`,
     };
   }
   if (/^\d{14}$/.test(trimmed)) {
     return {
       href: `/funds/${encodeURIComponent(trimmed)}`,
-      label: `Open fund ${trimmed}`,
+      label: `Abrir fundo ${trimmed}`,
     };
   }
   return {
     href: `/quotes/${encodeURIComponent(trimmed)}`,
-    label: `Open quotes ${trimmed}`,
+    label: `Abrir cotações ${trimmed}`,
   };
 }
 

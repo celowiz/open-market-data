@@ -16,6 +16,29 @@ export function todayIso(): string {
   return formatLocalIso(new Date());
 }
 
+export function addUtcMonths(iso: string, months: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString().slice(0, 10);
+}
+
+export function addUtcYears(iso: string, years: number): string {
+  return addUtcMonths(iso, years * 12);
+}
+
+export function addUtcDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+export function utcDayDiff(start: string, end: string): number {
+  const from = Date.parse(`${start}T00:00:00Z`);
+  const to = Date.parse(`${end}T00:00:00Z`);
+  return Math.round((to - from) / 86_400_000);
+}
+
 export function safeDecode(value: string): string {
   try {
     return decodeURIComponent(value);

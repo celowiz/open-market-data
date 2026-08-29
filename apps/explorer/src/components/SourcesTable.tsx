@@ -4,32 +4,32 @@ export function SourcesTable({ sources }: { sources: SourceResponse[] }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table className="min-w-full text-left text-sm">
-        <caption className="sr-only">Public data sources</caption>
+        <caption className="sr-only">Fontes de dados públicas</caption>
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">
-              Name
+              Nome
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Display name
+              Nome de exibição
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Official
+              Oficial
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Redistribution
+              Redistribuição
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Ingestion
+              Ingestão
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Public API
+              API pública
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Public dataset
+              Conjunto público
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              License
+              Licença
             </th>
           </tr>
         </thead>
@@ -38,11 +38,11 @@ export function SourcesTable({ sources }: { sources: SourceResponse[] }) {
             <tr key={source.name} className="border-t border-slate-100">
               <td className="px-3 py-2 font-mono">{source.name}</td>
               <td className="px-3 py-2">{source.display_name}</td>
-              <td className="px-3 py-2">{source.official ? "yes" : "no"}</td>
+              <td className="px-3 py-2">{source.official ? "sim" : "não"}</td>
               <td className="px-3 py-2 font-mono text-xs">{source.redistribution_policy}</td>
-              <td className="px-3 py-2">{source.ingestion_enabled ? "yes" : "no"}</td>
-              <td className="px-3 py-2">{source.public_api_enabled ? "yes" : "no"}</td>
-              <td className="px-3 py-2">{source.public_dataset_enabled ? "yes" : "no"}</td>
+              <td className="px-3 py-2">{source.ingestion_enabled ? "sim" : "não"}</td>
+              <td className="px-3 py-2">{source.public_api_enabled ? "sim" : "não"}</td>
+              <td className="px-3 py-2">{source.public_dataset_enabled ? "sim" : "não"}</td>
               <td className="px-3 py-2">{source.data_license ?? "—"}</td>
             </tr>
           ))}

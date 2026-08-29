@@ -33,64 +33,64 @@ export function ProvenanceStrip({
 
   const officialLabel =
     officialFlags.length === 0
-      ? "n/a"
+      ? "n/d"
       : officialFlags.length === 1
         ? officialFlags[0]
-          ? "yes"
-          : "no"
-        : "mixed";
+          ? "sim"
+          : "não"
+        : "misto";
 
   const revisionLabel =
     revisions.length === 0
-      ? "n/a"
+      ? "n/d"
       : `${Math.min(...revisions)}${revisions.length > 1 ? `–${Math.max(...revisions)}` : ""}`;
 
   return (
     <section
-      aria-label="Provenance"
+      aria-label="Proveniência"
       className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
     >
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Provenance
+        Proveniência
       </h2>
       <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <dt className="text-xs text-slate-500">Source</dt>
-          <dd>{sources.join(", ") || "n/a"}</dd>
+          <dt className="text-xs text-slate-500">Fonte</dt>
+          <dd>{sources.join(", ") || "n/d"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Price type</dt>
-          <dd className="font-mono">{priceTypes.join(", ") || "n/a"}</dd>
+          <dt className="text-xs text-slate-500">Tipo de preço</dt>
+          <dd className="font-mono">{priceTypes.join(", ") || "n/d"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Official</dt>
+          <dt className="text-xs text-slate-500">Oficial</dt>
           <dd>{officialLabel}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Revision</dt>
+          <dt className="text-xs text-slate-500">Revisão</dt>
           <dd>{revisionLabel}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Unit / currency</dt>
+          <dt className="text-xs text-slate-500">Unidade / moeda</dt>
           <dd>
-            {[...units, ...currencies].join(" · ") || "n/a"}
+            {[...units, ...currencies].join(" · ") || "n/d"}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Retrieved at</dt>
-          <dd className="break-all font-mono text-xs">{retrieved ?? "n/a"}</dd>
+          <dt className="text-xs text-slate-500">Recuperado em</dt>
+          <dd className="break-all font-mono text-xs">{retrieved ?? "n/d"}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-xs text-slate-500">Raw artifact SHA-256</dt>
+          <dt className="text-xs text-slate-500">SHA-256 do artefato bruto</dt>
           <dd className="break-all font-mono text-xs" title={sha ?? undefined}>
-            {sha ?? "n/a"}
+            {sha ?? "n/d"}
           </dd>
         </div>
       </dl>
       <p className="mt-3 text-xs text-slate-500">
-        Values are shown exactly as returned by the public API. Empty or 404 responses are not
-        filled with placeholder prices. Chart axes parse decimal strings with Number() for plotting
-        only.
+        Os valores são exibidos exatamente como a API pública os devolve. Respostas vazias ou 404
+        não são preenchidas com preços inventados. Os eixos do gráfico usam Number() só para
+        plotagem.
       </p>
       {extra}
     </section>

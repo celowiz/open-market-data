@@ -4,35 +4,35 @@ export function QuotesTable({ quotes }: { quotes: QuoteResponse[] }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table className="min-w-full text-left text-sm">
-        <caption className="sr-only">Quote history</caption>
+        <caption className="sr-only">Histórico de cotações</caption>
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">
-              Date
+              Data
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Price
+              Preço
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Currency
+              Moeda
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Price type
+              Tipo de preço
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Source
+              Fonte
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Official
+              Oficial
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Revision
+              Revisão
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Unit
+              Unidade
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Artifact SHA-256
+              SHA-256 do artefato
             </th>
           </tr>
         </thead>
@@ -44,7 +44,7 @@ export function QuotesTable({ quotes }: { quotes: QuoteResponse[] }) {
               <td className="px-3 py-2">{quote.currency ?? "—"}</td>
               <td className="px-3 py-2 font-mono">{quote.price_type}</td>
               <td className="px-3 py-2">{quote.source}</td>
-              <td className="px-3 py-2">{quote.official ? "yes" : "no"}</td>
+              <td className="px-3 py-2">{quote.official ? "sim" : "não"}</td>
               <td className="px-3 py-2">{quote.revision}</td>
               <td className="px-3 py-2">{quote.unit ?? "—"}</td>
               <td className="max-w-[12rem] truncate px-3 py-2 font-mono text-xs" title={quote.raw_artifact_sha256 ?? undefined}>

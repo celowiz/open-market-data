@@ -1,25 +1,58 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
+import { useApiStatus } from "@/components/ApiStatusProvider";
+import { CoverageChart } from "@/components/CoverageChart";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { EmptyState, LoadingState } from "@/components/Status";
-import { fetchCoverage } from "@/lib/api";
+import { COVERAGE_PAGE_SIZE, fetchCoverage } from "@/lib/api";
+import { offlineFormHint } from "@/lib/copy";
 import { todayIso } from "@/lib/dates";
-import { useClientFetch } from "@/lib/use-client-fetch";
+import { useLocalPageOrigin } from "@/lib/use-local-origin";
+import { hrefForIdentifier } from "@/lib/links";
+import { useHistoryPages } from "@/lib/use-history-pages";
 
 export default function CoveragePage() {
+  const api = useApiStatus();
+  const localOrigin = useLocalPageOrigin();
+  const apiReady = api.status === "ok";
   const [dateInput, setDateInput] = useState(todayIso());
-  const [appliedDate, setAppliedDate] = useState(todayIso());
-  const state = useClientFetch(`coverage:${appliedDate}`, () => fetchCoverage(appliedDate));
+  const [universe, setUniverse] = useState<"example" | "operator">("example");
+  const [applied, setApplied] = useState<{ date: string; universe: "example" | "operator" }>({
+    date: todayIso(),
+    universe: "example",
+  });
+
+  const history = useHistoryPages({
+    key: JSON.stringify(applied),
+    enabled: apiReady,
+    fetchPage: (cursor, signal) =>
+      fetchCoverage(
+        {
+          date: applied.date,
+          universe: applied.universe,
+          limit: COVERAGE_PAGE_SIZE,
+          cursor: cursor ? Number(cursor) : 0,
+        },
+        signal,
+      ),
+    itemsOf: (page) => page.results,
+    cursorOf: (page) => (page.next_cursor === null || page.next_cursor === undefined ? null : String(page.next_cursor)),
+  });
+
+  const data = history.firstPage;
+  const rows = history.items;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
       <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Coverage</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Cobertura</h1>
         <p className="mt-1 text-sm text-slate-600">
-          <code className="font-mono text-xs">GET /v1/coverage?date=</code> for the example
-          universe. Missing prices stay blank.
+          <code className="font-mono text-xs">GET /v1/coverage?date=</code> para o universo
+          escolhido. Preços ausentes permanecem em branco.
         </p>
       </header>
 
@@ -27,12 +60,14 @@ export default function CoveragePage() {
         className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-end"
         onSubmit={(event) => {
           event.preventDefault();
-          setAppliedDate(dateInput);
+          if (apiReady) {
+            setApplied({ date: dateInput, universe });
+          }
         }}
       >
         <div className="flex flex-col gap-1">
           <label htmlFor="coverage-date" className="text-sm font-medium text-slate-800">
-            Reference date
+            Data de referência
           </label>
           <input
             id="coverage-date"
@@ -40,98 +75,132 @@ export default function CoveragePage() {
             type="date"
             required
             value={dateInput}
+            disabled={!apiReady}
             onChange={(event) => setDateInput(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
           />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="coverage-universe" className="text-sm font-medium text-slate-800">
+            Universo
+          </label>
+          <select
+            id="coverage-universe"
+            name="universe"
+            value={universe}
+            disabled={!apiReady}
+            onChange={(event) =>
+              setUniverse(event.target.value === "operator" ? "operator" : "example")
+            }
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+          >
+            <option value="example">example</option>
+            <option value="operator">operator</option>
+          </select>
         </div>
         <button
           type="submit"
-          className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
+          disabled={!apiReady}
+          className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          Load coverage
+          Carregar cobertura
         </button>
       </form>
+      {!apiReady && api.status === "unreachable" ? (
+        <p className="text-sm text-slate-600">{offlineFormHint(localOrigin)}</p>
+      ) : null}
 
-      {state.status === "loading" ? <LoadingState label="Loading coverage…" /> : null}
-      {state.status === "error" ? <ErrorBanner error={state.error} /> : null}
+      {api.status !== "unreachable" && history.status === "loading" ? (
+        <LoadingState label="Carregando cobertura…" />
+      ) : null}
+      {history.status === "error" ? <ErrorBanner error={history.error} /> : null}
 
-      {state.status === "success" ? (
+      {data && (history.status === "success" || rows.length > 0) ? (
         <>
           <section className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="text-xs text-slate-500">Date</p>
-              <p className="font-mono">{state.data.date}</p>
+              <p className="text-xs text-slate-500">Data</p>
+              <p className="font-mono">{data.date}</p>
             </div>
             <div>
-              <p className="text-xs text-slate-500">Universe</p>
+              <p className="text-xs text-slate-500">Universo</p>
               <p>
-                {state.data.universe} ({state.data.mode})
+                {data.universe} ({data.mode})
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-500">Priced</p>
+              <p className="text-xs text-slate-500">Com preço</p>
               <p>
-                {state.data.priced} / {state.data.universe_size} ({state.data.priced_pct})
+                {data.priced} / {data.universe_size} ({data.priced_pct})
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-500">Missing reasons</p>
+              <p className="text-xs text-slate-500">Motivos de ausência</p>
               <p>
-                {Object.keys(state.data.missing_reason_counts).length === 0
+                {Object.keys(data.missing_reason_counts).length === 0
                   ? "—"
-                  : Object.entries(state.data.missing_reason_counts)
+                  : Object.entries(data.missing_reason_counts)
                       .map(([reason, count]) => `${reason}: ${count}`)
                       .join(", ")}
               </p>
             </div>
           </section>
 
-          {state.data.results.length === 0 ? (
+          <CoverageChart data={data} rows={rows} />
+
+          {rows.length === 0 ? (
             <EmptyState>
-              <p>Coverage returned no rows for this date.</p>
+              <p>A cobertura não devolveu linhas para esta data.</p>
             </EmptyState>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
               <table className="min-w-full text-left text-sm">
-                <caption className="sr-only">Coverage results</caption>
+                <caption className="sr-only">Resultados de cobertura</caption>
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Instrument
+                      Instrumento
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Asset class
+                      Classe
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Provider
+                      Provedor
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Reference date
+                      Data de referência
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Price
+                      Preço
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Price type
+                      Tipo de preço
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
                       Status
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Staleness
+                      Defasagem
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Missing reason
+                      Motivo da ausência
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {state.data.results.map((row, index) => (
+                  {rows.map((row, index) => (
                     <tr
                       key={`${row.instrument}-${row.reference_date}-${index}`}
                       className="border-t border-slate-100"
                     >
-                      <td className="px-3 py-2 font-mono">{row.instrument}</td>
+                      <td className="px-3 py-2 font-mono">
+                        <Link
+                          href={hrefForIdentifier(row.instrument, row.asset_class)}
+                          className="text-teal-800 hover:underline"
+                        >
+                          {row.instrument}
+                        </Link>
+                      </td>
                       <td className="px-3 py-2">{row.asset_class}</td>
                       <td className="px-3 py-2">{row.provider ?? "—"}</td>
                       <td className="px-3 py-2 font-mono">{row.reference_date}</td>
@@ -148,11 +217,11 @@ export default function CoveragePage() {
               </table>
             </div>
           )}
-          {state.data.next_cursor !== null && state.data.next_cursor !== undefined ? (
-            <p className="text-sm text-slate-600">
-              Additional rows exist (cursor {state.data.next_cursor}).
-            </p>
-          ) : null}
+          <LoadMoreButton
+            hasMore={history.hasMore}
+            loading={history.loadingMore}
+            onClick={history.loadMore}
+          />
         </>
       ) : null}
     </div>

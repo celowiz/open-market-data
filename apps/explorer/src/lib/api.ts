@@ -1,7 +1,10 @@
+import { copy } from "@/lib/copy";
 import type {
+  CoverageQuery,
   CoverageResponse,
   DatasetListing,
   FundQuotesResponse,
+  HealthResponse,
   HistoryQuery,
   InstrumentsResponse,
   QuoteResponse,
@@ -23,12 +26,36 @@ export class ApiError extends Error {
   }
 }
 
+export const HISTORY_PAGE_SIZE = 500;
+export const COVERAGE_PAGE_SIZE = 100;
+
 export function getApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw) {
     return raw.replace(/\/$/, "");
   }
   return "http://127.0.0.1:8000";
+}
+
+export function isLoopbackApiHost(baseUrl = getApiBaseUrl()): boolean {
+  try {
+    const host = new URL(baseUrl).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+export function isLocalPageOrigin(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
+
+export function shouldRevealApiBase(): boolean {
+  return isLocalPageOrigin();
 }
 
 function encodePathSegment(value: string): string {
@@ -80,6 +107,16 @@ function detailMessage(body: unknown): string | null {
   }
 }
 
+export function isNetworkFailure(error: unknown): boolean {
+  if (error instanceof TypeError) {
+    return true;
+  }
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return /failed to fetch|networkerror|load failed|fetch failed/i.test(error.message);
+}
+
 export function formatApiError(error: unknown): string {
   if (error instanceof ApiError) {
     const detail = detailMessage(error.body);
@@ -91,13 +128,24 @@ export function formatApiError(error: unknown): string {
     }
     return error.message;
   }
-  if (error instanceof TypeError) {
-    return `Cannot reach ${getApiBaseUrl()}. Start FastAPI (uvicorn on port 8000) and set CORS_ALLOWED_ORIGINS to include this Explorer origin (http://localhost:3000).`;
+  if (isNetworkFailure(error)) {
+    if (isLocalPageOrigin()) {
+      return copy.api.localUnreachable(getApiBaseUrl());
+    }
+    return copy.api.publicUnavailable;
   }
   if (error instanceof Error) {
     return error.message;
   }
-  return "Unknown error";
+  return copy.api.unknown;
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 404;
+  }
+  const message = formatApiError(error).toLowerCase();
+  return message.includes("404") || message.includes("not found");
 }
 
 export async function apiFetch<T>(
@@ -148,17 +196,19 @@ export async function apiFetch<T>(
   return body as T;
 }
 
-const HISTORY_LIMIT = 5000;
-
 function historyQuery(params: HistoryQuery): Record<string, string | number | undefined | null> {
   return {
     start: params.start,
     end: params.end,
-    limit: params.limit ?? HISTORY_LIMIT,
+    limit: params.limit ?? HISTORY_PAGE_SIZE,
     cursor: params.cursor,
     price_type: params.price_type,
     source: params.source,
   };
+}
+
+export function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
+  return apiFetch<HealthResponse>("/v1/health", { signal });
 }
 
 export function searchInstruments(
@@ -172,23 +222,37 @@ export function searchInstruments(
   });
 }
 
+export async function lookupInstrumentName(
+  q: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const data = await searchInstruments(q, 5, signal);
+  const needle = q.trim().toLowerCase();
+  const match =
+    data.instruments.find((item) =>
+      item.identifiers.some((id) => id.toLowerCase() === needle),
+    ) ?? data.instruments.find((item) => item.name.toLowerCase() === needle);
+  return match?.name ?? null;
+}
+
 export function fetchQuoteHistory(
   identifier: string,
   params: HistoryQuery,
   signal?: AbortSignal,
 ): Promise<QuotesResponse> {
-  return apiFetch<QuotesResponse>(
-    `/v1/quotes/${encodePathSegment(identifier)}/history`,
-    { query: historyQuery(params), signal },
-  );
+  return apiFetch<QuotesResponse>(`/v1/quotes/${encodePathSegment(identifier)}/history`, {
+    query: historyQuery(params),
+    signal,
+  });
 }
 
 export function fetchQuoteLatest(
   identifier: string,
-  signal?: AbortSignal,
+  params?: { price_type?: string; source?: string; signal?: AbortSignal },
 ): Promise<QuoteResponse> {
   return apiFetch<QuoteResponse>(`/v1/quotes/${encodePathSegment(identifier)}/latest`, {
-    signal,
+    query: { price_type: params?.price_type, source: params?.source },
+    signal: params?.signal,
   });
 }
 
@@ -197,20 +261,19 @@ export function fetchSeriesObservations(
   params: HistoryQuery,
   signal?: AbortSignal,
 ): Promise<SeriesHistoryResponse> {
-  return apiFetch<SeriesHistoryResponse>(
-    `/v1/series/${encodePathSegment(code)}/observations`,
-    { query: historyQuery(params), signal },
-  );
+  return apiFetch<SeriesHistoryResponse>(`/v1/series/${encodePathSegment(code)}/observations`, {
+    query: historyQuery(params),
+    signal,
+  });
 }
 
 export function fetchSeriesLatest(
   code: string,
   signal?: AbortSignal,
 ): Promise<SeriesObservationResponse> {
-  return apiFetch<SeriesObservationResponse>(
-    `/v1/series/${encodePathSegment(code)}/latest`,
-    { signal },
-  );
+  return apiFetch<SeriesObservationResponse>(`/v1/series/${encodePathSegment(code)}/latest`, {
+    signal,
+  });
 }
 
 export function fetchFundQuotes(
@@ -218,20 +281,19 @@ export function fetchFundQuotes(
   params: HistoryQuery,
   signal?: AbortSignal,
 ): Promise<FundQuotesResponse> {
-  return apiFetch<FundQuotesResponse>(
-    `/v1/funds/${encodePathSegment(identifier)}/quotes`,
-    { query: historyQuery(params), signal },
-  );
+  return apiFetch<FundQuotesResponse>(`/v1/funds/${encodePathSegment(identifier)}/quotes`, {
+    query: historyQuery(params),
+    signal,
+  });
 }
 
 export function fetchFundLatest(
   identifier: string,
   signal?: AbortSignal,
 ): Promise<QuoteResponse> {
-  return apiFetch<QuoteResponse>(
-    `/v1/funds/${encodePathSegment(identifier)}/quotes/latest`,
-    { signal },
-  );
+  return apiFetch<QuoteResponse>(`/v1/funds/${encodePathSegment(identifier)}/quotes/latest`, {
+    signal,
+  });
 }
 
 export function fetchSources(signal?: AbortSignal): Promise<SourceResponse[]> {
@@ -242,12 +304,18 @@ export function fetchDatasets(signal?: AbortSignal): Promise<DatasetListing[]> {
   return apiFetch<DatasetListing[]>("/v1/datasets", { signal });
 }
 
-export function fetchCoverage(
-  date: string,
-  signal?: AbortSignal,
-): Promise<CoverageResponse> {
+export function fetchDataset(name: string, signal?: AbortSignal): Promise<DatasetListing> {
+  return apiFetch<DatasetListing>(`/v1/datasets/${encodePathSegment(name)}`, { signal });
+}
+
+export function fetchCoverage(params: CoverageQuery, signal?: AbortSignal): Promise<CoverageResponse> {
   return apiFetch<CoverageResponse>("/v1/coverage", {
-    query: { date },
+    query: {
+      date: params.date,
+      universe: params.universe,
+      limit: params.limit ?? COVERAGE_PAGE_SIZE,
+      cursor: params.cursor,
+    },
     signal,
   });
 }

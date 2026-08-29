@@ -111,3 +111,14 @@ export type HistoryQuery = {
   price_type?: string;
   source?: string;
 };
+
+export type HealthResponse = {
+  status: string;
+};
+
+export type CoverageQuery = {
+  date: string;
+  universe?: "example" | "operator";
+  limit?: number;
+  cursor?: number;
+};
