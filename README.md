@@ -44,6 +44,31 @@ by default; optional S3-compatible via `uv sync --extra s3`), normalizes into
 PostgreSQL, and serves `/v1` from the database only. The Explorer is a
 read-only browser app against that API.
 
+Sources persist into Neon Postgres; FastAPI on Railway reads Neon and serves
+`/v1`; the Next.js Explorer on Vercel is a read-only client of that API (never
+`DATABASE_URL`).
+
+```mermaid
+flowchart LR
+  B3[B3]
+  CVM[CVM]
+  Tesouro[Tesouro Direto]
+  BCB[BCB]
+  Yahoo[Yahoo Finance]
+
+  Neon[(Neon Postgres)]
+  API["FastAPI\nRailway"]
+  Explorer["Explorer\nVercel"]
+
+  B3 --> Neon
+  CVM --> Neon
+  Tesouro --> Neon
+  BCB --> Neon
+  Yahoo --> Neon
+  Neon --> API
+  API --> Explorer
+```
+
 See:
 
 - [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) — product specification
