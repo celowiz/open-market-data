@@ -12,6 +12,7 @@ import {
   isNotFoundError,
 } from "@/lib/api";
 import { copy } from "@/lib/copy";
+import { formatDisplayValue } from "@/lib/format-display-value";
 import {
   BRAZIL_HOME_EXAMPLES,
   HOME_EXAMPLES,
@@ -26,6 +27,9 @@ type LatestValue = {
   date: string;
   value: string;
   extra: string;
+  priceType?: string;
+  unit?: string | null;
+  kind: "quote" | "series";
 };
 
 async function loadLatest(example: HomeExample): Promise<LatestValue> {
@@ -35,6 +39,8 @@ async function loadLatest(example: HomeExample): Promise<LatestValue> {
       date: row.date,
       value: row.value,
       extra: `${row.unit} · ${row.source}`,
+      unit: row.unit,
+      kind: "series",
     };
   }
   if (example.kind === "fund") {
@@ -43,6 +49,9 @@ async function loadLatest(example: HomeExample): Promise<LatestValue> {
       date: row.date,
       value: row.price,
       extra: `${row.price_type} · ${row.source}`,
+      priceType: row.price_type,
+      unit: row.unit,
+      kind: "quote",
     };
   }
   const row = await fetchQuoteLatest(example.identifier);
@@ -50,6 +59,9 @@ async function loadLatest(example: HomeExample): Promise<LatestValue> {
     date: row.date,
     value: row.price,
     extra: `${row.price_type} · ${row.source}`,
+    priceType: row.price_type,
+    unit: row.unit,
+    kind: "quote",
   };
 }
 
@@ -77,7 +89,11 @@ function ExampleCard({ example }: { example: HomeExample }) {
         {state.status === "success" ? (
           <p>
             <span className="block font-mono text-lg tabular-nums text-slate-900">
-              {state.data.value}
+              {formatDisplayValue(state.data.value, {
+                priceType: state.data.priceType,
+                unit: state.data.unit,
+                kind: state.data.kind,
+              })}
             </span>
             <span className="text-xs text-slate-500">
               {state.data.date} · {state.data.extra}

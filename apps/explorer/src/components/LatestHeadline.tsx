@@ -10,12 +10,16 @@ import {
   lookupInstrumentName,
 } from "@/lib/api";
 import { copy } from "@/lib/copy";
+import { formatDisplayValue } from "@/lib/format-display-value";
 import { useClientFetch } from "@/lib/use-client-fetch";
 
 type HeadlineValue = {
   date: string;
   value: string;
   extra: string;
+  priceType?: string;
+  unit?: string | null;
+  kind: "quote" | "series";
 };
 
 export function LatestHeadline({
@@ -34,7 +38,13 @@ export function LatestHeadline({
     async () => {
       if (kind === "series") {
         const row = await fetchSeriesLatest(identifier);
-        return { date: row.date, value: row.value, extra: `${row.unit} · ${row.source}` };
+        return {
+          date: row.date,
+          value: row.value,
+          extra: `${row.unit} · ${row.source}`,
+          unit: row.unit,
+          kind: "series",
+        };
       }
       if (kind === "fund") {
         const row = await fetchFundLatest(identifier);
@@ -42,6 +52,9 @@ export function LatestHeadline({
           date: row.date,
           value: row.price,
           extra: `${row.price_type} · ${row.source}`,
+          priceType: row.price_type,
+          unit: row.unit,
+          kind: "quote",
         };
       }
       const row = await fetchQuoteLatest(identifier, { price_type: priceType || undefined });
@@ -49,6 +62,9 @@ export function LatestHeadline({
         date: row.date,
         value: row.price,
         extra: `${row.price_type} · ${row.source}`,
+        priceType: row.price_type,
+        unit: row.unit,
+        kind: "quote",
       };
     },
     { enabled },
@@ -77,7 +93,13 @@ export function LatestHeadline({
       {name.status === "success" && name.data && name.data !== identifier ? (
         <p className="text-sm text-slate-700">{name.data}</p>
       ) : null}
-      <p className="font-mono text-2xl tabular-nums text-slate-900">{latest.data.value}</p>
+      <p className="font-mono text-2xl tabular-nums text-slate-900">
+        {formatDisplayValue(latest.data.value, {
+          priceType: latest.data.priceType,
+          unit: latest.data.unit,
+          kind: latest.data.kind,
+        })}
+      </p>
       <p className="text-xs text-slate-500">
         {latest.data.date} · {latest.data.extra}
       </p>

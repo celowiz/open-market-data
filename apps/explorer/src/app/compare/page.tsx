@@ -149,6 +149,8 @@ function ComparePageInner() {
     current.push({
       key: pane.code,
       label: pane.code,
+      kind: "series",
+      unit,
       rows: pane.history.items.map((row) => ({ date: row.date, raw: row.value })),
     });
     groups.set(unit, current);

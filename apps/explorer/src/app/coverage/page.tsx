@@ -11,6 +11,7 @@ import { EmptyState, LoadingState } from "@/components/Status";
 import { COVERAGE_PAGE_SIZE, fetchCoverage } from "@/lib/api";
 import { offlineFormHint } from "@/lib/copy";
 import { todayIso } from "@/lib/dates";
+import { formatDisplayValue } from "@/lib/format-display-value";
 import { useLocalPageOrigin } from "@/lib/use-local-origin";
 import { hrefForIdentifier } from "@/lib/links";
 import { useHistoryPages } from "@/lib/use-history-pages";
@@ -205,7 +206,9 @@ export default function CoveragePage() {
                       <td className="px-3 py-2">{row.provider ?? "—"}</td>
                       <td className="px-3 py-2 font-mono">{row.reference_date}</td>
                       <td className="px-3 py-2 font-mono tabular-nums">
-                        {row.price === null || row.price === undefined ? "—" : row.price}
+                        {row.price === null || row.price === undefined
+                          ? "—"
+                          : formatDisplayValue(row.price, { priceType: row.price_type })}
                       </td>
                       <td className="px-3 py-2 font-mono">{row.price_type ?? "—"}</td>
                       <td className="px-3 py-2">{row.status}</td>

@@ -212,6 +212,8 @@ function QuoteHistoryPage() {
             <>
               <PriceChart
                 label={`${applied.price_type || "Preço"} (${primaryUnit})`}
+                priceType={applied.price_type || quotes[0]?.price_type}
+                unit={quotes[0]?.unit}
                 rows={quotes.map((quote) => ({ date: quote.date, raw: quote.price }))}
               />
               {tesouro && companionType && companion.items.length > 0 ? (
@@ -221,6 +223,8 @@ function QuoteHistoryPage() {
                   </h2>
                   <PriceChart
                     label={`${companionType} (${companionUnit})`}
+                    priceType={companionType}
+                    unit={companion.items[0]?.unit}
                     rows={companion.items.map((quote) => ({ date: quote.date, raw: quote.price }))}
                   />
                 </section>

@@ -11,86 +11,41 @@ import {
   YAxis,
 } from "recharts";
 
-import { addUtcDays, utcDayDiff } from "@/lib/dates";
+import {
+  buildChartData,
+  isGapMarkerDate,
+  type ChartRow,
+  type ChartSeries,
+} from "@/lib/chart-data";
+import { formatDisplayValue } from "@/lib/format-display-value";
 
-export type ChartRow = {
-  date: string;
-  raw: string;
-};
-
-export type ChartSeries = {
-  key: string;
-  label: string;
-  color?: string;
-  rows: ChartRow[];
-};
+export type { ChartRow, ChartSeries };
 
 const DEFAULT_COLORS = ["#0f766e", "#1e293b", "#b45309", "#3730a3", "#9f1239"];
-const OUTAGE_GAP_DAYS = 4;
-
-function withGaps(rows: ChartRow[]): Array<{ date: string; raw: string | null }> {
-  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
-  const out: Array<{ date: string; raw: string | null }> = [];
-  for (let index = 0; index < sorted.length; index += 1) {
-    const current = sorted[index];
-    if (index > 0) {
-      const previous = sorted[index - 1];
-      if (utcDayDiff(previous.date, current.date) > OUTAGE_GAP_DAYS) {
-        out.push({ date: addUtcDays(previous.date, 1), raw: null });
-      }
-    }
-    out.push({ date: current.date, raw: current.raw });
-  }
-  return out;
-}
 
 export function PriceChart({
   rows,
   label = "Valor",
   series,
+  priceType,
+  unit,
+  kind,
 }: {
   rows?: ChartRow[];
   label?: string;
   series?: ChartSeries[];
+  priceType?: string | null;
+  unit?: string | null;
+  kind?: "quote" | "series";
 }) {
   const resolved = useMemo<ChartSeries[]>(() => {
     if (series && series.length > 0) {
       return series;
     }
-    return [{ key: "value", label, rows: rows ?? [] }];
-  }, [label, rows, series]);
+    return [{ key: "value", label, rows: rows ?? [], priceType, unit, kind }];
+  }, [kind, label, priceType, rows, series, unit]);
 
-  const data = useMemo(() => {
-    const dates = new Set<string>();
-    const byKey = new Map<string, Map<string, number | null>>();
-    for (const item of resolved) {
-      const map = new Map<string, number | null>();
-      for (const row of withGaps(item.rows)) {
-        dates.add(row.date);
-        if (row.raw === null) {
-          map.set(row.date, null);
-          continue;
-        }
-        const value = Number(row.raw);
-        if (Number.isFinite(value)) {
-          map.set(row.date, value);
-        }
-      }
-      byKey.set(item.key, map);
-    }
-    return [...dates]
-      .sort((a, b) => a.localeCompare(b))
-      .map((date) => {
-        const point: Record<string, string | number | null | undefined> = { date };
-        for (const item of resolved) {
-          const map = byKey.get(item.key);
-          if (map?.has(date)) {
-            point[item.key] = map.get(date);
-          }
-        }
-        return point;
-      });
-  }, [resolved]);
+  const data = useMemo(() => buildChartData(resolved), [resolved]);
 
   const hasAny = data.some((row) => resolved.some((item) => typeof row[item.key] === "number"));
   if (!hasAny) {
@@ -102,7 +57,15 @@ export function PriceChart({
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={24} />
+          <XAxis
+            dataKey="date"
+            type="category"
+            scale="point"
+            padding={{ left: 16, right: 16 }}
+            tick={{ fontSize: 11 }}
+            minTickGap={24}
+            tickFormatter={(value) => (isGapMarkerDate(String(value)) ? "—" : String(value))}
+          />
           <YAxis tick={{ fontSize: 11 }} width={72} domain={["auto", "auto"]} />
           <Tooltip
             formatter={(value, name, item) => {
@@ -110,10 +73,17 @@ export function PriceChart({
               const match =
                 resolved.find((entry) => entry.key === name) ??
                 resolved.find((entry) => entry.label === name);
-              const raw = match?.rows.find((row) => row.date === date)?.raw;
-              return [raw ?? String(value), match?.label ?? String(name)];
+              const raw = date ? match?.rows.find((row) => row.date === date)?.raw : undefined;
+              return [
+                formatDisplayValue(raw ?? String(value), {
+                  priceType: match?.priceType,
+                  unit: match?.unit,
+                  kind: match?.kind,
+                }),
+                match?.label ?? String(name),
+              ];
             }}
-            labelFormatter={(date) => String(date)}
+            labelFormatter={(date) => (isGapMarkerDate(String(date)) ? "—" : String(date))}
           />
           {resolved.map((item, index) => (
             <Line

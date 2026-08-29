@@ -121,6 +121,8 @@ function SeriesPage() {
             <>
               <PriceChart
                 label={unit || "Valor"}
+                kind="series"
+                unit={unit}
                 rows={observations.map((row) => ({ date: row.date, raw: row.value }))}
               />
               <ObservationsTable observations={observations} />
