@@ -8,6 +8,9 @@ data/
 .env.*
 !.env.example
 
+# Operator coverage universe (gitignored; example file is committed)
+config/instruments.csv
+
 # Test and linter caches
 .pytest_cache/
 .ruff_cache/

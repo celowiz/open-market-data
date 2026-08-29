@@ -27,7 +27,7 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/src /app/src
 COPY --chown=app:app alembic.ini ./
 COPY --chown=app:app migrations ./migrations
-# coverage_config_dir defaults to Path.cwd() (/app). GET /v1/coverage?universe=example
+# coverage_config_dir defaults to Path(".") (WORKDIR /app). GET /v1/coverage?universe=example
 # reads config/instruments.example.csv. Operator config/instruments.csv is gitignored.
 COPY --chown=app:app config ./config
 RUN test -f /app/config/instruments.example.csv

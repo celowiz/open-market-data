@@ -208,7 +208,7 @@ Pass configuration at runtime (`-e`, `--env-file`, or the host's env).
 The image copies repository `config/` into `/app/config` (WORKDIR `/app`).
 `coverage_config_dir` defaults to `.`, so `GET /v1/coverage?universe=example`
 resolves `config/instruments.example.csv` inside the container. The operator
-file `config/instruments.csv` is gitignored and is **not** in the image;
+file `config/instruments.csv` is gitignored and listed in `.dockerignore`;
 `universe=operator` remains 404 until that file is supplied at runtime.
 
 ```bash
