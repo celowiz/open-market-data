@@ -117,10 +117,21 @@ Re-fetch whole monthly ZIPs and upsert. Do not assume append-only history.
 
 ### Cadastral companion
 
-Legacy `cad_fi.csv` still exists. RCVM 175 structure is
-`registro_fundo_classe.zip` (fund / class / subclass). Post-175,
-`CNPJ_FUNDO_CLASSE` is class-level. Phase 2 may ingest quotes first and
-enrich cadastral data later.
+RCVM 175 file (aligned with Informe era C `CNPJ_FUNDO_CLASSE`):
+
+```text
+https://dados.cvm.gov.br/dados/FI/CAD/DADOS/registro_fundo_classe.zip
+```
+
+Inner CSVs: `registro_fundo.csv`, `registro_classe.csv`, `registro_subclasse.csv`.
+Ingest joins Informe rows to `registro_classe.csv` on digits-only
+`CNPJ_FUNDO_CLASSE` = `CNPJ_Classe`. The class used for persist filtering is
+`Classificacao` (same labels as legacy `cad_fi.csv` `CLASSE` for FIF:
+`Multimercado`, `Ações`, `Renda Fixa`). FII/FIDC have blank `Classificacao`.
+See [`providers/cvm.md`](providers/cvm.md).
+
+Legacy `cad_fi.csv` still exists (`CNPJ_FUNDO`, mostly `CANCELADA` non-adapted
+funds). Do not use it as the era C join file.
 
 ### License
 

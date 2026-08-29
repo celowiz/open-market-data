@@ -24,8 +24,9 @@ Scheduled workflows run only on the repository **default branch**. Use
 Daily scheduled ingest is the **per-provider** crons (BCB, B3, Tesouro).
 `ingest-all.yml` is `workflow_dispatch` only so it does not run on the same
 calendar as those crons (overlapping jobs duplicate work and raise source
-load). `ingest-cvm.yml` is also `workflow_dispatch` only: the scratch ingest
-universe skips CVM (Informe Diário / HIST volume vs Neon Free).
+load). `ingest-cvm.yml` is also `workflow_dispatch` only. Persist is filtered by
+`CVM_CLASSES` (scratch default `Multimercado,Ações`; see below). Do not add
+its cron back unless operators explicitly want daily CVM on Neon.
 
 ---
 
@@ -53,7 +54,7 @@ run Monday–Friday **evening BRT** must therefore list **Tuesday–Saturday UTC
 
 | Workflow | Safe local clock BRT | Cron UTC | Command |
 |---|---|---|---|
-| `ingest-cvm.yml` | none (scratch: skip CVM) | **no schedule** | `marketdata ingest cvm --date` |
+| `ingest-cvm.yml` | none (dispatch only; class-filtered persist) | **no schedule** | `marketdata ingest cvm --date` |
 | `ingest-tesouro.yml` | 10:30 weekdays | `30 13 * * 1-5` | `marketdata ingest tesouro --date` |
 | `ingest-bcb.yml` | 16:30 weekdays | `30 19 * * 1-5` | `marketdata ingest bcb --date` |
 | `ingest-b3.yml` | 21:00 weekdays | `0 0 * * 2-6` | `marketdata ingest b3 --date` (BRT trading date; see below) |
@@ -66,16 +67,25 @@ All ingest/publish workflows also have `workflow_dispatch` with optional
 `date` (`YYYY-MM-DD`). When `date` is omitted:
 
 - CVM / Tesouro / BCB / Yahoo: **today UTC** (Tesouro and BCB crons still fall
-  on the same BRT calendar day; CVM is dispatch-only).
+  on the same BRT calendar day; CVM is dispatch-only and class-filtered).
 - B3: America/Sao_Paulo trading-date helper (below).
 - ingest-all / publish: **today in America/Sao_Paulo**. Publish still runs
   after 00:00 UTC (BRT evening of the previous UTC date). ingest-all is
   dispatch-only; the Sao_Paulo default remains so a weekday evening rerun
   does not pick the next UTC calendar date.
 
-`ingest-cvm.yml` stays dispatch-only (scratch universe skips CVM). Do not add
-its cron back unless operators explicitly want daily CVM on Neon and have
-sized storage for Informe Diário / HIST.
+`ingest-cvm.yml` stays dispatch-only. Informe persist is filtered by
+`CVM_CLASSES` after joining CVM cadastro (`registro_classe.csv`) on
+`CNPJ_FUNDO_CLASSE`. Empty application setting = persist all classes.
+Scratch / Neon Free uses `CVM_CLASSES=Multimercado,Ações` (exact cad_fi
+`CLASSE` labels). FII, FIDC, Renda Fixa, and unclassified rows are skipped.
+The workflow job defaults that allowlist unless repository variable
+`CVM_CLASSES` is set. Do not add the CVM cron unless operators explicitly
+want daily CVM on Neon.
+
+`DATABASE_URL` is still an Actions **secret**. There is no connection string
+in git, workflow YAML, or these docs. Scheduled (and dispatch) jobs fail at
+"Require DATABASE_URL" until an operator sets that secret.
 
 `ingest-all.yml` stays dispatch-only. Do not add its cron while per-provider
 BCB / B3 / Tesouro schedules are enabled.
@@ -169,10 +179,12 @@ the B3 equity rows are skipped (not persisted), not errored.
 
 For a $0-scratch / Neon Free run:
 
-- Do **not** run CVM or Tesouro jobs. `CVM_PROVIDER_ENABLED` and
-  `TESOURO_PROVIDER_ENABLED` exist in Settings but are currently ignored by
-  ingest/backfill (only `yahoo_provider_enabled` is wired). Omit those
-  commands instead of expecting the flags to skip them.
+- CVM persist honors `CVM_CLASSES=Multimercado,Ações`. `ingest-cvm.yml` stays
+  dispatch-only. Do not re-enable its cron.
+- Tesouro persist honors `TESOURO_CURRENT_TITLES_ONLY` (default true).
+- `CVM_PROVIDER_ENABLED` and `TESOURO_PROVIDER_ENABLED` exist in Settings but
+  are currently ignored by ingest/backfill (only `yahoo_provider_enabled` is
+  wired).
 - Do **not** enable COTAHIST (`--cotahist`).
 - Keep `marketdata ingest b3` (186 filtered + 187 as-is). Prefer BCB if you
   still want a cheap official series.

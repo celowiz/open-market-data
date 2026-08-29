@@ -14,7 +14,7 @@ from marketdata.domain.enums import (
     QualityStatus,
     RedistributionPolicy,
 )
-from marketdata.providers.cvm import CvmDailyRecord
+from marketdata.providers.cvm import CvmCadastroClass, CvmDailyRecord
 from marketdata.storage.models import (
     IngestionRunRow,
     InstrumentIdentifierRow,
@@ -118,11 +118,42 @@ def store_raw_artifact(
     return artifact
 
 
+def _cvm_instrument_extra(
+    *,
+    record: CvmDailyRecord,
+    cadastro: CvmCadastroClass | None,
+) -> dict[str, str]:
+    extra: dict[str, str] = {}
+    if record.subclass_id:
+        extra["subclass_id"] = record.subclass_id
+    if cadastro is None:
+        return extra
+    if cadastro.classe:
+        extra["classe"] = cadastro.classe
+    if cadastro.tipo_classe:
+        extra["tipo_classe"] = cadastro.tipo_classe
+    return extra
+
+
+def _apply_cvm_cadastro(
+    instrument: InstrumentRow,
+    *,
+    record: CvmDailyRecord,
+    cadastro: CvmCadastroClass | None,
+) -> None:
+    merged = dict(instrument.extra or {})
+    merged.update(_cvm_instrument_extra(record=record, cadastro=cadastro))
+    instrument.extra = merged
+    if cadastro is not None and cadastro.denominacao_social:
+        instrument.name = cadastro.denominacao_social[:256]
+
+
 def get_or_create_fund_instrument(
     session: Session,
     *,
     source_id: UUID,
     record: CvmDailyRecord,
+    cadastro: CvmCadastroClass | None = None,
 ) -> InstrumentRow:
     source_key = f"{record.cnpj_fundo_classe}:{record.subclass_id or ''}"
     existing_id = session.scalar(
@@ -136,14 +167,20 @@ def get_or_create_fund_instrument(
         instrument = session.get(InstrumentRow, existing_id)
         if instrument is None:
             raise RuntimeError("instrument identifier points at a missing instrument")
+        _apply_cvm_cadastro(instrument, record=record, cadastro=cadastro)
         return instrument
+    name = (
+        cadastro.denominacao_social[:256]
+        if cadastro is not None and cadastro.denominacao_social
+        else f"CVM fund {record.cnpj_fundo_classe}"
+    )
     instrument = InstrumentRow(
         id=uuid4(),
         asset_class=AssetClass.FUND.value,
         instrument_type="fund_class",
-        name=f"CVM fund {record.cnpj_fundo_classe}",
+        name=name,
         currency="BRL",
-        extra={"subclass_id": record.subclass_id} if record.subclass_id else {},
+        extra=_cvm_instrument_extra(record=record, cadastro=cadastro),
     )
     session.add(instrument)
     session.flush()

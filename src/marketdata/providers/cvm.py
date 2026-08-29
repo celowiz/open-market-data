@@ -35,9 +35,20 @@ class CvmDailyRecord:
     raw: dict[str, str]
 
 
+@dataclass(frozen=True)
+class CvmCadastroClass:
+    cnpj_classe: str
+    classe: str | None
+    tipo_classe: str | None
+    denominacao_social: str | None
+    situacao: str | None
+
+
 ERA_A = "A"
 ERA_B = "B"
 ERA_C = "C"
+_PREFERRED_SITUACAO = "Em Funcionamento Normal"
+REGISTRO_CLASSE_CSV = "registro_classe.csv"
 
 
 def detect_schema_era(header: list[str]) -> str:
@@ -175,10 +186,79 @@ def _parse_int(value: str) -> int | None:
 
 CVM_MONTHLY_BASE = "https://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS"
 CVM_HIST_BASE = "https://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS/HIST"
+CVM_CADASTRO_URL = "https://dados.cvm.gov.br/dados/FI/CAD/DADOS/registro_fundo_classe.zip"
+
+
+def cadastro_url() -> str:
+    return CVM_CADASTRO_URL
 
 
 def month_url(year: int, month: int) -> str:
     return f"{CVM_MONTHLY_BASE}/inf_diario_fi_{year:04d}{month:02d}.zip"
+
+
+def parse_cvm_class_allowlist(raw: str | None) -> frozenset[str] | None:
+    """Return CLASSE labels to persist, or None when the filter is off."""
+    if raw is None:
+        return None
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    return frozenset(parts) if parts else None
+
+
+def should_persist_cvm_class(classe: str | None, allowlist: frozenset[str] | None) -> bool:
+    if allowlist is None:
+        return True
+    if not classe:
+        return False
+    return classe in allowlist
+
+
+def _blank(value: str | None) -> str | None:
+    cleaned = (value or "").strip()
+    return cleaned or None
+
+
+def _prefer_cadastro(existing: CvmCadastroClass, incoming: CvmCadastroClass) -> CvmCadastroClass:
+    if incoming.situacao == _PREFERRED_SITUACAO and existing.situacao != _PREFERRED_SITUACAO:
+        return incoming
+    if existing.situacao == _PREFERRED_SITUACAO and incoming.situacao != _PREFERRED_SITUACAO:
+        return existing
+    return incoming
+
+
+def parse_registro_classe(csv_text: str) -> dict[str, CvmCadastroClass]:
+    reader = csv.DictReader(io.StringIO(csv_text), delimiter=";")
+    if reader.fieldnames is None:
+        raise CvmParseError("cadastro CSV is missing a header row")
+    columns = {column.strip() for column in reader.fieldnames if column}
+    if "CNPJ_Classe" not in columns or "Classificacao" not in columns:
+        raise CvmParseError(f"unrecognized CVM registro_classe header: {reader.fieldnames}")
+    by_cnpj: dict[str, CvmCadastroClass] = {}
+    for row in reader:
+        normalized = {key.strip(): (value or "").strip() for key, value in row.items() if key}
+        cnpj = digits_only(normalized.get("CNPJ_Classe", ""))
+        if len(cnpj) != 14:
+            continue
+        record = CvmCadastroClass(
+            cnpj_classe=cnpj,
+            classe=_blank(normalized.get("Classificacao")),
+            tipo_classe=_blank(normalized.get("Tipo_Classe")),
+            denominacao_social=_blank(normalized.get("Denominacao_Social")),
+            situacao=_blank(normalized.get("Situacao")),
+        )
+        previous = by_cnpj.get(cnpj)
+        by_cnpj[cnpj] = record if previous is None else _prefer_cadastro(previous, record)
+    return by_cnpj
+
+
+def parse_cadastro_zip(payload: bytes) -> dict[str, CvmCadastroClass]:
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        names = _zip_csv_names(archive)
+        matching = [name for name in names if _csv_basename(name).lower() == REGISTRO_CLASSE_CSV]
+        if not matching:
+            raise CvmParseError("cadastro ZIP does not contain registro_classe.csv")
+        with archive.open(matching[0]) as handle:
+            return parse_registro_classe(handle.read().decode("latin-1"))
 
 
 def hist_year_url(year: int) -> str:
@@ -247,6 +327,9 @@ class CvmProvider:
     def hist_year_url(self, year: int) -> str:
         return hist_year_url(year)
 
+    def cadastro_url(self) -> str:
+        return cadastro_url()
+
     def fetch_month(
         self, year: int, month: int, *, client: httpx.Client | None = None
     ) -> httpx.Response:
@@ -254,3 +337,6 @@ class CvmProvider:
 
     def fetch_hist_year(self, year: int, *, client: httpx.Client | None = None) -> httpx.Response:
         return _cvm_http_get(self.hist_year_url(year), client=client)
+
+    def fetch_cadastro(self, *, client: httpx.Client | None = None) -> httpx.Response:
+        return _cvm_http_get(self.cadastro_url(), client=client)

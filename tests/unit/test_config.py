@@ -12,4 +12,5 @@ def test_settings_defaults_are_local_first() -> None:
     assert settings.b3_equity_universe_path == ""
     assert settings.public_dataset_publication_enabled is False
     assert settings.tesouro_current_titles_only is True
+    assert settings.cvm_classes == ""
     assert not settings.object_storage_access_key

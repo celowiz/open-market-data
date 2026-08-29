@@ -30,11 +30,22 @@ class _FakeCvm(CvmProvider):
     def fetch_month(self, year: int, month: int, *, client=None) -> _FakeResponse:
         return _FakeResponse(self._payload, self.month_url(year, month))
 
+    def fetch_cadastro(self, *, client=None) -> _FakeResponse:
+        return _FakeResponse(_empty_cadastro_zip(), self.cadastro_url())
+
 
 def _zip_from_csv(path: Path) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr(path.name, path.read_bytes())
+    return buffer.getvalue()
+
+
+def _empty_cadastro_zip() -> bytes:
+    header = "CNPJ_Classe;Classificacao;Tipo_Classe;Denominacao_Social;Situacao\n"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("registro_classe.csv", header.encode("latin-1"))
     return buffer.getvalue()
 
 
