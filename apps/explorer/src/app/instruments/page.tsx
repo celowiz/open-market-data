@@ -97,6 +97,11 @@ function InstrumentsCatalogPage() {
   const assetClass = searchParams.get("asset_class") ?? "";
   const qParam = searchParams.get("q") ?? "";
   const [qInput, setQInput] = useState(qParam);
+  const [prevQParam, setPrevQParam] = useState(qParam);
+  if (qParam !== prevQParam) {
+    setPrevQParam(qParam);
+    setQInput(qParam);
+  }
 
   useEffect(() => {
     const trimmed = qInput.trim();

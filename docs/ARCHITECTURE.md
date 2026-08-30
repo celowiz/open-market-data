@@ -269,8 +269,8 @@ backend. See [`DATASETS.md`](DATASETS.md).
 - Instrument catalog/search: `GET /v1/instruments` lists public-API-visible
   instruments (those with quotes from `public_api_enabled` sources) when `q`
   is missing or empty. With `q`, search by name or identifier is unchanged.
-  Pagination uses `limit` (default 20, max 100) and opaque `cursor`
-  (`instrument_id`); `next_cursor` is present when more rows remain. Optional
+  Pagination uses `limit` (default 20, max 100) and an opaque `cursor`;
+  `next_cursor` is present when more rows remain. Optional
   `source` and `asset_class` filters use existing columns (no extra table).
 - No arbitrary SQL endpoint. Yahoo remains 404 on public quotes.
 
