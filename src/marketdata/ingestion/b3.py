@@ -1,5 +1,6 @@
 import time
 from datetime import date, timedelta
+from logging import getLogger
 from uuid import UUID
 
 import httpx
@@ -21,6 +22,7 @@ from marketdata.ingestion.checkpoint import (
 )
 from marketdata.ingestion.universe import (
     b3_equity_allowlist,
+    live_otc_credit_enabled,
     should_persist_b3_equity_last,
 )
 from marketdata.providers.b3 import (
@@ -57,7 +59,6 @@ from marketdata.storage.repositories import (
     get_or_create_source,
     load_quote_keys,
     record_quality_event,
-    resolve_instrument_id,
     start_ingestion_run,
     store_raw_artifact,
     upsert_quote,
@@ -67,6 +68,14 @@ B3_HOMEPAGE = (
     "https://www.b3.com.br/pt_br/market-data-e-indices/servicos-de-dados/"
     "market-data/historico/boletins-diarios/pesquisa-por-pregao/pesquisa-por-pregao/"
 )
+logger = getLogger(__name__)
+
+
+def _log_stage(stage: str, started: float | None = None, **fields: object) -> None:
+    parts = [f"{key}={value}" for key, value in fields.items()]
+    if started is not None:
+        parts.insert(0, f"elapsed_ms={int((time.perf_counter() - started) * 1000)}")
+    logger.info("b3 %s %s", stage, " ".join(parts))
 
 
 def ingest_b3(
@@ -129,9 +138,19 @@ def _ingest_b3_day(
     inserted = updated = skipped = rejected = 0
     artifacts = 0
     try:
+        allowlist = b3_equity_allowlist()
+        _log_stage(
+            "start",
+            date=reference_date.isoformat(),
+            equity_filter=allowlist is not None,
+            allowlist=len(allowlist) if allowlist is not None else "all",
+        )
+        started = time.perf_counter()
+        _log_stage("download start", kind="186")
         price_bytes, price_url, price_status = _load_file(
             b3, kind="186", reference_date=reference_date, payload=price_payload
         )
+        _log_stage("download 186", started, bytes=len(price_bytes), http_status=price_status)
         price_key = (
             f"raw/b3/year={reference_date.year:04d}/month={reference_date.month:02d}/"
             f"bvbg186_{reference_date.isoformat()}.zip"
@@ -152,11 +171,13 @@ def _ingest_b3_day(
             reference_date=reference_date,
         )
         artifacts += 1
+        started = time.perf_counter()
         quotes = parse_price_report(price_bytes)
-        allowlist = b3_equity_allowlist()
+        _log_stage("parse 186", started, records=len(quotes))
         instrument_ids: dict[str, UUID] = {}
         existing_quotes = load_quote_keys(session, source_id=source.id, on_date=reference_date)
         pending_quotes: list[InstrumentQuoteRow] = []
+        started = time.perf_counter()
         for record in quotes:
             if not should_persist_b3_equity_last(record.ticker, allowlist):
                 skipped += 1
@@ -216,11 +237,20 @@ def _ingest_b3_day(
             session.add_all(pending_quotes)
             session.flush()
             pending_quotes.clear()
+        _log_stage(
+            "persist 186",
+            started,
+            inserted=inserted,
+            skipped=skipped,
+            persisted_tickers=len(instrument_ids),
+        )
 
         parsed = len(quotes)
         derivatives_bytes: bytes | None = None
         derivatives_url = pregao_url("187", reference_date)
         derivatives_status: int | None = None
+        started = time.perf_counter()
+        _log_stage("download start", kind="187")
         if derivatives_payload is not None:
             derivatives_bytes, derivatives_url, derivatives_status = _load_file(
                 b3, kind="187", reference_date=reference_date, payload=derivatives_payload
@@ -230,9 +260,16 @@ def _ingest_b3_day(
                 derivatives_bytes, derivatives_url, derivatives_status = _load_file(
                     b3, kind="187", reference_date=reference_date, payload=None
                 )
-            except (B3ParseError, httpx.HTTPError):
+            except (B3ParseError, httpx.HTTPError) as exc:
+                _log_stage("skip 187", started, error=type(exc).__name__, detail=str(exc)[:200])
                 derivatives_bytes = None
         if derivatives_bytes is not None:
+            _log_stage(
+                "download 187",
+                started,
+                bytes=len(derivatives_bytes),
+                http_status=derivatives_status,
+            )
             derivatives_key = (
                 f"raw/b3/year={reference_date.year:04d}/month={reference_date.month:02d}/"
                 f"bvbg187_{reference_date.isoformat()}.zip"
@@ -255,12 +292,15 @@ def _ingest_b3_day(
                 reference_date=reference_date,
             )
             artifacts += 1
+            started = time.perf_counter()
             settlements = [
                 record
                 for record in parse_settlement_report(derivatives_bytes)
                 if is_mvp_future_ticker(record.ticker)
             ]
+            _log_stage("parse 187", started, mvp_records=len(settlements))
             parsed += len(settlements)
+            started = time.perf_counter()
             for index, record in enumerate(settlements, start=1):
                 instrument = get_or_create_instrument_by_key(
                     session,
@@ -271,6 +311,7 @@ def _ingest_b3_day(
                     name=record.ticker,
                     currency=record.currency or "BRL",
                 )
+                instrument_ids[record.ticker] = instrument.id
                 attach_identifier(
                     session,
                     instrument_id=instrument.id,
@@ -307,18 +348,23 @@ def _ingest_b3_day(
                     skipped += 1
                 if index % 500 == 0:
                     session.flush()
+            _log_stage("persist 187", started, mvp_records=len(settlements))
 
         master_bytes = master_payload
         master_url = pregao_url("028", reference_date)
         master_status: int | None = 200 if master_payload is not None else None
+        started = time.perf_counter()
+        _log_stage("download start", kind="028")
         if master_bytes is None:
             try:
                 master_bytes, master_url, master_status = _load_file(
                     b3, kind="028", reference_date=reference_date, payload=None
                 )
-            except (B3ParseError, httpx.HTTPError):
+            except (B3ParseError, httpx.HTTPError) as exc:
+                _log_stage("skip 028", started, error=type(exc).__name__, detail=str(exc)[:200])
                 master_bytes = None
         if master_bytes is not None:
+            _log_stage("download 028", started, bytes=len(master_bytes), http_status=master_status)
             master_key = (
                 f"raw/b3/year={reference_date.year:04d}/month={reference_date.month:02d}/"
                 f"bvbg028_{reference_date.isoformat()}.zip"
@@ -341,15 +387,25 @@ def _ingest_b3_day(
                 reference_date=reference_date,
             )
             artifacts += 1
+            keep = frozenset(instrument_ids)
+            started = time.perf_counter()
             try:
-                master = parse_instrument_master(master_bytes)
-            except B3ParseError:
+                if keep:
+                    master = parse_instrument_master(master_bytes, keep_tickers=keep)
+                else:
+                    master = {}
+                    _log_stage("skip parse 028", started, reason="no_persisted_tickers")
+            except B3ParseError as exc:
+                _log_stage("skip parse 028", started, error=str(exc)[:200])
                 rejected += 1
+                master = {}
             else:
+                matched = 0
                 for ticker, info in master.items():
-                    instrument_id = resolve_instrument_id(session, ticker)
+                    instrument_id = instrument_ids.get(ticker)
                     if instrument_id is None:
                         continue
+                    matched += 1
                     if info.isin:
                         attach_identifier(
                             session,
@@ -362,21 +418,35 @@ def _ingest_b3_day(
                         instrument = session.get(InstrumentRow, instrument_id)
                         if instrument is not None and instrument.maturity_date is None:
                             instrument.maturity_date = info.maturity_date
+                _log_stage("enrich 028", started, matched=matched, keep=len(keep))
 
+        credit_live = live_otc_credit_enabled(allowlist) and price_payload is None
+        if not live_otc_credit_enabled(allowlist) and credit_trades_payload is None:
+            _log_stage("skip live OTC credit", reason="equity_universe_filter")
+        started = time.perf_counter()
+        if credit_live:
+            _log_stage("download start", kind="otc_credit")
         credit_trades_bytes, credit_trades_url, credit_trades_status = _load_otc_table(
             b3,
             table_name=BDI_CREDIT_TRADES_TABLE,
             reference_date=reference_date,
             payload=credit_trades_payload,
-            live=price_payload is None,
+            live=credit_live,
         )
         credit_master_bytes, credit_master_url, credit_master_status = _load_otc_table(
             b3,
             table_name=BDI_CREDIT_MASTER_TABLE,
             reference_date=reference_date,
             payload=credit_master_payload,
-            live=price_payload is None,
+            live=credit_live,
         )
+        if credit_live:
+            _log_stage(
+                "download otc_credit",
+                started,
+                trades_bytes=0 if credit_trades_bytes is None else len(credit_trades_bytes),
+                master_bytes=0 if credit_master_bytes is None else len(credit_master_bytes),
+            )
         credit_quote_keys: set[tuple[str, date]] = set()
         if credit_trades_bytes is not None:
             trades_key = (
@@ -439,6 +509,7 @@ def _ingest_b3_day(
                     skipped += 1
                 if index % 500 == 0:
                     session.flush()
+            _log_stage("persist otc_trades", records=len(credit_trades))
 
         if credit_master_bytes is not None:
             master_otc_key = (
@@ -512,6 +583,7 @@ def _ingest_b3_day(
                                 "ticker": record.ticker,
                             },
                         )
+            _log_stage("persist otc_master", records=len(cadastro))
 
         run.artifacts_downloaded = artifacts
         run.records_parsed = parsed
@@ -521,6 +593,14 @@ def _ingest_b3_day(
         run.records_normalized = inserted + updated + skipped
         finish_ingestion_run(run, status=IngestionRunStatus.SUCCEEDED)
         session.flush()
+        _log_stage(
+            "done",
+            inserted=inserted,
+            updated=updated,
+            skipped=skipped,
+            rejected=rejected,
+            artifacts=artifacts,
+        )
         return {
             "run_id": str(run.id),
             "inserted": inserted,
@@ -570,7 +650,13 @@ def _load_otc_table(
         return None, url, None
     try:
         response = provider.fetch_public_table(table_name, reference_date)
-    except (B3ParseError, httpx.HTTPError):
+    except (B3ParseError, httpx.HTTPError) as exc:
+        logger.info(
+            "b3 skip %s error=%s detail=%s",
+            table_name,
+            type(exc).__name__,
+            str(exc)[:200],
+        )
         return None, url, None
     response_url = str(response.request.url) if response.request is not None else url
     return response.content, response_url, response.status_code

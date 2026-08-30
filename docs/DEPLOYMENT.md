@@ -107,7 +107,8 @@ seed). An explicit
 `B3_EQUITY_UNIVERSE_PATH=/path/to/universe.csv` (same columns as the example
 file) wins over `INGEST_UNIVERSE`. Tickers outside the B3 equity rows are
 skipped, not errored. Empty/unset `INGEST_UNIVERSE` still means full BVBG.186
-persist in Python.
+persist in Python. Scratch also skips live BDI OTC credit (not in the IBOV/SMLL
+list). BVBG.028 ISINs are attached only for names persisted that day.
 
 Then run B3 (and optionally BCB). CVM dispatch is class-filtered
 (`CVM_CLASSES=Multimercado,Ações`); `ingest-cvm.yml` stays dispatch-only.

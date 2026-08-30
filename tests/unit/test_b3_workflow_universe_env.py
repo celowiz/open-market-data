@@ -19,3 +19,12 @@ def test_b3_ingest_workflows_forward_ingest_universe_repo_var() -> None:
         text = path.read_text(encoding="utf-8")
         for needle in expected:
             assert needle in text, f"{path.name} must pass {needle.split(':')[0]} into job env"
+
+
+def test_b3_ingest_workflows_unbuffer_python_and_do_not_raise_job_cap() -> None:
+    """Cancelled run 33334956436 printed nothing for 2h; unbuffered logs are required."""
+    for path in B3_JOBS:
+        text = path.read_text(encoding="utf-8")
+        assert "PYTHONUNBUFFERED:" in text, (
+            f"{path.name} must set PYTHONUNBUFFERED so stage logs flush"
+        )

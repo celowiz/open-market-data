@@ -1,6 +1,8 @@
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
+from logging import INFO, basicConfig
 from pathlib import Path
+from sys import stderr
 
 import typer
 from sqlalchemy.orm import Session
@@ -27,6 +29,12 @@ app.add_typer(backfill_app, name="backfill")
 @app.callback()
 def main() -> None:
     """Open Market Data command-line interface."""
+    basicConfig(
+        level=INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=stderr,
+        force=True,
+    )
     register_default_providers()
 
 
