@@ -12,19 +12,26 @@ import { COVERAGE_PAGE_SIZE, fetchCoverage } from "@/lib/api";
 import { offlineFormHint } from "@/lib/copy";
 import { todayIso } from "@/lib/dates";
 import { formatDisplayValue } from "@/lib/format-display-value";
-import { useLocalPageOrigin } from "@/lib/use-local-origin";
 import { hrefForIdentifier } from "@/lib/links";
+import type { CoverageUniverse } from "@/lib/types";
 import { useHistoryPages } from "@/lib/use-history-pages";
+import { useLocalPageOrigin } from "@/lib/use-local-origin";
+
+const COVERAGE_UNIVERSES: CoverageUniverse[] = ["scratch", "example", "operator"];
+
+function isCoverageUniverse(value: string): value is CoverageUniverse {
+  return COVERAGE_UNIVERSES.includes(value as CoverageUniverse);
+}
 
 export default function CoveragePage() {
   const api = useApiStatus();
   const localOrigin = useLocalPageOrigin();
   const apiReady = api.status === "ok";
   const [dateInput, setDateInput] = useState(todayIso());
-  const [universe, setUniverse] = useState<"example" | "operator">("example");
-  const [applied, setApplied] = useState<{ date: string; universe: "example" | "operator" }>({
+  const [universe, setUniverse] = useState<CoverageUniverse>("scratch");
+  const [applied, setApplied] = useState<{ date: string; universe: CoverageUniverse }>({
     date: todayIso(),
-    universe: "example",
+    universe: "scratch",
   });
 
   const history = useHistoryPages({
@@ -53,7 +60,7 @@ export default function CoveragePage() {
         <h1 className="text-2xl font-semibold text-slate-900">Cobertura</h1>
         <p className="mt-1 text-sm text-slate-600">
           <code className="font-mono text-xs">GET /v1/coverage?date=</code> para o universo
-          escolhido. Preços ausentes permanecem em branco.
+          escolhido (padrão: scratch, IBOV/SMLL/futuros). Preços ausentes permanecem em branco.
         </p>
       </header>
 
@@ -90,11 +97,15 @@ export default function CoveragePage() {
             name="universe"
             value={universe}
             disabled={!apiReady}
-            onChange={(event) =>
-              setUniverse(event.target.value === "operator" ? "operator" : "example")
-            }
+            onChange={(event) => {
+              const next = event.target.value;
+              if (isCoverageUniverse(next)) {
+                setUniverse(next);
+              }
+            }}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
           >
+            <option value="scratch">scratch</option>
             <option value="example">example</option>
             <option value="operator">operator</option>
           </select>

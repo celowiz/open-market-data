@@ -165,17 +165,17 @@ names. `backfill.yml` must never gain a `schedule:` block.
 Default B3 ingest is **unchanged**: the full BVBG.186 LAST file is persisted.
 BVBG.187 futures keep the existing MVP ticker regex.
 
-To persist only B3 equities listed in the coverage CSV (IBOV+SMLL in the
-example seed):
+To persist only B3 equities listed in the scratch coverage CSV (IBOV+SMLL):
 
 ```text
 INGEST_UNIVERSE=scratch
 ```
 
 `scratch` reads `config/instruments.csv` if present, else
-`config/instruments.example.csv`. Or set an explicit file
+`config/instruments.scratch.csv`. Or set an explicit file
 (`B3_EQUITY_UNIVERSE_PATH`); that wins over `INGEST_UNIVERSE`. Tickers not in
-the B3 equity rows are skipped (not persisted), not errored.
+the B3 equity rows are skipped (not persisted), not errored. Empty
+`INGEST_UNIVERSE` still persists the full BVBG.186.
 
 `ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml` pass both variables from
 repository Actions variables (`vars.INGEST_UNIVERSE`,

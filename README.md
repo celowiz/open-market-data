@@ -23,17 +23,23 @@ are implemented in this repository.
 - **Phases 0–10:** complete (providers, Parquet for ODbL sources, coverage).
 - **Phase 11:** complete for artifacts. Dockerfile, GitHub Actions
   ingest/publish/backfill workflows, and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
-  exist. Neon is the serving-database target. Railway FastAPI is **not**
-  created yet — wait until Phase 12 live backfill has populated Neon.
+  exist. Neon (Free) is the serving Postgres. FastAPI is live on Railway at
+  [https://api-production-288d4.up.railway.app](https://api-production-288d4.up.railway.app)
+  (service `api`, project `open-market-data`).
 - **Phase 12:** `marketdata backfill` for CVM, Tesouro, BCB, B3 (optional
-  COTAHIST), and Yahoo. Operator live load into Neon is the current gate
-  before a public API. Yahoo is currently visible on the public API.
-  B3 and Yahoo are never published as Parquet.
+  COTAHIST), and Yahoo. Remaining operator work is historical backfill into
+  Neon (B3 scratch 2024 slice running). That is not multi-year B3 history.
+  Yahoo is currently visible on the public API. B3 and Yahoo are never
+  published as Parquet.
 - **Phase 13:** Next.js Data Explorer in `apps/explorer`, consuming FastAPI
-  `/v1` only (never `DATABASE_URL`). Local default is `http://127.0.0.1:8000`.
-  Vercel is live at [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/);
-  it cannot reach visitors' localhost until Railway (or another public
-  FastAPI) exists.
+  `/v1` only (never `DATABASE_URL`). Live at
+  [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/)
+  with `NEXT_PUBLIC_API_BASE_URL` pointing at the Railway origin (no trailing
+  slash). Local default remains `http://127.0.0.1:8000`.
+
+Ingest universe for B3 is GitHub Actions var `INGEST_UNIVERSE=scratch`
+(IBOV/SMLL/futures allowlist). CVM persist is Multimercado+Ações. Tesouro
+ingest is currently-traded titles only.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -127,7 +133,7 @@ Coverage (after quotes are ingested):
 
 ```bash
 uv run marketdata coverage --date 2026-08-24
-curl "http://127.0.0.1:8000/v1/coverage?date=2026-08-24"
+curl "http://127.0.0.1:8000/v1/coverage?date=2026-08-24&universe=scratch"
 ```
 
 Coverage scores a CSV universe against stored quotes. It does not fetch

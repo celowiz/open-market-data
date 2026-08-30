@@ -16,8 +16,9 @@ Set `DATABASE_URL` in `.env` to a local PostgreSQL database when you need
 migrations or database tests. Keep
 `CORS_ALLOWED_ORIGINS=http://localhost:3000` if you will run the Explorer.
 Object storage defaults to `./data` on the filesystem. Neon, Railway, and
-Cloudflare are not required for local work. Public FastAPI on Railway waits
-until Neon serving tables are backfilled; see `docs/DEPLOYMENT.md`. Optional S3-compatible storage:
+Cloudflare are not required for local work. Official FastAPI is already hosted
+on Railway; remaining operator work is historical backfill into Neon. See
+`docs/DEPLOYMENT.md`. Optional S3-compatible storage:
 
 ```bash
 uv sync --extra s3

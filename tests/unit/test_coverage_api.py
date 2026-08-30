@@ -256,6 +256,39 @@ def test_operator_universe_missing_is_404(db_session, tmp_path: Path) -> None:
 
 
 @pytest.mark.db
+def test_scratch_universe_missing_is_404(db_session, tmp_path: Path) -> None:
+    _seed_quotes(db_session)
+    client = _client(_seed_universe(tmp_path))
+    response = client.get(
+        "/v1/coverage",
+        params={"date": REF.isoformat(), "universe": "scratch"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "universe not found"
+
+
+@pytest.mark.db
+def test_scratch_universe_prices_named_csv(db_session, tmp_path: Path) -> None:
+    _seed_quotes(db_session)
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "instruments.scratch.csv").write_text(
+        TINY.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    client = _client(tmp_path)
+    response = client.get(
+        "/v1/coverage",
+        params={"date": REF.isoformat(), "universe": "scratch"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["universe"] == "scratch"
+    assert body["universe_size"] == 5
+    assert body["priced"] == 3
+
+
+@pytest.mark.db
 def test_cli_local_counts_yahoo_close(db_session, tmp_path: Path) -> None:
     _seed_quotes(db_session)
     universe = _seed_universe(tmp_path) / "config" / "instruments.example.csv"

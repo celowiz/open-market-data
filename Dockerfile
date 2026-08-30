@@ -28,9 +28,11 @@ COPY --from=builder --chown=app:app /app/src /app/src
 COPY --chown=app:app alembic.ini ./
 COPY --chown=app:app migrations ./migrations
 # coverage_config_dir defaults to Path(".") (WORKDIR /app). GET /v1/coverage?universe=example
-# reads config/instruments.example.csv. Operator config/instruments.csv is gitignored.
+# reads config/instruments.example.csv; universe=scratch reads instruments.scratch.csv.
+# Operator config/instruments.csv is gitignored and excluded by .dockerignore.
 COPY --chown=app:app config ./config
-RUN test -f /app/config/instruments.example.csv
+RUN test -f /app/config/instruments.example.csv \
+    && test -f /app/config/instruments.scratch.csv
 
 RUN mkdir -p /app/data && chown app:app /app/data
 

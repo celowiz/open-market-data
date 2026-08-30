@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from marketdata.coverage.paths import default_universe_path, named_universe_path
 
 
@@ -28,3 +30,14 @@ def test_named_universe_example_and_operator(tmp_path: Path) -> None:
     assert named_universe_path("operator", base=tmp_path) == (
         tmp_path / "config" / "instruments.csv"
     )
+
+
+def test_named_universe_scratch(tmp_path: Path) -> None:
+    assert named_universe_path("scratch", base=tmp_path) == (
+        tmp_path / "config" / "instruments.scratch.csv"
+    )
+
+
+def test_named_universe_unknown_raises() -> None:
+    with pytest.raises(ValueError, match="unknown universe"):
+        named_universe_path("ibov")
