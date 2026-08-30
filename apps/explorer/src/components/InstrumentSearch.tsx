@@ -71,7 +71,11 @@ export function InstrumentSearch({
       {apiReady && !trimmed && !compact ? (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-slate-600">
-            Digite um identificador ou nome para buscar.
+            Digite um identificador ou nome para buscar, ou abra o{" "}
+            <Link href="/instruments" className="font-medium text-teal-800 hover:underline">
+              catálogo de ativos
+            </Link>
+            .
           </p>
           <div className="flex flex-wrap gap-2">
             {HOME_EXAMPLES.map((example) => (
@@ -160,8 +164,12 @@ export function InstrumentSearch({
         Buscar instrumentos
       </h2>
       <p className="mt-1 text-sm text-slate-600">
-        Consulta <code className="font-mono text-xs">GET /v1/instruments?q=</code>. Busca vazia não
-        é enviada (a API responde 400).
+        Consulta <code className="font-mono text-xs">GET /v1/instruments</code>. Digite para buscar
+        por nome ou identificador. Para ver a lista completa, abra o{" "}
+        <Link href="/instruments" className="font-medium text-teal-800 hover:underline">
+          catálogo de ativos
+        </Link>
+        .
       </p>
       <div className="mt-3 flex flex-col gap-1">
         <label htmlFor={inputId} className="text-sm font-medium text-slate-800">

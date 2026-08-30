@@ -28,6 +28,15 @@ export class ApiError extends Error {
 
 export const HISTORY_PAGE_SIZE = 500;
 export const COVERAGE_PAGE_SIZE = 100;
+export const INSTRUMENT_PAGE_SIZE = 20;
+
+export type InstrumentsQuery = {
+  q?: string;
+  limit?: number;
+  cursor?: string;
+  source?: string;
+  asset_class?: string;
+};
 
 export function getApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
@@ -211,15 +220,28 @@ export function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiFetch<HealthResponse>("/v1/health", { signal });
 }
 
-export function searchInstruments(
-  q: string,
-  limit = 20,
+export function listInstruments(
+  query: InstrumentsQuery = {},
   signal?: AbortSignal,
 ): Promise<InstrumentsResponse> {
   return apiFetch<InstrumentsResponse>("/v1/instruments", {
-    query: { q, limit },
+    query: {
+      q: query.q,
+      limit: query.limit ?? INSTRUMENT_PAGE_SIZE,
+      cursor: query.cursor,
+      source: query.source,
+      asset_class: query.asset_class,
+    },
     signal,
   });
+}
+
+export function searchInstruments(
+  q: string,
+  limit = INSTRUMENT_PAGE_SIZE,
+  signal?: AbortSignal,
+): Promise<InstrumentsResponse> {
+  return listInstruments({ q, limit }, signal);
 }
 
 export async function lookupInstrumentName(

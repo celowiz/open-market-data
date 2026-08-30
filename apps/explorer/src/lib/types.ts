@@ -3,10 +3,12 @@ export type InstrumentSearchItem = {
   name: string;
   asset_class: string;
   identifiers: string[];
+  sources?: string[];
 };
 
 export type InstrumentsResponse = {
   instruments: InstrumentSearchItem[];
+  next_cursor?: string | null;
 };
 
 export type QuoteResponse = {

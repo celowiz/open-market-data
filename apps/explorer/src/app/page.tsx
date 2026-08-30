@@ -34,12 +34,21 @@ export default function HomePage() {
       <InstrumentSearch />
 
       <section aria-labelledby="examples-heading" className="flex flex-col gap-3">
-        <h2 id="examples-heading" className="text-xl font-semibold text-slate-900">
-          Identificadores de exemplo
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="examples-heading" className="text-xl font-semibold text-slate-900">
+            Identificadores de exemplo
+          </h2>
+          <Link href="/instruments" className="text-sm font-medium text-teal-800 hover:underline">
+            Catálogo de ativos
+          </Link>
+        </div>
         <p className="text-sm text-slate-600">
           Cada cartão consulta a API ao vivo. Um 404 mostra o corpo do erro — nunca um preço
-          inventado.
+          inventado. O{" "}
+          <Link href="/instruments" className="font-medium text-teal-800 hover:underline">
+            catálogo de ativos
+          </Link>{" "}
+          lista todos os instrumentos públicos, com filtro por fonte.
         </p>
         <ExampleCards />
       </section>

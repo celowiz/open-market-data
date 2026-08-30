@@ -295,12 +295,41 @@ def explorer_seed(db_session):
             value_semantics="REFERENCE",
         )
     )
+    hidden = _source(
+        db_session,
+        name=f"hidden-api-{suffix.lower()}",
+        policy=RedistributionPolicy.INTERNAL_ONLY,
+        public_api=False,
+    )
+    hidden_instrument = _add_instrument(
+        db_session,
+        ticker=f"HD{suffix}",
+        name=f"Hidden Equity {suffix}",
+        source=hidden,
+        asset_class=AssetClass.EQUITY,
+        instrument_type="stock",
+    )
+    _add_quote(
+        db_session,
+        instrument_id=hidden_instrument.id,
+        source_id=hidden.id,
+        reference_date=date(2026, 1, 7),
+        value=Decimal("1.00"),
+        price_type=PriceType.LAST.value,
+    )
+
     db_session.commit()
     return SimpleNamespace(
         b3_ticker=b3_ticker,
         b3_instrument_id=str(b3_instrument.id),
+        b3_source_name=b3.name,
         yahoo_ticker=yahoo_ticker,
+        yahoo_instrument_id=str(yahoo_instrument.id),
+        yahoo_source_name=yahoo.name,
         fund_id=fund_id,
+        fund_instrument_id=str(fund.id),
+        cvm_source_name=cvm.name,
+        hidden_instrument_id=str(hidden_instrument.id),
         series_code=series_code,
         empty_series_code=empty_code,
         suffix=suffix,
@@ -359,14 +388,26 @@ def test_quotes_without_database_url_is_unavailable(monkeypatch: pytest.MonkeyPa
     assert response.json()["detail"] == "DATABASE_URL is not configured"
 
 
-def test_instruments_empty_q_returns_400() -> None:
-    client = _client()
-    missing = client.get("/v1/instruments")
-    assert missing.status_code == 400
-    blank = client.get("/v1/instruments", params={"q": ""})
-    assert blank.status_code == 400
-    whitespace = client.get("/v1/instruments", params={"q": "   "})
-    assert whitespace.status_code == 400
+def test_instruments_openapi_lists_with_optional_q() -> None:
+    spec = _client().get("/openapi.json").json()
+    operation = spec["paths"]["/v1/instruments"]["get"]
+    params = {item["name"]: item for item in operation["parameters"]}
+    assert params["q"].get("required") is not True
+    assert {"cursor", "limit", "source", "asset_class"} <= set(params)
+    assert params["limit"]["schema"]["default"] == 20
+    assert params["limit"]["schema"]["maximum"] == 100
+    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    if "$ref" in schema:
+        name = schema["$ref"].rsplit("/", 1)[-1]
+        schema = spec["components"]["schemas"][name]
+    assert "next_cursor" in schema["properties"]
+    assert "sources" in spec["components"]["schemas"]["InstrumentSearchItem"]["properties"]
+
+
+def test_instruments_invalid_cursor_returns_400() -> None:
+    response = _client().get("/v1/instruments", params={"cursor": "not-a-uuid"})
+    assert response.status_code == 400
+    assert "cursor" in str(response.json()["detail"]).lower()
 
 
 @pytest.mark.db
@@ -518,3 +559,128 @@ def test_instruments_search_public_only(explorer_seed) -> None:
     )
     assert by_name.status_code == 200
     assert by_name.json()["instruments"][0]["instrument_id"] == explorer_seed.b3_instrument_id
+
+
+def _instrument_ids(response) -> set[str]:
+    return {row["instrument_id"] for row in response.json()["instruments"]}
+
+
+def _list_all_instruments(client, **params) -> list[dict]:
+    items: list[dict] = []
+    cursor: str | None = None
+    query = dict(params)
+    query.setdefault("limit", 100)
+    for _ in range(50):
+        page_query = dict(query)
+        if cursor is not None:
+            page_query["cursor"] = cursor
+        response = client.get("/v1/instruments", params=page_query)
+        assert response.status_code == 200
+        body = response.json()
+        items.extend(body["instruments"])
+        cursor = body["next_cursor"]
+        if not cursor:
+            return items
+    raise AssertionError("instrument catalog pagination did not terminate")
+
+
+@pytest.mark.db
+def test_instruments_empty_q_lists_visible_public_instruments(explorer_seed) -> None:
+    client = _client()
+    listed = (
+        _list_all_instruments(client),
+        _list_all_instruments(client, q=""),
+        _list_all_instruments(client, q="   "),
+    )
+    for rows in listed:
+        ids = {row["instrument_id"] for row in rows}
+        assert explorer_seed.b3_instrument_id in ids
+        assert explorer_seed.yahoo_instrument_id in ids
+        assert explorer_seed.fund_instrument_id in ids
+        assert explorer_seed.hidden_instrument_id not in ids
+        b3_row = next(row for row in rows if row["instrument_id"] == explorer_seed.b3_instrument_id)
+        assert b3_row["name"] == f"Visible B3 Equity {explorer_seed.suffix}"
+        assert b3_row["asset_class"] == AssetClass.EQUITY.value
+        assert explorer_seed.b3_ticker in b3_row["identifiers"]
+        assert explorer_seed.b3_source_name in b3_row["sources"]
+
+
+@pytest.mark.db
+def test_instruments_q_still_searches(explorer_seed) -> None:
+    client = _client()
+    response = client.get("/v1/instruments", params={"q": explorer_seed.yahoo_ticker})
+    assert response.status_code == 200
+    rows = response.json()["instruments"]
+    assert [row["instrument_id"] for row in rows] == [explorer_seed.yahoo_instrument_id]
+    missed = client.get(
+        "/v1/instruments", params={"q": f"no-such-instrument-{explorer_seed.suffix}"}
+    )
+    assert missed.status_code == 200
+    assert missed.json()["instruments"] == []
+    assert missed.json()["next_cursor"] is None
+
+
+@pytest.mark.db
+def test_instruments_list_pagination_and_source_filter(explorer_seed, db_session) -> None:
+    suffix = explorer_seed.suffix
+    source = _source(
+        db_session,
+        name=f"page-api-{suffix.lower()}",
+        policy=RedistributionPolicy.PUBLIC,
+        public_api=True,
+    )
+    created: list[str] = []
+    for index in range(3):
+        instrument = _add_instrument(
+            db_session,
+            ticker=f"PG{index}{suffix}",
+            name=f"Page {index:02d} {suffix}",
+            source=source,
+            asset_class=AssetClass.EQUITY,
+            instrument_type="stock",
+        )
+        _add_quote(
+            db_session,
+            instrument_id=instrument.id,
+            source_id=source.id,
+            reference_date=date(2026, 1, 7),
+            value=Decimal("1.00"),
+            price_type=PriceType.LAST.value,
+        )
+        created.append(str(instrument.id))
+    db_session.commit()
+
+    client = _client()
+    first = client.get(
+        "/v1/instruments",
+        params={"source": source.name, "limit": 1},
+    )
+    assert first.status_code == 200
+    body = first.json()
+    assert len(body["instruments"]) == 1
+    assert body["instruments"][0]["instrument_id"] == created[0]
+    assert body["next_cursor"] == created[0]
+    second = client.get(
+        "/v1/instruments",
+        params={"source": source.name, "limit": 1, "cursor": body["next_cursor"]},
+    )
+    assert second.status_code == 200
+    page = second.json()
+    assert [row["instrument_id"] for row in page["instruments"]] == [created[1]]
+    assert page["next_cursor"] == created[1]
+    third = client.get(
+        "/v1/instruments",
+        params={"source": source.name, "limit": 1, "cursor": page["next_cursor"]},
+    )
+    assert [row["instrument_id"] for row in third.json()["instruments"]] == [created[2]]
+    assert third.json()["next_cursor"] is None
+    filtered = client.get(
+        "/v1/instruments",
+        params={"source": explorer_seed.b3_source_name, "asset_class": AssetClass.EQUITY.value},
+    )
+    assert filtered.status_code == 200
+    assert _instrument_ids(filtered) == {explorer_seed.b3_instrument_id}
+    funds = client.get("/v1/instruments", params={"asset_class": AssetClass.FUND.value})
+    fund_ids = _instrument_ids(funds)
+    assert explorer_seed.fund_instrument_id in fund_ids
+    assert explorer_seed.b3_instrument_id not in fund_ids

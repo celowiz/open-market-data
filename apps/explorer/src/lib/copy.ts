@@ -6,6 +6,7 @@ export const copy = {
     "Explorador somente leitura da API pública FastAPI /v1: cotações, séries, fundos, fontes, conjuntos de dados e cobertura.",
   nav: {
     home: "Início",
+    instruments: "Ativos",
     series: "Séries",
     compare: "Comparar",
     sources: "Fontes",
