@@ -15,8 +15,9 @@ universe, or pass `--universe PATH`.
 The same files can opt-in filter B3 BVBG.186 LAST ingest:
 `INGEST_UNIVERSE=scratch` (operator file if present, else
 `instruments.scratch.csv`) or `B3_EQUITY_UNIVERSE_PATH`. Only B3 `equity`
-rows are used for the 186 filter. Empty `INGEST_UNIVERSE` still means full
-186 persist. See [`docs/INGEST_SCHEDULE.md`](../docs/INGEST_SCHEDULE.md).
+rows are used for the 186 filter. Scratch skips live OTC credit. Empty
+`INGEST_UNIVERSE` still means full 186 persist plus live credit. See
+[`docs/INGEST_SCHEDULE.md`](../docs/INGEST_SCHEDULE.md).
 
 ## Snapshot
 

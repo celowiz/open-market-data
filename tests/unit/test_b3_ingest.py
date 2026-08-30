@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID
 from zipfile import ZipFile
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -375,3 +376,182 @@ def test_b3_credit_empty_trades_skips_absence_events(db_session, tmp_path) -> No
         )
         is None
     )
+
+
+def _response(content: bytes, url: str) -> httpx.Response:
+    return httpx.Response(200, content=content, request=httpx.Request("GET", url))
+
+
+class _RecordingB3Provider:
+    name = "b3"
+
+    def __init__(self, files: dict[str, bytes]) -> None:
+        self.files = files
+        self.fetched: list[str] = []
+        self.public_tables: list[str] = []
+
+    def fetch(self, kind: str, reference_date: date, *, client=None) -> httpx.Response:
+        self.fetched.append(kind)
+        from marketdata.providers.b3 import pregao_url
+
+        return _response(self.files[kind], pregao_url(kind, reference_date))
+
+    def fetch_public_table(
+        self, table_name: str, reference_date: date, *, client=None
+    ) -> httpx.Response:
+        self.public_tables.append(table_name)
+        raise httpx.TimeoutException("BDI export timed out")
+
+
+def _rewritten_zip(
+    outer_name: str, inner_name: str, source: Path, replacements: dict[str, str]
+) -> bytes:
+    text = source.read_text(encoding="utf-8")
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return _nested_zip(outer_name, inner_name, text.encode("utf-8"))
+
+
+def _isolated_day_payloads(
+    *,
+    day: date,
+    equity: str,
+    future: str,
+    extra_master_ticker: str | None = "EXTRA9",
+) -> tuple[bytes, bytes, bytes]:
+    iso = day.isoformat()
+    yymmdd = day.strftime("%y%m%d")
+    price = _rewritten_zip(
+        f"SPRE{yymmdd}.zip",
+        "BVBG.186.01_sample.xml",
+        FIXTURES / "price_report.xml",
+        {"2026-08-24": iso, "PETR4": equity},
+    )
+    derivatives = _rewritten_zip(
+        f"SPRD{yymmdd}.zip",
+        "BVBG.187.01_sample.xml",
+        FIXTURES / "derivatives_price_report.xml",
+        {"2026-08-24": iso, "DI1F27": future},
+    )
+    master_replacements = {
+        "PETR4": equity,
+        "DI1F27": future,
+        "BRPETRACNPR6": f"BR{equity[:4]}ACNPR1",
+        "BRBMEFD1I4Z0": f"BR{future}ISIN01"[:12],
+    }
+    xml = (FIXTURES / "instrument_master.xml").read_text(encoding="utf-8")
+    for old, new in master_replacements.items():
+        xml = xml.replace(old, new)
+    if extra_master_ticker:
+        xml = xml.replace(
+            "</EqtyInf>",
+            "</EqtyInf>\n            <EqtyInf>"
+            "<ISIN>BREXTRA9XXXX</ISIN>"
+            f"<TckrSymb>{extra_master_ticker}</TckrSymb>"
+            "<CrpnNm>EXTRA</CrpnNm>"
+            "<TradgCcy>BRL</TradgCcy>"
+            "</EqtyInf>",
+            1,
+        )
+    master = _nested_zip(f"IN{yymmdd}.zip", "BVBG.028.02_sample.xml", xml.encode("utf-8"))
+    return price, master, derivatives
+
+
+@pytest.mark.db
+def test_scratch_live_ingest_skips_credit_and_master_lookups(
+    db_session, tmp_path, monkeypatch, caplog
+) -> None:
+    from marketdata.ingestion import b3 as b3_mod
+    from marketdata.ingestion.b3 import ingest_b3
+
+    day = date(2026, 9, 1)
+    equity = "SCRT4"
+    future = "DI1F01"
+    price, master, derivatives = _isolated_day_payloads(day=day, equity=equity, future=future)
+    provider = _RecordingB3Provider({"186": price, "187": derivatives, "028": master})
+    monkeypatch.setattr(b3_mod, "b3_equity_allowlist", lambda: frozenset({equity}))
+    caplog.set_level("INFO", logger="marketdata.ingestion.b3")
+
+    result = ingest_b3(
+        db_session,
+        reference_date=day,
+        storage=LocalFileObjectStorage(tmp_path),
+        provider=provider,
+    )
+    db_session.commit()
+
+    assert result["status"] == "succeeded"
+    assert provider.public_tables == []
+    assert "186" in provider.fetched
+    assert resolve_instrument_id(db_session, "EXTRA9") is None
+    equity_id = resolve_instrument_id(db_session, equity)
+    assert equity_id is not None
+    types = set(
+        db_session.scalars(
+            select(InstrumentIdentifierRow.identifier_type).where(
+                InstrumentIdentifierRow.instrument_id == equity_id
+            )
+        )
+    )
+    assert IdentifierType.ISIN.value in types
+    log_text = caplog.text.lower()
+    assert "skip" in log_text and "credit" in log_text
+    assert "186" in log_text
+
+
+@pytest.mark.db
+def test_full_live_ingest_fetches_credit_but_skips_on_timeout(db_session, tmp_path, caplog) -> None:
+    from marketdata.ingestion.b3 import ingest_b3
+
+    day = date(2026, 9, 2)
+    equity = "FULL4"
+    future = "DI1F02"
+    price, master, derivatives = _isolated_day_payloads(
+        day=day, equity=equity, future=future, extra_master_ticker=None
+    )
+    provider = _RecordingB3Provider({"186": price, "187": derivatives, "028": master})
+    caplog.set_level("INFO", logger="marketdata.ingestion.b3")
+    result = ingest_b3(
+        db_session,
+        reference_date=day,
+        storage=LocalFileObjectStorage(tmp_path),
+        provider=provider,
+    )
+    db_session.commit()
+    assert result["status"] == "succeeded"
+    assert provider.public_tables == [
+        "ConsolidatedRecords",
+        "InstrumentRegistration",
+    ]
+    assert resolve_instrument_id(db_session, equity) is not None
+    log_text = caplog.text.lower()
+    assert "credit" in log_text
+    assert "timeout" in log_text or "skip" in log_text
+
+
+@pytest.mark.db
+def test_scratch_still_persists_explicit_credit_payload(db_session, tmp_path, monkeypatch) -> None:
+    from marketdata.ingestion import b3 as b3_mod
+    from marketdata.ingestion.b3 import ingest_b3
+
+    day = date(2026, 8, 21)
+    equity = "CRDT4"
+    future = "DI1F03"
+    price, master, derivatives = _isolated_day_payloads(
+        day=day, equity=equity, future=future, extra_master_ticker=None
+    )
+    monkeypatch.setattr(b3_mod, "b3_equity_allowlist", lambda: frozenset({equity}))
+    result = ingest_b3(
+        db_session,
+        reference_date=day,
+        storage=LocalFileObjectStorage(tmp_path),
+        price_payload=price,
+        master_payload=master,
+        derivatives_payload=derivatives,
+        credit_trades_payload=(FIXTURES / "otc_trades.json").read_bytes(),
+        credit_master_payload=(FIXTURES / "otc_instruments.json").read_bytes(),
+    )
+    db_session.commit()
+    assert result["status"] == "succeeded"
+    assert resolve_instrument_id(db_session, equity) is not None
+    assert resolve_instrument_id(db_session, "JALL14") is not None

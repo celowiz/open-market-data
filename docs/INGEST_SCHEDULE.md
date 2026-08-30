@@ -177,6 +177,14 @@ INGEST_UNIVERSE=scratch
 the B3 equity rows are skipped (not persisted), not errored. Empty
 `INGEST_UNIVERSE` still persists the full BVBG.186.
 
+Scratch also skips the live BDI OTC credit download (trades + ~9k-row cadastro).
+That path is not in the IBOV/SMLL coverage list and was the bulk of a 2-hour
+single-day GitHub Actions run. Explicit `credit_*_payload` arguments still
+ingest. BVBG.028 is still fetched so ISINs/maturities can be attached, but only
+for tickers persisted from 186/187 — ingest does not issue one Neon lookup per
+master instrument. Stage timing logs go to stderr; B3 workflows set
+`PYTHONUNBUFFERED=1`.
+
 `ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml` pass both variables from
 repository Actions variables (`vars.INGEST_UNIVERSE`,
 `vars.B3_EQUITY_UNIVERSE_PATH`). Unset/empty keeps default full-file persist.

@@ -10,6 +10,7 @@ from marketdata.config import Settings
 from marketdata.ingestion.universe import (
     b3_equity_allowlist,
     equity_last_records_to_persist,
+    live_otc_credit_enabled,
     load_b3_equity_tickers,
     resolve_b3_equity_universe_path,
     should_persist_b3_equity_last,
@@ -159,6 +160,11 @@ def test_explicit_path_wins_over_scratch() -> None:
     assert "PETR4" in allowlist
     assert "UNKNOWN1" in allowlist
     assert "VALE3" not in allowlist
+
+
+def test_scratch_allowlist_disables_live_otc_credit() -> None:
+    assert live_otc_credit_enabled(None) is True
+    assert live_otc_credit_enabled(frozenset({"PETR4"})) is False
 
 
 def test_unknown_ingest_universe_is_rejected() -> None:

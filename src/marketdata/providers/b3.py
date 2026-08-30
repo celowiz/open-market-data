@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -13,7 +14,7 @@ from zipfile import BadZipFile, ZipFile
 import httpx
 
 from marketdata import __version__
-from marketdata.config import get_settings
+from marketdata.config import Settings, get_settings
 from marketdata.domain.errors import InvalidFinancialValueError, exact_decimal
 
 PREGAO_DOWNLOAD = "https://www.b3.com.br/pesquisapregao/download?filelist={filelist}"
@@ -119,16 +120,29 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def iter_xml_blobs(payload: bytes) -> list[bytes]:
+def b3_http_timeout(settings: Settings | None = None) -> httpx.Timeout:
+    """Bounded client timeout so Pesquisa por Pregão / BDI cannot run to the job cap.
+
+    `read` is per-chunk idle time, not total download time. Connect is short so a
+    hung handshake fails in seconds instead of 2 hours of silence.
+    """
+    cfg = settings if settings is not None else get_settings()
+    read = max(float(cfg.http_timeout_seconds), 60.0)
+    return httpx.Timeout(connect=15.0, read=read, write=30.0, pool=15.0)
+
+
+def iter_xml_blobs(payload: bytes) -> Iterator[bytes]:
+    """Yield inner XML documents one at a time (do not hold a 028-sized pair in RAM)."""
     validate_b3_zip(payload)
-    blobs: list[bytes] = []
-    _collect_xml_blobs(payload, blobs)
-    if not blobs:
+    yielded = False
+    for blob in _yield_xml_blobs(payload):
+        yielded = True
+        yield blob
+    if not yielded:
         raise B3ParseError("ZIP does not contain XML")
-    return blobs
 
 
-def _collect_xml_blobs(payload: bytes, blobs: list[bytes]) -> None:
+def _yield_xml_blobs(payload: bytes) -> Iterator[bytes]:
     try:
         archive = ZipFile(BytesIO(payload))
     except BadZipFile as exc:
@@ -140,11 +154,11 @@ def _collect_xml_blobs(payload: bytes, blobs: list[bytes]) -> None:
         for name in names:
             data = archive.read(name)
             if data[:4] == b"PK\x03\x04" and len(data) >= MIN_ZIP_BYTES:
-                _collect_xml_blobs(data, blobs)
+                yield from _yield_xml_blobs(data)
                 continue
             stripped = data.lstrip()
             if stripped.startswith(b"<?xml") or stripped.startswith(b"<"):
-                blobs.append(data)
+                yield data
 
 
 def parse_price_report(payload: bytes) -> list[B3PriceRecord]:
@@ -162,10 +176,15 @@ def parse_settlement_report(payload: bytes) -> list[B3SettlementRecord]:
     return list(by_key.values())
 
 
-def parse_instrument_master(payload: bytes) -> dict[str, B3InstrumentRecord]:
+def parse_instrument_master(
+    payload: bytes, *, keep_tickers: frozenset[str] | None = None
+) -> dict[str, B3InstrumentRecord]:
     by_ticker: dict[str, B3InstrumentRecord] = {}
+    # Inner IN zip often has two near-duplicate XML files (~0.6GB each). Parse the
+    # first only; the second is not worth a second full document walk.
     for blob in iter_xml_blobs(payload):
-        by_ticker.update(_parse_master_xml(blob))
+        by_ticker.update(_parse_master_xml(blob, keep_tickers=keep_tickers))
+        break
     return by_ticker
 
 
@@ -477,7 +496,9 @@ def _price_from_element(elem: ET.Element) -> B3PriceRecord | None:
 _MASTER_BLOCKS = frozenset({"EqtyInf", "FutrCtrctsInf"})
 
 
-def _parse_master_xml(blob: bytes) -> dict[str, B3InstrumentRecord]:
+def _parse_master_xml(
+    blob: bytes, keep_tickers: frozenset[str] | None = None
+) -> dict[str, B3InstrumentRecord]:
     by_ticker: dict[str, B3InstrumentRecord] = {}
     for _event, elem in ET.iterparse(BytesIO(blob), events=("end",)):
         block = _local_name(elem.tag)
@@ -485,6 +506,9 @@ def _parse_master_xml(blob: bytes) -> dict[str, B3InstrumentRecord]:
             continue
         ticker = _child_text(elem, "TckrSymb") or _text(elem, "TckrSymb")
         if not ticker:
+            elem.clear()
+            continue
+        if keep_tickers is not None and ticker not in keep_tickers:
             elem.clear()
             continue
         raw_maturity = _child_text(elem, "XprtnDt") or _text(elem, "XprtnDt")
@@ -508,7 +532,7 @@ class B3Provider:
     ) -> httpx.Response:
         settings = get_settings()
         headers = {"User-Agent": f"{settings.http_user_agent}/{__version__}"}
-        timeout = max(settings.http_timeout_seconds, 120)
+        timeout = b3_http_timeout(settings)
         owns_client = client is None
         http_client = client or httpx.Client(
             timeout=timeout, follow_redirects=True, headers=headers
@@ -528,7 +552,7 @@ class B3Provider:
     ) -> httpx.Response:
         settings = get_settings()
         headers = {"User-Agent": f"{settings.http_user_agent}/{__version__}"}
-        timeout = max(settings.http_timeout_seconds, 120)
+        timeout = b3_http_timeout(settings)
         owns_client = client is None
         http_client = client or httpx.Client(
             timeout=timeout, follow_redirects=True, headers=headers

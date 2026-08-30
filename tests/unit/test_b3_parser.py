@@ -6,8 +6,10 @@ from zipfile import ZipFile
 
 import pytest
 
+from marketdata.config import Settings
 from marketdata.providers.b3 import (
     B3ParseError,
+    b3_http_timeout,
     is_mvp_future_ticker,
     parse_instrument_master,
     parse_price_report,
@@ -117,6 +119,51 @@ def test_parse_settlement_dedupes_duplicate_xml_blobs() -> None:
     di1 = [item for item in records if item.ticker == "DI1F27"]
     assert len(di1) == 1
     assert di1[0].settlement == Decimal("89656.53")
+
+
+def test_parse_instrument_master_uses_first_xml_blob_only() -> None:
+    first = (FIXTURES / "instrument_master.xml").read_bytes()
+    second = first.replace(b"PETR4", b"EXTRA9", 1)
+    inner_buffer = BytesIO()
+    with ZipFile(inner_buffer, "w") as inner:
+        inner.writestr("BVBG.028.02_a.xml", first)
+        inner.writestr("BVBG.028.02_b.xml", second)
+    outer_buffer = BytesIO()
+    with ZipFile(outer_buffer, "w") as outer:
+        outer.writestr("IN260824.zip", inner_buffer.getvalue())
+    by_ticker = parse_instrument_master(outer_buffer.getvalue())
+    assert "PETR4" in by_ticker
+    assert "EXTRA9" not in by_ticker
+
+
+def test_parse_instrument_master_keep_tickers_filters_and_keeps_isin() -> None:
+    xml = (FIXTURES / "instrument_master.xml").read_text(encoding="utf-8")
+    extra = xml.replace(
+        "</EqtyInf>",
+        "</EqtyInf>\n            <EqtyInf>"
+        "<ISIN>BRVALEACNOR0</ISIN>"
+        "<TckrSymb>EXTRA9</TckrSymb>"
+        "<CrpnNm>EXTRA</CrpnNm>"
+        "<TradgCcy>BRL</TradgCcy>"
+        "</EqtyInf>",
+        1,
+    )
+    payload = _nested_zip("IN260824.zip", "BVBG.028.02_sample.xml", extra.encode("utf-8"))
+    full = parse_instrument_master(payload)
+    assert "PETR4" in full
+    assert "EXTRA9" in full
+    filtered = parse_instrument_master(payload, keep_tickers=frozenset({"PETR4"}))
+    assert set(filtered) == {"PETR4"}
+    assert filtered["PETR4"].isin == "BRPETRACNPR6"
+
+
+def test_b3_http_timeout_bounds_connect_and_read() -> None:
+    timeout = b3_http_timeout(Settings(_env_file=None, http_timeout_seconds=30))
+    assert timeout.connect == 15.0
+    assert timeout.read == 60.0
+    assert timeout.write == 30.0
+    long_read = b3_http_timeout(Settings(_env_file=None, http_timeout_seconds=180))
+    assert long_read.read == 180.0
 
 
 def test_mvp_future_ticker_allowlist() -> None:

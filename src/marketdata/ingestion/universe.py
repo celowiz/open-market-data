@@ -68,6 +68,15 @@ def should_persist_b3_equity_last(ticker: str, allowlist: frozenset[str] | None)
     return ticker.strip().upper() in allowlist
 
 
+def live_otc_credit_enabled(allowlist: frozenset[str] | None) -> bool:
+    """Live BDI credit download/persist runs only when BVBG.186 is unfiltered.
+
+    Scratch / explicit equity allowlists skip the OTC cadastro (~9k DEB/CRI/CRA
+    rows with per-instrument Neon writes). Explicit credit payloads still ingest.
+    """
+    return allowlist is None
+
+
 def equity_last_records_to_persist(
     quotes: Sequence[B3PriceRecord],
     allowlist: frozenset[str] | None,
