@@ -54,6 +54,27 @@ def test_example_universe_csv_loads() -> None:
     assert any(row.universe == "b3_futures" for row in rows)
 
 
+def test_scratch_universe_csv_is_b3_subset_of_example() -> None:
+    root = Path(__file__).resolve().parents[2] / "config"
+    example = load_universe(root / "instruments.example.csv")
+    scratch = load_universe(root / "instruments.scratch.csv")
+    example_b3 = {
+        (row.ticker, row.asset_class, row.universe)
+        for row in example
+        if row.universe in {"ibov", "smll", "b3_futures"}
+    }
+    scratch_keys = {(row.ticker, row.asset_class, row.universe) for row in scratch}
+    assert scratch_keys == example_b3
+    assert scratch_keys
+    tickers = {row.ticker for row in scratch}
+    assert "PETR4" in tickers
+    assert "DI1F27" in tickers
+    assert "AAPL" not in tickers
+    assert all(row.exchange == "B3" for row in scratch)
+    assert all(row.preferred_provider == "b3" for row in scratch)
+    assert {row.universe for row in scratch} == {"ibov", "smll", "b3_futures"}
+
+
 def test_load_universe_reads_tiny_fixture_and_skips_comments() -> None:
     rows = load_universe(FIXTURE)
     assert [row.ticker for row in rows] == ["PETR4", "DI1F27", "AAPL", "UNKNOWN1", "CVMSTUB"]

@@ -116,9 +116,11 @@ export type HealthResponse = {
   status: string;
 };
 
+export type CoverageUniverse = "scratch" | "example" | "operator";
+
 export type CoverageQuery = {
   date: string;
-  universe?: "example" | "operator";
+  universe?: CoverageUniverse;
   limit?: number;
   cursor?: number;
 };

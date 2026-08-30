@@ -3,10 +3,9 @@ from pathlib import Path
 
 from marketdata.config import Settings, get_settings
 from marketdata.coverage.csv import load_universe
-from marketdata.coverage.paths import default_universe_path
+from marketdata.coverage.paths import SCRATCH_UNIVERSE, named_universe_path
 from marketdata.providers.b3 import B3PriceRecord
 
-SCRATCH_UNIVERSE = "scratch"
 _B3_EXCHANGE = "B3"
 _EQUITY = "equity"
 
@@ -33,14 +32,15 @@ def resolve_b3_equity_universe_path(
             "use 'scratch' or leave empty for full B3 BVBG.186"
         )
     root = base if base is not None else Path(cfg.coverage_config_dir)
-    path = default_universe_path(root)
+    operator = root / "config" / "instruments.csv"
+    path = operator if operator.is_file() else named_universe_path(SCRATCH_UNIVERSE, base=root)
     if not path.is_file():
         raise FileNotFoundError(f"INGEST_UNIVERSE=scratch but universe CSV is missing: {path}")
     return path
 
 
 def load_b3_equity_tickers(path: Path) -> frozenset[str]:
-    """B3 equity tickers from a coverage-universe CSV (IBOV+SMLL in the example seed)."""
+    """B3 equity tickers from a coverage-universe CSV (IBOV+SMLL in the scratch seed)."""
     return frozenset(
         row.ticker.strip().upper()
         for row in load_universe(path)

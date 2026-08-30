@@ -7,17 +7,21 @@ Official hosting is an operator step with explicit approval. Local development
 must keep working with PostgreSQL and `./data` only. Agents must not create
 paid resources unless the user asks in the same session.
 
-Current operator state (2026-08-24):
+Current operator state (2026-08-30):
 
-- **Neon** is the serving-database target. Populate it with Phase 12
-  `marketdata backfill` **before** hosting FastAPI.
+- **Neon** (Free) is the serving Postgres. Remaining operator work is
+  historical backfill into Neon (B3 scratch 2024 slice running). That is not
+  multi-year B3 history and is not a Railway provisioning step.
+- **Railway** FastAPI is live at
+  [https://api-production-288d4.up.railway.app](https://api-production-288d4.up.railway.app)
+  (service `api`, project `open-market-data`).
 - **Vercel** Data Explorer is live at
   [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/).
-  It talks only to FastAPI `/v1` — never to `DATABASE_URL`. Until a public
-  API exists it defaults to `http://127.0.0.1:8000` (the visitor's machine).
-- **Railway** FastAPI is **not** created yet. Do not provision it until Neon
-  serving tables have history. Then follow
-  [Next operator step: Railway FastAPI](#next-operator-step-railway-fastapi-after-neon-backfill).
+  It talks only to FastAPI `/v1` — never to a database URL.
+  `NEXT_PUBLIC_API_BASE_URL` points at the Railway origin (no trailing slash).
+- Ingest universe for B3 is GitHub Actions var `INGEST_UNIVERSE=scratch`
+  (IBOV/SMLL/futures allowlist). CVM persist is Multimercado+Ações. Tesouro
+  ingest is currently-traded titles only.
 - Cloudflare R2 is not enabled.
 
 Cron conversion and B3 trading-date rules live in
@@ -98,10 +102,12 @@ INGEST_UNIVERSE=scratch
 ```
 
 `scratch` reads `config/instruments.csv` if present, else
-`config/instruments.example.csv`. An explicit
+`config/instruments.scratch.csv` (IBOV/SMLL/futures copied from the example
+seed). An explicit
 `B3_EQUITY_UNIVERSE_PATH=/path/to/universe.csv` (same columns as the example
 file) wins over `INGEST_UNIVERSE`. Tickers outside the B3 equity rows are
-skipped, not errored.
+skipped, not errored. Empty/unset `INGEST_UNIVERSE` still means full BVBG.186
+persist in Python.
 
 Then run B3 (and optionally BCB). CVM dispatch is class-filtered
 (`CVM_CLASSES=Multimercado,Ações`); `ingest-cvm.yml` stays dispatch-only.
@@ -207,8 +213,9 @@ Pass configuration at runtime (`-e`, `--env-file`, or the host's env).
 
 The image copies repository `config/` into `/app/config` (WORKDIR `/app`).
 `coverage_config_dir` defaults to `.`, so `GET /v1/coverage?universe=example`
-resolves `config/instruments.example.csv` inside the container. The operator
-file `config/instruments.csv` is gitignored and listed in `.dockerignore`;
+resolves `config/instruments.example.csv` and `universe=scratch` resolves
+`config/instruments.scratch.csv` inside the container. The operator file
+`config/instruments.csv` is gitignored and listed in `.dockerignore`;
 `universe=operator` remains 404 until that file is supplied at runtime.
 
 ```bash
@@ -234,16 +241,16 @@ docker run --rm --env-file .env open-market-data alembic upgrade head
 
 ## Production shape
 
-Intended official stack. Neon and Vercel exist as operator projects; Railway
-is the next hosting step **after** Neon backfill.
+Intended official stack. Neon, Railway, and Vercel exist as operator projects.
+Remaining operator work is Neon historical backfill, not creating Railway.
 
 | Role | Intended choice | App sees | Operator status |
 |---|---|---|---|
-| Serving database | Neon PostgreSQL | `DATABASE_URL` | Target for Phase 12 live load |
-| API process | Railway, this `Dockerfile` | `PORT` (injected) + env vars below | **Not created** — wait for Neon history |
+| Serving database | Neon PostgreSQL | serving URL on FastAPI / Actions only | Live (Free). Backfill in progress |
+| API process | Railway, this `Dockerfile` | `PORT` (injected) + env vars below | Live: [api-production-288d4.up.railway.app](https://api-production-288d4.up.railway.app) (service `api`, project `open-market-data`) |
 | Object storage | Cloudflare R2 (S3-compatible), when enabled | `OBJECT_STORAGE_BACKEND=s3` and `OBJECT_STORAGE_*` | R2 not enabled |
-| Scheduled ingest | GitHub Actions → project CLI (ADR-0006) | same env via Actions secrets/variables | Workflows exist |
-| Data Explorer | Vercel Next.js (Phase 13) | `NEXT_PUBLIC_API_BASE_URL` only — never `DATABASE_URL` | Live at [open-market-data.vercel.app](https://open-market-data.vercel.app/) |
+| Scheduled ingest | GitHub Actions → project CLI (ADR-0006) | same env via Actions secrets/variables | Workflows exist. `INGEST_UNIVERSE=scratch` |
+| Data Explorer | Vercel Next.js (Phase 13) | `NEXT_PUBLIC_API_BASE_URL` only — never a database URL | Live at [open-market-data.vercel.app](https://open-market-data.vercel.app/) pointing at the Railway origin |
 
 Self-hosters may use any PostgreSQL, any S3-compatible bucket, and the same
 image or `uvicorn`. Cloud vendors are deployment choices, not domain
@@ -257,30 +264,50 @@ runner workspace).
 
 ---
 
-## Next operator step: Railway FastAPI (after Neon backfill)
+## Remaining operator work: historical backfill into Neon
 
-**Gate:** do not create a Railway project until `marketdata backfill` has
-written the intended history into Neon. Confirm with `/v1` against local
-uvicorn pointed at that `DATABASE_URL`, or with SQL against Neon.
+<a id="next-operator-step-railway-fastapi-after-neon-backfill"></a>
 
-The public Explorer cannot call `127.0.0.1:8000`. Any public FastAPI host
-would work; Railway is the official choice (ADR-0005). Fly, Render, or a VPS
-are valid self-host alternatives, not the official instance.
+Railway FastAPI is **already live** at
+[https://api-production-288d4.up.railway.app](https://api-production-288d4.up.railway.app)
+(service `api`, project `open-market-data`). The Explorer at
+[https://open-market-data.vercel.app/](https://open-market-data.vercel.app/)
+uses `NEXT_PUBLIC_API_BASE_URL=https://api-production-288d4.up.railway.app`
+(no trailing slash; visibility **config**, not secret). Do **not** put a
+database URL on Vercel.
 
-When the operator explicitly approves this step:
+Remaining operator work is Phase 12 live load into Neon, not provisioning
+another Railway service:
 
-1. Create a Railway service from this repository `Dockerfile`. Railway injects
-   `PORT`; the image already binds `0.0.0.0`.
-2. Set Railway `DATABASE_URL` to the Neon URL (`postgresql://…?sslmode=require`).
-   Suggested release command: `alembic upgrade head`.
-3. Set Railway `CORS_ALLOWED_ORIGINS` to the exact Explorer origins:
+- B3 scratch universe (IBOV/SMLL LAST + existing MVP futures regex); a 2024
+  slice is running. Do not claim multi-year B3 history is loaded. Do **not**
+  pass `--cotahist`.
+- CVM persist stays Multimercado+Ações (`CVM_CLASSES`). `ingest-cvm.yml`
+  stays dispatch-only.
+- Tesouro ingest stays currently-traded titles only
+  (`TESOURO_CURRENT_TITLES_ONLY`, default true).
+
+Confirm coverage against the same names with
+`GET /v1/coverage?date=YYYY-MM-DD&universe=scratch`.
+
+The Railway env checklist below is how the **existing** service is wired
+(ADR-0005). Fly, Render, or a VPS remain valid self-host alternatives, not
+the official instance. Do not invent secrets in this repository.
+
+Already-hosted service (do not recreate unless replacing it):
+
+1. Railway runs this repository `Dockerfile`. Railway injects `PORT`; the
+   image already binds `0.0.0.0`.
+2. Railway holds the serving-database URL (`sslmode=require` on Neon).
+   Suggested release command: `alembic upgrade head`. Never commit that URL.
+3. Railway `CORS_ALLOWED_ORIGINS` must include the exact Explorer origins:
 
    ```text
    CORS_ALLOWED_ORIGINS=https://open-market-data.vercel.app,http://localhost:3000
    ```
 
    No trailing slash on origins.
-4. Set Railway `PUBLIC_API_BASE_URL` to the Railway public origin (no path).
+4. Railway `PUBLIC_API_BASE_URL` is the Railway public origin (no path).
    Other Python `PUBLIC_*` names (`PUBLIC_DATA_BASE_URL`,
    `PUBLIC_DATASET_PUBLICATION_ENABLED`, `PUBLIC_DATASET_FORMAT`) stay on
    FastAPI / GitHub Actions. **Do not add them to the Vercel project** and
@@ -289,17 +316,18 @@ When the operator explicitly approves this step:
 
    | Name | Value | Visibility |
    |---|---|---|
-   | `NEXT_PUBLIC_API_BASE_URL` | `https://<railway-public-host>` (no trailing slash) | **config**, not secret |
+   | `NEXT_PUBLIC_API_BASE_URL` | `https://api-production-288d4.up.railway.app` (no trailing slash) | **config**, not secret |
 
    Vercel treats `NEXT_PUBLIC_`, `PUBLIC_`, and `VITE_` as public framework
    prefixes. Those variables cannot use `visibility: secret` because they are
    inlined into the browser bundle. After saving, **redeploy** so the build
    picks up the value.
-6. Do **not** put `DATABASE_URL` on Vercel.
-7. Smoke tests: `GET https://<railway>/v1/health` then open
+6. Do **not** put a database URL on Vercel.
+7. Smoke tests: `GET https://api-production-288d4.up.railway.app/v1/health`
+   then open
    [https://open-market-data.vercel.app/](https://open-market-data.vercel.app/)
-   and confirm example cards hit `/v1` (404 body from the API is fine; a
-   connection error to `127.0.0.1:8000` is not).
+   and confirm cards hit `/v1` (404 body from the API is fine; a connection
+   error to `127.0.0.1:8000` is not).
 
 Local `.env` may set `YAHOO_PROVIDER_ENABLED=true` for development. Keep
 `.env.example` at `false`. Production Yahoo on Railway is a separate flag
@@ -377,7 +405,7 @@ Used when `OBJECT_STORAGE_BACKEND=s3`. Leave empty for local filesystem.
 |---|---|
 | `RECENT_REPROCESS_DAYS` | `90` |
 | `INGESTION_MAX_CONCURRENCY` | `4` |
-| `INGEST_UNIVERSE` | empty (full BVBG.186). `scratch` = coverage CSV |
+| `INGEST_UNIVERSE` | empty (full BVBG.186). `scratch` = `config/instruments.scratch.csv` |
 | `B3_EQUITY_UNIVERSE_PATH` | empty. Explicit CSV wins over `INGEST_UNIVERSE` |
 | `PUBLIC_DATASET_PUBLICATION_ENABLED` | `false` (must be `true` to publish) |
 | `PUBLIC_DATASET_FORMAT` | `parquet` |
@@ -434,7 +462,7 @@ until that secret exists.
 | `PUBLIC_DATASET_PUBLICATION_ENABLED` | variable | `PUBLIC_DATASET_PUBLICATION_ENABLED` | **Yes = `true`** for `publish-datasets.yml` |
 | `PUBLIC_DATA_BASE_URL` | variable | `PUBLIC_DATA_BASE_URL` | Recommended when publishing |
 | `CVM_CLASSES` | variable | `CVM_CLASSES` | No (CVM jobs default `Multimercado,Ações`) |
-| `INGEST_UNIVERSE` | variable | `INGEST_UNIVERSE` | No. Empty = persist full B3 BVBG.186. `scratch` filters 186 LAST to the coverage CSV. Wired on `ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml`. |
+| `INGEST_UNIVERSE` | variable | `INGEST_UNIVERSE` | No. Empty = persist full B3 BVBG.186. `scratch` filters 186 LAST to `config/instruments.scratch.csv`. Wired on `ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml`. |
 | `B3_EQUITY_UNIVERSE_PATH` | variable | `B3_EQUITY_UNIVERSE_PATH` | No. Empty is fine. When set, wins over `INGEST_UNIVERSE`. Same three B3 jobs. |
 
 Do not put secret values in workflow YAML. Do not commit `.env`.
@@ -473,7 +501,7 @@ Set `CORS_ALLOWED_ORIGINS` to a comma-separated list of exact origins:
 # local Explorer
 CORS_ALLOWED_ORIGINS=http://localhost:3000
 
-# public Explorer on Vercel (set on Railway when FastAPI is hosted)
+# public Explorer on Vercel (set on the live Railway API)
 # CORS_ALLOWED_ORIGINS=https://open-market-data.vercel.app,http://localhost:3000
 ```
 

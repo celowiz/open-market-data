@@ -154,8 +154,11 @@ The intended official deployment currently uses:
 - Cloudflare CDN / WAF
 - GitHub Pages for documentation
 - Next.js + Vercel as the public Data Explorer in **Phase 13** (Explorer
-  consumes FastAPI only). The Vercel site exists; public `/v1` waits on
-  Railway **after** Phase 12 Neon backfill. See
+  consumes FastAPI only). The Vercel site is live at
+  https://open-market-data.vercel.app/ with `NEXT_PUBLIC_API_BASE_URL` pointing
+  at the Railway FastAPI origin
+  (https://api-production-288d4.up.railway.app, no trailing slash). Remaining
+  operator work is historical backfill into Neon. See
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 MCP access for Neon, Cloudflare and Railway may be available in the development
@@ -234,13 +237,12 @@ but not all production resources exist yet.
 
 - Account configured.
 - Railway Remote MCP is expected to be available through OAuth.
-- No Railway project currently exists.
-- **Do not create a Railway project until operator live backfill has
-  populated Neon serving tables.** Then FastAPI on Railway is the next
-  operator step (explicit approval still required). Checklist:
+- FastAPI is live: project `open-market-data`, service `api`, origin
+  https://api-production-288d4.up.railway.app (no trailing slash).
+- Do not create additional Railway projects during discovery,
+  documentation, or foundation work. Remaining operator work is historical
+  backfill into Neon, not provisioning Railway. Checklist:
   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
-- Do not create Railway projects or deploy services during discovery,
-  documentation, or foundation work.
 
 ### Vercel
 
@@ -249,8 +251,8 @@ but not all production resources exist yet.
   not secret). It must never receive `DATABASE_URL` or Python `PUBLIC_*`
   settings (`PUBLIC_DATA_BASE_URL` is a FastAPI/CDN URL, not a Next.js
   public prefix).
-- Until Railway (or another public FastAPI) exists, the site cannot reach
-  `/v1` from visitors' browsers.
+- Production `NEXT_PUBLIC_API_BASE_URL` is
+  `https://api-production-288d4.up.railway.app` (no trailing slash).
 
 ### Cloudflare
 

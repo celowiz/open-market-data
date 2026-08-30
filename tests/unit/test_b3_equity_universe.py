@@ -22,7 +22,7 @@ from marketdata.providers.b3 import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE_CSV = ROOT / "config" / "instruments.example.csv"
+SCRATCH_CSV = ROOT / "config" / "instruments.scratch.csv"
 TINY_CSV = Path(__file__).resolve().parents[1] / "fixtures" / "coverage" / "universe.tiny.csv"
 B3_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "b3"
 UNIVERSE_HEADER = (
@@ -112,10 +112,10 @@ def test_futures_187_unchanged_when_allowlist_on() -> None:
     assert should_persist_b3_equity_last("DI1F27", allowlist) is False
 
 
-def test_scratch_reads_example_csv_b3_equities_only() -> None:
+def test_scratch_reads_scratch_csv_b3_equities_only() -> None:
     settings = _settings(ingest_universe="scratch")
     path = resolve_b3_equity_universe_path(settings, base=ROOT)
-    assert path == EXAMPLE_CSV
+    assert path == SCRATCH_CSV
     allowlist = b3_equity_allowlist(settings, base=ROOT)
     assert allowlist is not None
     assert "PETR4" in allowlist

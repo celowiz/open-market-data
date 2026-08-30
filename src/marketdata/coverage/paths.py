@@ -2,6 +2,7 @@ from pathlib import Path
 
 EXAMPLE_UNIVERSE = "example"
 OPERATOR_UNIVERSE = "operator"
+SCRATCH_UNIVERSE = "scratch"
 
 
 def default_universe_path(base: Path | None = None) -> Path:
@@ -18,4 +19,6 @@ def named_universe_path(name: str, *, base: Path | None = None) -> Path:
         return root / "config" / "instruments.example.csv"
     if name == OPERATOR_UNIVERSE:
         return root / "config" / "instruments.csv"
+    if name == SCRATCH_UNIVERSE:
+        return root / "config" / "instruments.scratch.csv"
     raise ValueError(f"unknown universe: {name}")

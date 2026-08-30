@@ -18,12 +18,14 @@ Default universe path: `config/instruments.csv` if present, else
 [`config/instruments.example.csv`](../config/instruments.example.csv).
 
 ```text
-GET /v1/coverage?date=YYYY-MM-DD&universe=example|operator
+GET /v1/coverage?date=YYYY-MM-DD&universe=example|operator|scratch
 ```
 
-`universe` is a name, never a filesystem path. `example` is the committed seed.
-`operator` is gitignored `config/instruments.csv` (404 if missing). There is no
-`/v1/yahoo` route.
+`universe` is a name, never a filesystem path. `example` is the committed
+coverage seed (includes US ticker experiments). `scratch` is the committed
+IBOV/SMLL/futures list used by `INGEST_UNIVERSE=scratch`. `operator` is
+gitignored `config/instruments.csv` (404 if missing). There is no `/v1/yahoo`
+route.
 
 The API always uses **public** mode. The CLI defaults to **local** mode.
 `--public` applies the same gate as the API (`public_api_enabled`).

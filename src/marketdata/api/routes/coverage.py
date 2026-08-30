@@ -48,7 +48,7 @@ def get_coverage_config_dir() -> Path:
 @router.get("/coverage", response_model=CoverageResponse)
 def coverage(
     date_filter: date = Query(..., alias="date"),
-    universe: Literal["example", "operator"] = Query(default="example"),
+    universe: Literal["example", "operator", "scratch"] = Query(default="example"),
     limit: int = Query(default=100, ge=1, le=1000),
     cursor: int = Query(default=0, ge=0),
     session: Session = Depends(get_db),
