@@ -11,6 +11,7 @@ import { useLocalPageOrigin } from "@/lib/use-local-origin";
 
 const NAV = [
   { href: "/", label: copy.nav.home },
+  { href: "/instruments", label: copy.nav.instruments },
   { href: "/series", label: copy.nav.series },
   { href: "/compare", label: copy.nav.compare },
   { href: "/sources", label: copy.nav.sources },
