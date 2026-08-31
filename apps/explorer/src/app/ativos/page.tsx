@@ -269,7 +269,7 @@ function AtivosExampleRow({ example }: { example: HomeExample }) {
       title={example.title}
       href={example.href}
       latest={latest.status === "success" ? latest.data : undefined}
-      loading={latest.status === "loading"}
+      loading={enabled && latest.status === "loading"}
       span={match ?? undefined}
     />
   );

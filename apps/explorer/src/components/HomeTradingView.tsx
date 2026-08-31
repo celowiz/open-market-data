@@ -352,7 +352,7 @@ function ExampleWatchRow({
       onSelect={onSelect}
       latest={latest.status === "success" ? latest.data : undefined}
       history={history.status === "success" ? history.data : undefined}
-      loading={latest.status === "loading"}
+      loading={enabled && latest.status === "loading"}
       errorText={errorText}
       span={match ?? undefined}
     />
@@ -384,7 +384,7 @@ function SearchWatchRow({
       selected={selected}
       onSelect={() => onSelect(example)}
       latest={latest.status === "success" ? latest.data : undefined}
-      loading={latest.status === "loading"}
+      loading={api.status === "ok" && latest.status === "loading"}
       span={item}
     />
   );
