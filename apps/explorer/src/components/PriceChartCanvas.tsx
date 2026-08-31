@@ -79,6 +79,12 @@ type HoverState = {
   items: HoverItem[];
 };
 
+type PreparedSeries = {
+  item: ChartSeries;
+  data: Array<LineData<Time> | WhitespaceData<Time>>;
+  raw: Map<string, string>;
+};
+
 export function PriceChartCanvas({
   rows,
   label = "Valor",
@@ -99,7 +105,7 @@ export function PriceChartCanvas({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<Array<ISeriesApi<"Line">>>([]);
-  const preparedRef = useRef(prepared);
+  const preparedRef = useRef<PreparedSeries[]>([]);
   const [hover, setHover] = useState<HoverState | null>(null);
   const reducedMotion = usePrefersReducedMotion();
 
@@ -110,7 +116,7 @@ export function PriceChartCanvas({
     return [{ key: "value", label, rows: rows ?? [], priceType, unit, kind }];
   }, [kind, label, priceType, rows, series, unit]);
 
-  const prepared = useMemo(
+  const prepared = useMemo<PreparedSeries[]>(
     () =>
       resolved.map((item) => ({
         item,
@@ -170,11 +176,11 @@ export function PriceChartCanvas({
         borderVisible: false,
         borderColor: GRID,
         timeVisible: false,
-        tickMarkFormatter: (time) => formatChartTick(time),
+        tickMarkFormatter: (time: Time) => formatChartTick(time),
       },
       localization: {
         locale: "pt-BR",
-        timeFormatter: (time) => formatChartTime(time),
+        timeFormatter: (time: Time) => formatChartTime(time),
       },
       handleScroll: reducedMotion
         ? { mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false }
@@ -193,7 +199,7 @@ export function PriceChartCanvas({
         priceFormat: {
           type: "custom",
           minMove: 0.000001,
-          formatter: (price) =>
+          formatter: (price: number) =>
             formatDisplayValue(decimalString(price), {
               priceType: item.priceType,
               unit: item.unit,
@@ -216,13 +222,14 @@ export function PriceChartCanvas({
       preparedRef.current.forEach((entry, index) => {
         const seriesApi = created[index];
         const point = seriesApi ? param.seriesData.get(seriesApi) : undefined;
-        if (!point || !("value" in point)) {
+        const value = point && "value" in point ? point.value : undefined;
+        if (typeof value !== "number") {
           return;
         }
         const raw = iso ? entry.raw.get(iso) : undefined;
         items.push({
           label: entry.item.label,
-          text: formatDisplayValue(raw ?? decimalString(point.value), {
+          text: formatDisplayValue(raw ?? decimalString(value), {
             priceType: entry.item.priceType,
             unit: entry.item.unit,
             kind: entry.item.kind,
