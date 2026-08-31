@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { ApiStatusProvider } from "@/components/ApiStatusProvider";
+import { SearchQueryProvider } from "@/components/SearchQueryProvider";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { copy } from "@/lib/copy";
@@ -32,11 +33,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-slate-100 text-slate-900">
+      <body className="flex min-h-full flex-col bg-canvas text-foreground">
         <ApiStatusProvider>
-          <SiteHeader />
-          <main className="flex-1">{children}</main>
-          <SiteFooter />
+          <SearchQueryProvider>
+            <SiteHeader />
+            <main className="flex-1">{children}</main>
+            <SiteFooter />
+          </SearchQueryProvider>
         </ApiStatusProvider>
       </body>
     </html>

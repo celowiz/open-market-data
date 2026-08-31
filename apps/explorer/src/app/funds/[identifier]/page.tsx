@@ -64,13 +64,10 @@ function FundQuotesPage() {
   const quotes = history.items;
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <p className="text-sm text-slate-500">Cotações de fundos</p>
-        <h1 className="font-mono text-2xl font-semibold text-slate-900">{identifier || "—"}</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          <code className="font-mono text-xs">GET /v1/funds/{"{identifier}"}/quotes</code>
-        </p>
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">Cotações de fundos</p>
+        <h1 className="font-mono text-2xl font-semibold tracking-tight text-foreground">{identifier || "—"}</h1>
         <LatestHeadline kind="fund" identifier={identifier} />
       </header>
 
@@ -94,7 +91,7 @@ function FundQuotesPage() {
           {quotes.length === 0 ? (
             <EmptyState>
               <p>Nenhuma cota neste intervalo.</p>
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs text-muted">
                 Valor de cota ausente não é substituído por placeholder. Operadores: rode{" "}
                 <code className="font-mono">marketdata backfill cvm</code> se esperava histórico
                 deste CNPJ.
@@ -103,6 +100,7 @@ function FundQuotesPage() {
           ) : (
             <>
               <PriceChart
+                variant="hero"
                 label="Cota (NAV)"
                 priceType={quotes[0]?.price_type ?? "FUND_NAV"}
                 unit={quotes[0]?.unit}
@@ -126,7 +124,7 @@ export default function FundQuotesRoute() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-8">
           <LoadingState label="Carregando página do fundo…" />
         </div>
       }

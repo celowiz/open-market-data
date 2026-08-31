@@ -16,10 +16,10 @@ export function DatasetManifestCard({
   const fileUrl = !blocked && dataset.url ? dataset.url : null;
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="text-lg font-semibold text-slate-900">
+    <article className="rounded-2xl border border-border bg-surface p-4">
+      <h2 className="text-lg font-semibold text-foreground">
         {detailHref ? (
-          <Link href={detailHref} className="text-teal-800 hover:underline">
+          <Link href={detailHref} className="text-accent hover:underline">
             {dataset.dataset_name}
           </Link>
         ) : (
@@ -28,48 +28,48 @@ export function DatasetManifestCard({
       </h2>
       <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-xs text-slate-500">Schema</dt>
+          <dt className="text-xs text-muted">Schema</dt>
           <dd className="font-mono">{dataset.schema_version}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Data do snapshot</dt>
+          <dt className="text-xs text-muted">Data do snapshot</dt>
           <dd className="font-mono">{dataset.snapshot_date}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Gerado em</dt>
+          <dt className="text-xs text-muted">Gerado em</dt>
           <dd className="font-mono text-xs">{dataset.generated_at}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Linhas</dt>
+          <dt className="text-xs text-muted">Linhas</dt>
           <dd>{dataset.row_count}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Licença</dt>
+          <dt className="text-xs text-muted">Licença</dt>
           <dd>{dataset.license}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Redistribuição</dt>
+          <dt className="text-xs text-muted">Redistribuição</dt>
           <dd className="font-mono text-xs">{dataset.redistribution_policy}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-xs text-slate-500">Fontes</dt>
+          <dt className="text-xs text-muted">Fontes</dt>
           <dd>{dataset.sources.join(", ") || "—"}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-xs text-slate-500">Chave do objeto</dt>
+          <dt className="text-xs text-muted">Chave do objeto</dt>
           <dd className="break-all font-mono text-xs">{dataset.object_key}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-xs text-slate-500">SHA-256</dt>
+          <dt className="text-xs text-muted">SHA-256</dt>
           <dd className="break-all font-mono text-xs">{dataset.sha256}</dd>
         </div>
       </dl>
       <div className="mt-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Atribuição</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Atribuição</h3>
         {dataset.attribution.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhuma linha de atribuição neste manifesto.</p>
+          <p className="text-sm text-muted">Nenhuma linha de atribuição neste manifesto.</p>
         ) : (
-          <ul className="mt-1 list-disc pl-5 text-sm text-slate-700">
+          <ul className="mt-1 list-disc pl-5 text-sm text-foreground">
             {dataset.attribution.map((line) => (
               <li key={line}>{line}</li>
             ))}
@@ -82,13 +82,13 @@ export function DatasetManifestCard({
             href={fileUrl}
             rel="nofollow noopener noreferrer"
             target="_blank"
-            className="font-medium text-teal-800 hover:underline"
+            className="font-medium text-accent hover:underline"
           >
             Arquivo do conjunto
           </a>
         </p>
       ) : (
-        <p className="mt-3 text-sm text-slate-600">
+        <p className="mt-3 text-sm text-muted">
           {blocked
             ? "Nenhum download é oferecido para fontes bloqueadas (incluindo B3 e Yahoo)."
             : "Nenhuma URL pública de arquivo está configurada para este manifesto."}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
+import { SkeletonBlock } from "@/components/Status";
 import {
   fetchFundLatest,
   fetchQuoteLatest,
@@ -77,11 +78,11 @@ export function LatestHeadline({
     return null;
   }
   if (latest.status === "loading") {
-    return <p className="text-sm text-slate-600">Carregando último valor…</p>;
+    return <SkeletonBlock label="Carregando último valor…" />;
   }
   if (latest.status === "error") {
     return (
-      <p className="text-sm text-red-800">
+      <p className="text-sm text-danger">
         {formatApiError(latest.error)}
         {isNotFoundError(latest.error) ? ` — ${copy.common.noSynthetic}.` : null}
       </p>
@@ -91,16 +92,16 @@ export function LatestHeadline({
   return (
     <div className="mt-3">
       {name.status === "success" && name.data && name.data !== identifier ? (
-        <p className="text-sm text-slate-700">{name.data}</p>
+        <p className="text-sm text-muted">{name.data}</p>
       ) : null}
-      <p className="font-mono text-2xl tabular-nums text-slate-900">
+      <p className="font-mono text-3xl font-semibold tabular-nums tracking-tight text-foreground">
         {formatDisplayValue(latest.data.value, {
           priceType: latest.data.priceType,
           unit: latest.data.unit,
           kind: latest.data.kind,
         })}
       </p>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted">
         {latest.data.date} · {latest.data.extra}
       </p>
     </div>

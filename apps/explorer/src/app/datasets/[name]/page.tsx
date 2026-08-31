@@ -19,11 +19,11 @@ export default function DatasetDetailPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <p className="text-sm text-slate-500">Conjunto de dados</p>
-        <h1 className="font-mono text-2xl font-semibold text-slate-900">{name || "—"}</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="text-sm text-muted">Conjunto de dados</p>
+        <h1 className="font-mono text-2xl font-semibold text-foreground">{name || "—"}</h1>
+        <p className="mt-1 text-sm text-muted">
           <code className="font-mono text-xs">GET /v1/datasets/{"{name}"}</code>
         </p>
       </header>

@@ -14,10 +14,10 @@ export default function DatasetsPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Manifestos de conjuntos</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-foreground">Manifestos de conjuntos</h1>
+        <p className="mt-1 text-sm text-muted">
           Listagens de <code className="font-mono text-xs">GET /v1/datasets</code>. Só entram
           catálogos com redistribuição permitida. Não há botão de download da B3.
         </p>
@@ -29,7 +29,7 @@ export default function DatasetsPage() {
       {state.status === "success" && state.data.length === 0 ? (
         <EmptyState>
           <p>Nenhum manifesto público foi publicado ainda.</p>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-muted">
             Operadores: após um backfill ODbL, rode{" "}
             <code className="font-mono text-xs">marketdata publish datasets</code>.
           </p>

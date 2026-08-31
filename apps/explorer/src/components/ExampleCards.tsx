@@ -73,13 +73,13 @@ function ExampleCard({ example }: { example: HomeExample }) {
   const notFound = state.status === "error" && isNotFoundError(state.error);
 
   return (
-    <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-900">{example.title}</h3>
-      <p className="mt-1 font-mono text-sm text-teal-800">{example.identifier}</p>
-      <p className="mt-2 text-sm text-slate-600">{example.description}</p>
+    <article className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm">
+      <h3 className="text-sm font-semibold text-foreground">{example.title}</h3>
+      <p className="mt-1 font-mono text-sm text-accent">{example.identifier}</p>
+      <p className="mt-2 text-sm text-muted">{example.description}</p>
       <div className="mt-3 min-h-[4.5rem]">
         {api.status === "unreachable" ? (
-          <p className="font-mono text-lg tabular-nums text-slate-300" aria-hidden="true">
+          <p className="font-mono text-lg tabular-nums text-muted" aria-hidden="true">
             —
           </p>
         ) : null}
@@ -88,22 +88,21 @@ function ExampleCard({ example }: { example: HomeExample }) {
         ) : null}
         {state.status === "success" ? (
           <p>
-            <span className="block font-mono text-lg tabular-nums text-slate-900">
+            <span className="block font-mono text-lg tabular-nums text-foreground">
               {formatDisplayValue(state.data.value, {
                 priceType: state.data.priceType,
                 unit: state.data.unit,
                 kind: state.data.kind,
               })}
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-muted">
               {state.data.date} · {state.data.extra}
             </span>
           </p>
         ) : null}
         {state.status === "error" ? (
           <p
-            role="alert"
-            className="break-words font-mono text-xs text-red-800"
+            className="break-words font-mono text-xs text-danger"
             title={formatApiError(state.error)}
           >
             {formatApiError(state.error)}
@@ -113,7 +112,7 @@ function ExampleCard({ example }: { example: HomeExample }) {
       </div>
       <Link
         href={example.href}
-        className="mt-auto pt-3 text-sm font-medium text-teal-800 hover:underline"
+        className="mt-auto pt-3 text-sm font-medium text-accent hover:underline"
       >
         {copy.common.openHistory}
       </Link>
@@ -131,8 +130,8 @@ export function ExampleCards() {
       </div>
       {SECONDARY_HOME_EXAMPLES.length > 0 ? (
         <aside className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold text-slate-700">Yahoo (não oficial)</h3>
-          <p className="text-xs text-slate-500">
+          <h3 className="text-sm font-semibold text-foreground">Yahoo (não oficial)</h3>
+          <p className="text-xs text-muted">
             Fonte secundária, fora do primeiro conjunto de exemplos brasileiros. Sem download em
             lote.
           </p>
