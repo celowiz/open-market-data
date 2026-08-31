@@ -51,10 +51,15 @@ export const copy = {
     retry: "Tentar novamente",
     startDate: "Data inicial",
     endDate: "Data final",
+    firstQuote: "Primeira cotação",
+    lastQuote: "Última cotação",
+    sessions: "Pregões",
     priceType: "Tipo de preço",
     source: "Fonte",
     noSynthetic: "sem preço sintético",
     backfillSecondary: "Operadores: rode marketdata backfill se esperava histórico neste identificador.",
+    historyLoading:
+      "O histórico ainda está sendo carregado. Datas e totais aparecem quando as cotações chegam ao banco.",
     openHistory: "Abrir histórico",
   },
   shortcuts: {

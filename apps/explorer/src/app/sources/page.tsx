@@ -20,8 +20,8 @@ export default function SourcesPage() {
         <h1 className="text-2xl font-semibold text-slate-900">Fontes</h1>
         <p className="mt-1 text-sm text-slate-600">
           Fontes visíveis na API pública, de{" "}
-          <code className="font-mono text-xs">GET /v1/sources</code>. A lista inclui toda fonte com
-          API pública habilitada.
+          <code className="font-mono text-xs">GET /v1/sources</code>. A lista padrão mostra as fontes
+          dos provedores registrados (b3, bcb, cvm, tesouro, yahoo), não linhas de teste.
         </p>
       </header>
       {api.status !== "unreachable" && (api.status === "loading" || state.status === "loading") ? (

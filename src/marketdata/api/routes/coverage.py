@@ -1,14 +1,20 @@
 from datetime import date
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from marketdata.api.deps import get_db
+from marketdata.api.span import (
+    QuoteSpan,
+    load_instrument_source_spans,
+    resolve_universe_instrument_ids,
+)
 from marketdata.config import get_settings
-from marketdata.coverage.csv import load_universe
+from marketdata.coverage.csv import UniverseRow, load_universe
 from marketdata.coverage.engine import CoverageMode, evaluate_coverage
 from marketdata.coverage.paths import named_universe_path
 from marketdata.coverage.store import SessionCoverageStore
@@ -39,6 +45,26 @@ class CoverageResponse(BaseModel):
     missing_reason_counts: dict[str, int]
     results: list[CoverageItemResponse]
     next_cursor: int | None = None
+
+
+class CoverageSpanItem(BaseModel):
+    ticker: str
+    instrument_id: str | None = None
+    source: str | None = None
+    min_date: date | None = None
+    max_date: date | None = None
+    quote_count: int = 0
+
+
+class CoverageSpanResponse(BaseModel):
+    universe: str
+    universe_size: int
+    instruments_with_quotes: int
+    min_date: date | None = None
+    max_date: date | None = None
+    quote_count: int = 0
+    source: str | None = None
+    results: list[CoverageSpanItem]
 
 
 def get_coverage_config_dir() -> Path:
@@ -89,4 +115,69 @@ def coverage(
             for item in page
         ],
         next_cursor=next_cursor,
+    )
+
+
+def _optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _span_source(row: UniverseRow, source_name: str | None) -> str | None:
+    return source_name or (row.preferred_provider or None) or None
+
+
+def _span_for_row(
+    *,
+    instrument_id: UUID | None,
+    source: str | None,
+    spans: dict[tuple[UUID, str], QuoteSpan],
+) -> QuoteSpan | None:
+    if instrument_id is None or source is None:
+        return None
+    return spans.get((instrument_id, source))
+
+
+@router.get("/coverage/span", response_model=CoverageSpanResponse)
+def coverage_span(
+    universe: Literal["example", "operator", "scratch"] = Query(default="example"),
+    source: str | None = Query(default=None),
+    session: Session = Depends(get_db),
+    config_dir: Path = Depends(get_coverage_config_dir),
+) -> CoverageSpanResponse:
+    csv_path = named_universe_path(universe, base=config_dir)
+    if not csv_path.is_file():
+        raise HTTPException(status_code=404, detail="universe not found")
+    rows = load_universe(csv_path)
+    source_name = _optional_text(source)
+    resolved = resolve_universe_instrument_ids(session, rows, source_name=source_name)
+    instrument_ids = [instrument_id for instrument_id in resolved if instrument_id is not None]
+    spans = load_instrument_source_spans(session, instrument_ids, source_name=source_name)
+    results: list[CoverageSpanItem] = []
+    for row, instrument_id in zip(rows, resolved, strict=True):
+        item_source = _span_source(row, source_name)
+        span = _span_for_row(instrument_id=instrument_id, source=item_source, spans=spans)
+        results.append(
+            CoverageSpanItem(
+                ticker=row.ticker,
+                instrument_id=str(instrument_id) if instrument_id is not None else None,
+                source=item_source,
+                min_date=span.min_date if span is not None else None,
+                max_date=span.max_date if span is not None else None,
+                quote_count=span.quote_count if span is not None else 0,
+            )
+        )
+    min_dates = [item.min_date for item in results if item.min_date is not None]
+    max_dates = [item.max_date for item in results if item.max_date is not None]
+    return CoverageSpanResponse(
+        universe=universe,
+        universe_size=len(results),
+        instruments_with_quotes=sum(1 for item in results if item.quote_count > 0),
+        min_date=min(min_dates) if min_dates else None,
+        max_date=max(max_dates) if max_dates else None,
+        quote_count=sum(item.quote_count for item in results),
+        source=source_name,
+        results=results,
     )

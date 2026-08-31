@@ -11,6 +11,7 @@ import { EmptyState, LoadingState } from "@/components/Status";
 import { INSTRUMENT_PAGE_SIZE, fetchSources, listInstruments } from "@/lib/api";
 import { copy, offlineFormHint } from "@/lib/copy";
 import { hrefForInstrument } from "@/lib/links";
+import { formatPregoes } from "@/lib/span";
 import type { InstrumentSearchItem, SourceResponse } from "@/lib/types";
 import { useClientFetch } from "@/lib/use-client-fetch";
 import { useHistoryPages } from "@/lib/use-history-pages";
@@ -55,6 +56,15 @@ function InstrumentsTable({ rows }: { rows: InstrumentSearchItem[] }) {
             <th scope="col" className="px-3 py-2 font-medium">
               Fonte
             </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              {copy.common.firstQuote}
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              {copy.common.lastQuote}
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              {copy.common.sessions}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -75,6 +85,9 @@ function InstrumentsTable({ rows }: { rows: InstrumentSearchItem[] }) {
               <td className="px-3 py-2">
                 {row.sources && row.sources.length > 0 ? row.sources.join(", ") : "—"}
               </td>
+              <td className="px-3 py-2 font-mono">{row.first_quote_date ?? "—"}</td>
+              <td className="px-3 py-2 font-mono">{row.last_quote_date ?? "—"}</td>
+              <td className="px-3 py-2 font-mono tabular-nums">{formatPregoes(row.quote_count)}</td>
             </tr>
           ))}
         </tbody>
@@ -165,8 +178,8 @@ function InstrumentsCatalogPage() {
         <h1 className="text-2xl font-semibold text-slate-900">Ativos</h1>
         <p className="mt-1 text-sm text-slate-600">
           Catálogo de <code className="font-mono text-xs">GET /v1/instruments</code>. Sem consulta,
-          a API lista os instrumentos públicos (com cotação de fonte habilitada), paginados. Séries
-          BCB continuam em{" "}
+          a API lista os instrumentos públicos (com cotação de fonte habilitada), paginados, com
+          primeira e última data e o número de pregões. Séries BCB continuam em{" "}
           <Link href="/series" className="font-medium text-teal-800 hover:underline">
             Séries
           </Link>
@@ -250,7 +263,7 @@ function InstrumentsCatalogPage() {
       {history.status === "success" && rows.length === 0 ? (
         <EmptyState>
           <p>Nenhum instrumento público corresponde a estes filtros.</p>
-          <p className="mt-2 text-xs text-slate-500">{copy.common.backfillSecondary}</p>
+          <p className="mt-2 text-xs text-slate-500">{copy.common.historyLoading}</p>
         </EmptyState>
       ) : null}
 

@@ -401,7 +401,19 @@ def test_instruments_openapi_lists_with_optional_q() -> None:
         name = schema["$ref"].rsplit("/", 1)[-1]
         schema = spec["components"]["schemas"][name]
     assert "next_cursor" in schema["properties"]
-    assert "sources" in spec["components"]["schemas"]["InstrumentSearchItem"]["properties"]
+    item = spec["components"]["schemas"]["InstrumentSearchItem"]
+    assert "sources" in item["properties"]
+    assert "first_quote_date" in item["properties"]
+    assert "last_quote_date" in item["properties"]
+    assert "quote_count" in item["properties"]
+
+
+def test_sources_openapi_hides_test_rows_by_default() -> None:
+    spec = _client().get("/openapi.json").json()
+    operation = spec["paths"]["/v1/sources"]["get"]
+    params = {item["name"]: item for item in operation["parameters"]}
+    assert params["include_test"]["schema"]["default"] is False
+    assert params["include_test"].get("required") is not True
 
 
 def test_instruments_invalid_cursor_returns_400() -> None:
@@ -684,3 +696,39 @@ def test_instruments_list_pagination_and_source_filter(explorer_seed, db_session
     fund_ids = _instrument_ids(funds)
     assert explorer_seed.fund_instrument_id in fund_ids
     assert explorer_seed.b3_instrument_id not in fund_ids
+
+
+@pytest.mark.db
+def test_instruments_include_quote_span_fields(explorer_seed) -> None:
+    client = _client()
+    response = client.get("/v1/instruments", params={"q": explorer_seed.b3_ticker})
+    assert response.status_code == 200
+    rows = response.json()["instruments"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["first_quote_date"] == "2026-01-05"
+    assert row["last_quote_date"] == "2026-01-07"
+    assert row["quote_count"] == 3
+
+
+@pytest.mark.db
+def test_sources_default_hides_test_names(explorer_seed, db_session) -> None:
+    canonical = _source(
+        db_session,
+        name="b3",
+        policy=RedistributionPolicy.API_ONLY,
+        public_api=True,
+    )
+    canonical.public_api_enabled = True
+    db_session.commit()
+    client = _client()
+    names = {row["name"] for row in client.get("/v1/sources").json()}
+    assert canonical.name in names
+    assert explorer_seed.b3_source_name not in names
+    assert explorer_seed.yahoo_source_name not in names
+    with_tests = {
+        row["name"] for row in client.get("/v1/sources", params={"include_test": True}).json()
+    }
+    assert explorer_seed.b3_source_name in with_tests
+    assert explorer_seed.yahoo_source_name in with_tests
+    assert canonical.name in with_tests

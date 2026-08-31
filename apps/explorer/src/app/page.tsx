@@ -63,8 +63,8 @@ export default function HomePage() {
           </Link>
         </div>
         <p className="text-sm text-slate-600">
-          De <code className="font-mono text-xs">GET /v1/sources</code>. Aparecem as fontes com API
-          pública habilitada, inclusive Yahoo.
+          De <code className="font-mono text-xs">GET /v1/sources</code>. Aparecem as fontes dos
+          provedores registrados com API pública habilitada, inclusive Yahoo.
         </p>
         {api.status === "unreachable" ? (
           <div

@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from marketdata.api.access import source_row_allows_public_api
 from marketdata.api.deps import get_db
+from marketdata.api.span import load_instrument_spans
 from marketdata.storage.models import (
     InstrumentIdentifierRow,
     InstrumentQuoteRow,
@@ -26,6 +28,9 @@ class InstrumentSearchItem(BaseModel):
     asset_class: str
     identifiers: list[str]
     sources: list[str] = []
+    first_quote_date: date | None = None
+    last_quote_date: date | None = None
+    quote_count: int | None = None
 
 
 class InstrumentsResponse(BaseModel):
@@ -180,6 +185,7 @@ def search_instruments(
     instrument_ids = [instrument.id for instrument in page]
     identifiers = _public_identifier_values_by_instrument(session, instrument_ids)
     sources = _public_source_names_by_instrument(session, instrument_ids)
+    spans = load_instrument_spans(session, instrument_ids, source_name=source_name)
     return InstrumentsResponse(
         instruments=[
             InstrumentSearchItem(
@@ -188,6 +194,9 @@ def search_instruments(
                 asset_class=instrument.asset_class,
                 identifiers=identifiers[instrument.id],
                 sources=sources[instrument.id],
+                first_quote_date=spans[instrument.id].min_date if instrument.id in spans else None,
+                last_quote_date=spans[instrument.id].max_date if instrument.id in spans else None,
+                quote_count=spans[instrument.id].quote_count if instrument.id in spans else 0,
             )
             for instrument in page
         ],
