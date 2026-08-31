@@ -171,6 +171,13 @@ function AtivosPage() {
         <p className="text-sm text-muted">{offlineFormHint(localOrigin)}</p>
       ) : null}
 
+      {!catalogFilters ? (
+        <p className="text-sm text-muted">
+          Escolha uma fonte ou classe para listar o catálogo em cartões. A busca acima não envia q
+          vazio.
+        </p>
+      ) : null}
+
       {catalogFilters && api.status !== "unreachable" && history.status === "loading" ? (
         <RowSkeleton count={8} />
       ) : null}
