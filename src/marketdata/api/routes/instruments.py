@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, lateral, literal, or_, select, true
 from sqlalchemy.orm import Session
 
 from marketdata.api.access import source_row_allows_public_api
@@ -60,15 +60,20 @@ def _ilike_contains(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _visible_instrument_ids(*, source_name: str | None = None):
+def instrument_visibility_lateral(*, source_name: str | None = None):
+    """LATERAL LIMIT 1 so visibility is an index lookup per instrument, not a quotes seq scan."""
     stmt = (
-        select(InstrumentQuoteRow.instrument_id)
+        select(literal(True))
+        .select_from(InstrumentQuoteRow)
         .join(SourceRow, SourceRow.id == InstrumentQuoteRow.source_id)
-        .where(SourceRow.public_api_enabled.is_(True))
+        .where(
+            InstrumentQuoteRow.instrument_id == InstrumentRow.id,
+            SourceRow.public_api_enabled.is_(True),
+        )
     )
     if source_name is not None:
         stmt = stmt.where(SourceRow.name == source_name)
-    return stmt.distinct()
+    return lateral(stmt.limit(1).correlate(InstrumentRow)).alias("visible_quote")
 
 
 def _matching_instrument_ids(*, q: str):
@@ -166,7 +171,7 @@ def search_instruments(
 
     stmt = (
         select(InstrumentRow)
-        .where(InstrumentRow.id.in_(_visible_instrument_ids(source_name=source_name)))
+        .join(instrument_visibility_lateral(source_name=source_name), true())
         .order_by(InstrumentRow.name, InstrumentRow.id)
     )
     if query is not None:

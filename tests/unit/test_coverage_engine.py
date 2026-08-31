@@ -436,3 +436,40 @@ def test_preferred_provider_does_not_use_other_source_ticker() -> None:
         rows, reference_date=REF, store=store, mode=CoverageMode.LOCAL, today=REF
     )
     assert report.results[0].missing_reason is MissingReason.MAPPING_ERROR
+
+
+class _PrefetchRecordingStore(InMemoryCoverageStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.prefetch_calls = 0
+        self.prefetch_row_count = 0
+
+    def prefetch_universe(self, rows, reference_date: date) -> None:
+        self.prefetch_calls += 1
+        self.prefetch_row_count = len(rows)
+        assert reference_date == REF
+
+
+def test_evaluate_coverage_prefetches_universe_once_when_store_supports_it() -> None:
+    petr4 = uuid4()
+    store = _PrefetchRecordingStore()
+    store.add_source(_b3_source())
+    store.add_instrument(petr4)
+    store.add_identifier(petr4, IdentifierType.TICKER, "PETR4", "b3")
+    store.add_quote(
+        StoredQuote(
+            instrument_id=petr4,
+            reference_date=REF,
+            value=Decimal("32.51"),
+            price_type=PriceType.LAST,
+            source_name="b3",
+            quality_status=QualityStatus.OK.value,
+        )
+    )
+    rows = load_universe(FIXTURE)[:1]
+    report = evaluate_coverage(
+        rows, reference_date=REF, store=store, mode=CoverageMode.LOCAL, today=REF
+    )
+    assert store.prefetch_calls == 1
+    assert store.prefetch_row_count == 1
+    assert report.results[0].status is CoverageStatus.PRICED

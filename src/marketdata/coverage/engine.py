@@ -58,6 +58,9 @@ def evaluate_coverage(
     universe_name: str = "example",
 ) -> CoverageReport:
     as_of = today or datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+    prefetch = getattr(store, "prefetch_universe", None)
+    if prefetch is not None:
+        prefetch(rows, reference_date)
     results = [
         _evaluate_row(row, reference_date=reference_date, store=store, mode=mode, today=as_of)
         for row in rows

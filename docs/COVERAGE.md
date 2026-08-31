@@ -69,6 +69,49 @@ The committed example is an **incomplete snapshot**. See
 at coverage time. US rows are a ticker experiment, not licensed index-constituent
 redistribution.
 
+## Read path (API)
+
+`GET /v1/coverage` still scores the **whole** named CSV, then slices
+`results[cursor:cursor+limit]`. Totals (`priced`, `missing_reason_counts`) are
+universe-wide. The contract is unchanged.
+
+The slow path was not a missing index and not a Python date walk. For each
+CSV row the store issued separate SQL for source, identifier resolve, the
+session quote, `NO_PUBLIC_PRICE` events, ingest success, and `MAX(reference_date)`
+when the session was missing. Scratch is ~165 names. On Neon Free
+(`instrument_quotes` ~139 MB / ~350k rows, history back to 2004) that is
+hundreds of Railway→Neon round trips. A 2024-06-03 scratch request took ~199s
+with 146 `STALE` results.
+
+`SessionCoverageStore.prefetch_universe` now loads that snapshot in a handful
+of SELECTs, then `_evaluate_row` answers from memory:
+
+1. `sources` for preferred providers in the CSV.
+2. `instrument_identifiers` for all tickers/ISINs in the CSV
+   (`ix_instrument_identifiers_type_value`).
+3. `instrument_quotes` for those instrument ids on the requested date
+   (`uq_instrument_quotes_identity` / `(instrument_id, reference_date)`).
+   Highest `revision` wins in Python.
+4. `MAX(reference_date)` grouped by `(instrument_id, price_type, source)` for
+   `reference_date < :date` — Nested Loop + index-only scan on
+   `uq_instrument_quotes_identity`, not a seq scan. EXPLAIN ANALYZE for three
+   IBOV names was <1ms.
+5. Successful `ingestion_runs` for those providers and date.
+6. `quality_events` with `event_type = NO_PUBLIC_PRICE` for those ids.
+
+No migration. Existing `(instrument_id, reference_date)` indexes are enough.
+Prefetch is read-only (`SELECT`); it does not lock `instrument_quotes` and is
+safe while backfill inserts.
+
+Neighboring Explorer reads:
+
+- `GET /v1/instruments` used `SELECT DISTINCT instrument_id FROM instrument_quotes`
+  (seq scan, ~167ms on Neon plus transfer). It now uses `LATERAL … LIMIT 1`
+  correlated to `instruments` so PostgreSQL nested-loops the unique quote
+  index (~59ms for 21 rows, scales with instrument count).
+- Quote history hydrates `source` and `raw_artifact_sha256` in two IN queries
+  per page instead of `session.get` per row.
+
 ## Out of scope
 
 Live rebalancing, licensed US index feeds, ANBIMA, fair-value fills, funds,

@@ -418,6 +418,25 @@ def test_sources_openapi_hides_test_rows_by_default() -> None:
     assert params["include_test"].get("required") is not True
 
 
+def test_instruments_visibility_sql_uses_lateral_not_full_quotes_distinct() -> None:
+    from sqlalchemy import select, true
+    from sqlalchemy.dialects import postgresql
+
+    from marketdata.api.routes.instruments import instrument_visibility_lateral
+    from marketdata.storage.models import InstrumentRow
+
+    stmt = (
+        select(InstrumentRow)
+        .join(instrument_visibility_lateral(source_name=None), true())
+        .order_by(InstrumentRow.name, InstrumentRow.id)
+        .limit(21)
+    )
+    sql = str(stmt.compile(dialect=postgresql.dialect())).upper()
+    assert "LATERAL" in sql
+    assert "INSTRUMENT_QUOTES" in sql
+    assert "DISTINCT" not in sql
+
+
 def test_instruments_invalid_cursor_returns_400() -> None:
     response = _client().get("/v1/instruments", params={"cursor": "not-a-uuid"})
     assert response.status_code == 400

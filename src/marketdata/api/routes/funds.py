@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from marketdata.api.access import instrument_visible_on_public_api, public_quotes_stmt
@@ -42,29 +43,44 @@ class FundQuotesResponse(BaseModel):
     next_cursor: date | None = None
 
 
-def _source_name(session: Session, source_id) -> str:
-    source = session.get(SourceRow, source_id)
-    return source.name if source is not None else "unknown"
+def quote_responses(session: Session, rows: list[InstrumentQuoteRow]) -> list[QuoteResponse]:
+    if not rows:
+        return []
+    source_ids = {row.source_id for row in rows}
+    artifact_ids = {row.raw_artifact_id for row in rows if row.raw_artifact_id is not None}
+    sources = {
+        source.id: source.name
+        for source in session.scalars(select(SourceRow).where(SourceRow.id.in_(source_ids)))
+    }
+    artifacts: dict[object, str] = {}
+    if artifact_ids:
+        artifacts = {
+            artifact.id: artifact.sha256
+            for artifact in session.scalars(
+                select(RawArtifactRow).where(RawArtifactRow.id.in_(artifact_ids))
+            )
+        }
+    return [
+        QuoteResponse(
+            date=row.reference_date,
+            price=decimal_json(Decimal(row.value)),
+            currency=row.currency,
+            price_type=row.price_type,
+            source=sources.get(row.source_id, "unknown"),
+            official=row.is_official,
+            revision=row.revision,
+            retrieved_at=row.retrieved_at.isoformat() if row.retrieved_at else None,
+            raw_artifact_sha256=(
+                artifacts.get(row.raw_artifact_id) if row.raw_artifact_id is not None else None
+            ),
+            unit=row.unit,
+        )
+        for row in rows
+    ]
 
 
 def _to_quote(session: Session, row: InstrumentQuoteRow) -> QuoteResponse:
-    artifact_sha: str | None = None
-    if row.raw_artifact_id is not None:
-        artifact = session.get(RawArtifactRow, row.raw_artifact_id)
-        if artifact is not None:
-            artifact_sha = artifact.sha256
-    return QuoteResponse(
-        date=row.reference_date,
-        price=decimal_json(Decimal(row.value)),
-        currency=row.currency,
-        price_type=row.price_type,
-        source=_source_name(session, row.source_id),
-        official=row.is_official,
-        revision=row.revision,
-        retrieved_at=row.retrieved_at.isoformat() if row.retrieved_at else None,
-        raw_artifact_sha256=artifact_sha,
-        unit=row.unit,
-    )
+    return quote_responses(session, [row])[0]
 
 
 @router.get("/funds/{identifier}/quotes", response_model=FundQuotesResponse)
@@ -100,7 +116,7 @@ def fund_quotes(
     return FundQuotesResponse(
         instrument_id=str(instrument_id),
         identifier=identifier,
-        quotes=[_to_quote(session, row) for row in rows],
+        quotes=quote_responses(session, rows),
         next_cursor=next_cursor,
     )
 

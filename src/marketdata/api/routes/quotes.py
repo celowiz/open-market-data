@@ -13,7 +13,7 @@ from marketdata.api.query import (
     load_history_page,
     parse_history_window,
 )
-from marketdata.api.routes.funds import QuoteResponse, _to_quote
+from marketdata.api.routes.funds import QuoteResponse, _to_quote, quote_responses
 from marketdata.api.span import load_instrument_spans
 from marketdata.storage.models import InstrumentQuoteRow
 from marketdata.storage.repositories import resolve_instrument_id
@@ -76,7 +76,7 @@ def list_quotes(
     return QuotesResponse(
         instrument_id=str(instrument_id),
         identifier=identifier,
-        quotes=[_to_quote(session, row) for row in rows],
+        quotes=quote_responses(session, rows),
         next_cursor=next_cursor,
         first_quote_date=span.min_date if span is not None else None,
         last_quote_date=span.max_date if span is not None else None,
