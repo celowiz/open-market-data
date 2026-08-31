@@ -1,20 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useId, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { AssetRow, AssetRowList } from "@/components/AssetRow";
 import { useApiStatus } from "@/components/ApiStatusProvider";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { InstrumentSearch } from "@/components/InstrumentSearch";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { PageHeader, PageShell } from "@/components/PageShell";
 import { EmptyState, LoadingState, RowSkeleton } from "@/components/Status";
-import { INSTRUMENT_PAGE_SIZE, fetchSources, listInstruments, searchInstruments } from "@/lib/api";
-import { loadLatestPrint } from "@/lib/asset";
+import { INSTRUMENT_PAGE_SIZE, fetchSources, listInstruments } from "@/lib/api";
 import { copy, offlineFormHint } from "@/lib/copy";
-import { BRAZIL_HOME_EXAMPLES, type HomeExample } from "@/lib/examples";
 import { hrefForInstrument } from "@/lib/links";
-import { pickInstrumentMatch } from "@/lib/span";
+import { hasQuoteSpan } from "@/lib/span";
 import type { InstrumentSearchItem, SourceResponse } from "@/lib/types";
 import { fieldClass } from "@/lib/ui";
 import { useClientFetch } from "@/lib/use-client-fetch";
@@ -46,7 +45,6 @@ function AtivosPage() {
   const localOrigin = useLocalPageOrigin();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryId = useId();
   const sourceId = useId();
   const classId = useId();
   const apiReady = api.status === "ok";
@@ -74,11 +72,11 @@ function AtivosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qInput, qParam, source, assetClass, router]);
 
-  const browsing = Boolean(qParam.trim() || source || assetClass);
+  const catalogFilters = Boolean(source || assetClass);
   const applied = catalogQuery(source, assetClass, qParam.trim());
   const history = useHistoryPages({
     key: JSON.stringify(applied),
-    enabled: apiReady && browsing,
+    enabled: apiReady && catalogFilters,
     fetchPage: (cursor, signal) =>
       listInstruments({ ...applied, limit: INSTRUMENT_PAGE_SIZE, cursor }, signal),
     itemsOf: (page) => page.instruments,
@@ -113,35 +111,21 @@ function AtivosPage() {
     <PageShell>
       <PageHeader kicker="Catálogo" title="Ativos">
         <p>
-          Busca em <span className="font-mono text-xs">GET /v1/instruments</span> com <span className="font-mono text-xs">q</span>.
-          Sem consulta, mostramos exemplos — não uma busca vazia. Primeira e última cotação e o
-          número de pregões vêm da API quando existem.
+          Busca em <span className="font-mono text-xs">GET /v1/instruments</span> com{" "}
+          <span className="font-mono text-xs">q</span>. Sem consulta, atalhos — a API exige q=. Primeira e
+          última cotação e o número de pregões vêm da API quando existem.
         </p>
       </PageHeader>
 
+      <InstrumentSearch variant="page" query={qInput} onQueryChange={setQInput} />
+
       <form
-        className="grid gap-3 rounded-2xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid gap-3 rounded-2xl border border-border bg-surface p-4 sm:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault();
           replaceFilters({ q: qInput });
         }}
       >
-        <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
-          <label htmlFor={queryId} className="text-sm font-medium text-foreground">
-            Busca
-          </label>
-          <input
-            id={queryId}
-            name="q"
-            type="search"
-            autoComplete="off"
-            placeholder="Nome ou identificador"
-            value={qInput}
-            disabled={!apiReady}
-            onChange={(event) => setQInput(event.target.value)}
-            className={fieldClass}
-          />
-        </div>
         <div className="flex flex-col gap-1">
           <label htmlFor={sourceId} className="text-sm font-medium text-foreground">
             {copy.common.source}
@@ -187,43 +171,27 @@ function AtivosPage() {
         <p className="text-sm text-muted">{offlineFormHint(localOrigin)}</p>
       ) : null}
 
-      {!browsing ? (
-        <section className="flex flex-col gap-2" aria-labelledby="examples-heading">
-          <h2 id="examples-heading" className="text-sm font-semibold text-foreground">
-            {copy.common.examples}
-          </h2>
-          <p className="text-sm text-muted">{copy.common.curatedEmptySearch}</p>
-          <AssetRowList label={copy.common.examples}>
-            {BRAZIL_HOME_EXAMPLES.map((example) => (
-              <li key={example.identifier}>
-                <AtivosExampleRow example={example} />
-              </li>
-            ))}
-          </AssetRowList>
-        </section>
-      ) : null}
-
-      {browsing && api.status !== "unreachable" && history.status === "loading" ? (
+      {catalogFilters && api.status !== "unreachable" && history.status === "loading" ? (
         <RowSkeleton count={8} />
       ) : null}
-      {browsing && history.status === "error" ? <ErrorBanner error={history.error} /> : null}
+      {catalogFilters && history.status === "error" ? <ErrorBanner error={history.error} /> : null}
 
-      {browsing && history.status === "success" && rows.length === 0 ? (
+      {catalogFilters && history.status === "success" && rows.length === 0 ? (
         <EmptyState>
           <p>Nenhum instrumento público corresponde a estes filtros.</p>
           <p className="mt-2 text-xs">{copy.common.historyLoading}</p>
         </EmptyState>
       ) : null}
 
-      {browsing && rows.length > 0 ? (
+      {catalogFilters && rows.length > 0 ? (
         <>
-          <AssetRowList label="Instrumentos">
+          <ul aria-label="Instrumentos" className="grid gap-3">
             {rows.map((row) => (
               <li key={row.instrument_id}>
-                <CatalogRow row={row} />
+                <CatalogCard row={row} />
               </li>
             ))}
-          </AssetRowList>
+          </ul>
           <LoadMoreButton
             hasMore={history.hasMore}
             loading={history.loadingMore}
@@ -235,43 +203,48 @@ function AtivosPage() {
   );
 }
 
-function CatalogRow({ row }: { row: InstrumentSearchItem }) {
+function CatalogCard({ row }: { row: InstrumentSearchItem }) {
+  const identifier = row.identifiers[0] ?? row.instrument_id;
+  const extraIds = row.identifiers.filter((id) => id !== identifier).slice(0, 5);
   return (
-    <AssetRow
-      identifier={row.identifiers[0] ?? row.instrument_id}
-      title={row.name}
+    <Link
       href={hrefForInstrument(row)}
-      span={row}
-    />
-  );
-}
-
-function AtivosExampleRow({ example }: { example: HomeExample }) {
-  const api = useApiStatus();
-  const enabled = api.status === "ok";
-  const latest = useClientFetch(
-    `ativos-latest:${example.kind}:${example.identifier}`,
-    () => loadLatestPrint(example),
-    { enabled },
-  );
-  const catalog = useClientFetch(
-    `ativos-span:${example.identifier}`,
-    () => searchInstruments(example.identifier, 5),
-    { enabled },
-  );
-  const match =
-    catalog.status === "success"
-      ? pickInstrumentMatch(catalog.data.instruments, example.identifier)
-      : null;
-  return (
-    <AssetRow
-      identifier={example.identifier}
-      title={example.title}
-      href={example.href}
-      latest={latest.status === "success" ? latest.data : undefined}
-      loading={enabled && latest.status === "loading"}
-      span={match ?? undefined}
-    />
+      className="block rounded-2xl border border-border bg-surface px-4 py-3 hover:bg-elevated/80"
+    >
+      <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <p className="break-all font-mono text-sm text-foreground">{identifier}</p>
+          {row.name && row.name !== identifier ? (
+            <p className="text-sm text-muted">{row.name}</p>
+          ) : null}
+          {extraIds.length > 0 ? (
+            <p className="mt-1 font-mono text-[11px] text-muted">{extraIds.join(", ")}</p>
+          ) : null}
+        </div>
+        {hasQuoteSpan(row) ? (
+          <dl className="flex min-w-0 flex-col gap-1 font-mono text-[11px] text-muted sm:items-end">
+            {row.first_quote_date ? (
+              <div>
+                <dt className="inline">{copy.common.firstQuote}: </dt>
+                <dd className="inline">{row.first_quote_date}</dd>
+              </div>
+            ) : null}
+            {row.last_quote_date ? (
+              <div>
+                <dt className="inline">{copy.common.lastQuote}: </dt>
+                <dd className="inline">{row.last_quote_date}</dd>
+              </div>
+            ) : null}
+            {row.quote_count != null ? (
+              <div>
+                <dt className="inline">{copy.common.sessions}: </dt>
+                <dd className="inline">{row.quote_count.toLocaleString("pt-BR")}</dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+      </div>
+    </Link>
   );
 }
 

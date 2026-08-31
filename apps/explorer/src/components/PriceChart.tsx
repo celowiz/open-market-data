@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 export type { ChartRow, ChartSeries } from "@/lib/chart-data";
 
 function ChartPlaceholder() {
-  return <div className="h-[18rem] w-full sm:h-[24rem]" />;
+  return <div className="h-[260px] w-full sm:h-[24rem]" />;
 }
 
 export const PriceChart = dynamic(

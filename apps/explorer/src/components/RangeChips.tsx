@@ -53,7 +53,7 @@ export function RangeChips({
             aria-pressed={selected}
             onClick={() => onChange(option.key, rangeFromKey(option.key))}
             className={cn(
-              "rounded-full px-3 py-1 text-sm font-medium transition-colors disabled:opacity-50",
+              "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50",
               selected
                 ? "bg-accent text-accent-fg"
                 : "text-muted hover:bg-elevated hover:text-foreground",
