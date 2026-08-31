@@ -176,7 +176,10 @@ def _ingest_b3_day(
         quotes = parse_price_report(price_bytes)
         _log_stage("parse 186", started, records=len(quotes))
         instrument_ids: dict[str, UUID] = {}
-        existing_quotes = load_quote_keys(session, source_id=source.id, on_date=reference_date)
+        quote_dates = {reference_date, *(record.reference_date for record in quotes)}
+        existing_quotes: set[tuple[UUID, date, str]] = set()
+        for day in quote_dates:
+            existing_quotes |= load_quote_keys(session, source_id=source.id, on_date=day)
         pending_quotes: list[InstrumentQuoteRow] = []
         started = time.perf_counter()
         for record in quotes:
