@@ -11,7 +11,7 @@ from marketdata.config import get_settings
 router = APIRouter()
 
 
-_READY_503 = {
+_READY_503: dict[int | str, dict[str, Any]] = {
     503: {
         "description": (
             "Readiness check failed: DATABASE_URL is missing or Postgres did not answer SELECT 1."
