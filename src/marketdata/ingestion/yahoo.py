@@ -231,6 +231,7 @@ def _persist_yahoo_records(
     flush_every: int = _UPSERT_FLUSH_EVERY,
 ) -> tuple[int, int, int, int]:
     inserted = updated = skipped = 0
+    identified: set[object] = set()
     for record in records:
         instrument = get_or_create_instrument_by_key(
             session,
@@ -241,20 +242,22 @@ def _persist_yahoo_records(
             name=record.symbol,
             currency=record.currency,
         )
-        attach_identifier(
-            session,
-            instrument_id=instrument.id,
-            identifier_type=IdentifierType.YAHOO_SYMBOL,
-            identifier_value=record.symbol,
-            source_id=source.id,
-        )
-        attach_identifier(
-            session,
-            instrument_id=instrument.id,
-            identifier_type=IdentifierType.TICKER,
-            identifier_value=record.symbol,
-            source_id=source.id,
-        )
+        if instrument.id not in identified:
+            attach_identifier(
+                session,
+                instrument_id=instrument.id,
+                identifier_type=IdentifierType.YAHOO_SYMBOL,
+                identifier_value=record.symbol,
+                source_id=source.id,
+            )
+            attach_identifier(
+                session,
+                instrument_id=instrument.id,
+                identifier_type=IdentifierType.TICKER,
+                identifier_value=record.symbol,
+                source_id=source.id,
+            )
+            identified.add(instrument.id)
         action = upsert_quote(
             session,
             instrument_id=instrument.id,

@@ -264,7 +264,7 @@ def test_yahoo_ingest_skips_missing_symbol_and_persists_adj_close_column(
 def test_ingest_yahoo_missing_symbol_does_not_fail_sqlite_job(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'yahoo.db'}", future=True)
     Base.metadata.create_all(engine)
-    session = Session(engine)
+    session = Session(engine, autoflush=False)
     try:
         result = ingest_yahoo(
             session,
