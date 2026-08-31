@@ -3,6 +3,8 @@
 #
 # Requires PUBLIC_DATASET_PUBLICATION_ENABLED=true (GitHub Actions variable).
 # B3 and Yahoo must not be published as Parquet (ADR-0013, ADR-0014).
+# R2 is not configured: if OBJECT_STORAGE_BACKEND is local/unset/not s3, skip
+# with success instead of failing the scheduled run.
 name: Publish datasets
 
 on:
@@ -40,11 +42,25 @@ jobs:
       PUBLIC_DATA_BASE_URL: ${{ vars.PUBLIC_DATA_BASE_URL }}
       PUBLIC_DATASET_FORMAT: parquet
     steps:
+      - name: Skip when object storage is not S3
+        id: storage
+        run: |
+          set -euo pipefail
+          backend="$(printf '%s' "${OBJECT_STORAGE_BACKEND:-}" | tr '[:upper:]' '[:lower:]')"
+          if [ "$backend" != "s3" ]; then
+            echo "Publish datasets skipped: OBJECT_STORAGE_BACKEND=${OBJECT_STORAGE_BACKEND:-unset} is not s3 (R2 is not configured)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v5
+        if: steps.storage.outputs.skip != 'true'
         with:
           persist-credentials: false
 
       - name: Require DATABASE_URL
+        if: steps.storage.outputs.skip != 'true'
         run: |
           set -euo pipefail
           if [ -z "${DATABASE_URL:-}" ]; then
@@ -53,6 +69,7 @@ jobs:
           fi
 
       - name: Require publication flag
+        if: steps.storage.outputs.skip != 'true'
         run: |
           set -euo pipefail
           flag="$(printf '%s' "${PUBLIC_DATASET_PUBLICATION_ENABLED:-}" | tr '[:upper:]' '[:lower:]')"
@@ -62,16 +79,20 @@ jobs:
           fi
 
       - uses: astral-sh/setup-uv@v7
+        if: steps.storage.outputs.skip != 'true'
         with:
           enable-cache: true
 
       - name: Install Python
+        if: steps.storage.outputs.skip != 'true'
         run: uv python install 3.12
 
       - name: Install dependencies
+        if: steps.storage.outputs.skip != 'true'
         run: uv sync --frozen --no-dev
 
       - name: Resolve snapshot date
+        if: steps.storage.outputs.skip != 'true'
         id: refdate
         env:
           INPUT_DATE: ${{ inputs.date }}
@@ -93,4 +114,5 @@ jobs:
           printf 'date=%s\n' "$DATE" >> "$GITHUB_OUTPUT"
 
       - name: Publish datasets
+        if: steps.storage.outputs.skip != 'true'
         run: uv run marketdata publish datasets --date "${{ steps.refdate.outputs.date }}"

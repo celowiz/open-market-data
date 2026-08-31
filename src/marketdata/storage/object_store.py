@@ -84,3 +84,17 @@ def build_object_storage(root: Path | None = None) -> ObjectStorage:
             region=settings.object_storage_region,
         )
     raise ValueError(f"unknown object storage backend: {backend!r}")
+
+
+def public_publication_storage_configured(settings: object | None = None) -> bool:
+    """Return True when public dataset objects can be written to S3/R2."""
+    if settings is None:
+        from marketdata.config import get_settings
+
+        cfg = get_settings()
+    else:
+        cfg = settings
+    backend = str(getattr(cfg, "object_storage_backend", "") or "").strip().lower()
+    if backend != "s3":
+        return False
+    return bool(str(getattr(cfg, "object_storage_bucket", "") or "").strip())

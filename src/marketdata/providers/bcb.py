@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+from logging import getLogger
 from typing import Any
 
 from marketdata.domain.enums import PriceType
@@ -15,6 +16,16 @@ SGS_SERIES = (
     ("BCB:PTAX_USD_SELL", "1", "PTAX USD sell", "BRL_per_USD"),
     ("BCB:PTAX_USD_BUY", "10813", "PTAX USD buy", "BRL_per_USD"),
 )
+logger = getLogger(__name__)
+
+
+def is_missing_sgs_values(exc: BaseException) -> bool:
+    """True when python-bcb (or a test double) reports no SGS value for the window."""
+    name = type(exc).__name__
+    text = str(exc).lower()
+    if name == "SGSError":
+        return True
+    return "value(s) not found" in text
 
 
 @dataclass(frozen=True)
@@ -55,12 +66,34 @@ class BcbProvider:
         end: date,
     ) -> list[tuple[date, Decimal]]:
         from bcb import sgs
+        from bcb.exceptions import SGSError
 
-        frame: Any = sgs.get(
-            {source_series_id: int(source_series_id)},
-            start=start.isoformat(),
-            end=end.isoformat(),
-        )
+        try:
+            frame: Any = sgs.get(
+                {source_series_id: int(source_series_id)},
+                start=start.isoformat(),
+                end=end.isoformat(),
+            )
+        except SGSError as exc:
+            logger.info(
+                "bcb skip missing SGS series id=%s start=%s end=%s: %s",
+                source_series_id,
+                start,
+                end,
+                exc,
+            )
+            return []
+        except Exception as exc:
+            if not is_missing_sgs_values(exc):
+                raise
+            logger.info(
+                "bcb skip missing SGS series id=%s start=%s end=%s: %s",
+                source_series_id,
+                start,
+                end,
+                exc,
+            )
+            return []
         rows: list[tuple[date, Decimal]] = []
         if frame is None or getattr(frame, "empty", True):
             return rows

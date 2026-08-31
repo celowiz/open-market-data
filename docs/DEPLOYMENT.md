@@ -73,8 +73,9 @@ uv run marketdata ingest cvm --date YYYY-MM-DD
 uv run marketdata ingest tesouro --date YYYY-MM-DD
 uv run marketdata ingest bcb --date YYYY-MM-DD
 uv run marketdata ingest b3 --date YYYY-MM-DD
-# Yahoo is unofficial / POC (ADR-0013); keep YAHOO_PROVIDER_ENABLED=false
-# unless you intend a local-only store.
+# Yahoo is unofficial / POC (ADR-0013). ingest-yahoo.yml sets
+# YAHOO_PROVIDER_ENABLED=true for the nightly scratch run; other official
+# ingest/backfill jobs keep it false. Public dataset publication stays off.
 uv run marketdata ingest yahoo --date YYYY-MM-DD
 ```
 
@@ -333,8 +334,9 @@ Already-hosted service (do not recreate unless replacing it):
    error to `127.0.0.1:8000` is not).
 
 Local `.env` may set `YAHOO_PROVIDER_ENABLED=true` for development. Keep
-`.env.example` at `false`. Production Yahoo on Railway is a separate flag
-decision (ADR-0013); it is not required to wire Explorer → FastAPI.
+`.env.example` at `false`. GitHub Actions `ingest-yahoo.yml` sets the flag
+true for the nightly scratch equity run; other official ingest/backfill jobs
+keep it false. Public dataset publication stays off (ADR-0013).
 
 ---
 

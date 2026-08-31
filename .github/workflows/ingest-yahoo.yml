@@ -1,13 +1,16 @@
-# Yahoo Finance EOD — unofficial POC (ADR-0013). No daily schedule.
-# Enable only via workflow_dispatch. Do not add cron unless YAHOO_PROVIDER_ENABLED
-# is an explicit operator policy. See docs/INGEST_SCHEDULE.md.
+# Yahoo Finance EOD — unofficial POC (ADR-0013). Public dataset stays off.
+# Nightly at 00:00 America/Sao_Paulo (UTC-3). Scratch equities as {TICKER}.SA.
+# Official ingest/backfill workflows keep YAHOO_PROVIDER_ENABLED=false.
 name: Ingest Yahoo
 
 on:
+  schedule:
+    # 00:00 America/Sao_Paulo (UTC-3). Brazil has not used DST since 2019.
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       date:
-        description: "Reference date YYYY-MM-DD (defaults to today UTC)"
+        description: "Reference date YYYY-MM-DD (defaults to yesterday America/Sao_Paulo)"
         required: false
 
 # Shared with backfill and other ingest workflows so only one Neon writer runs at a time.
@@ -33,6 +36,8 @@ jobs:
       OBJECT_STORAGE_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY }}
       OBJECT_STORAGE_SECRET_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_KEY }}
       OBJECT_STORAGE_REGION: ${{ vars.OBJECT_STORAGE_REGION || 'auto' }}
+      YAHOO_PROVIDER_ENABLED: "true"
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -64,9 +69,13 @@ jobs:
           set -euo pipefail
           if [ -n "${INPUT_DATE:-}" ]; then
             printf 'date=%s\n' "$INPUT_DATE" >> "$GITHUB_OUTPUT"
-          else
-            printf 'date=%s\n' "$(date -u +%F)" >> "$GITHUB_OUTPUT"
+            echo "Yahoo --date from workflow_dispatch: $INPUT_DATE"
+            exit 0
           fi
+          # Yesterday America/Sao_Paulo — completed session, not an in-progress bar.
+          DATE="$(uv run python -c 'from marketdata.ingestion.schedule import yahoo_ingest_reference_date; print(yahoo_ingest_reference_date().isoformat())')"
+          printf 'date=%s\n' "$DATE" >> "$GITHUB_OUTPUT"
+          echo "Yahoo --date from yahoo_ingest_reference_date: $DATE"
 
       - name: Ingest Yahoo
         run: uv run marketdata ingest yahoo --date "${{ steps.refdate.outputs.date }}"

@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from marketdata.ingestion.schedule import b3_ingest_reference_date
+from marketdata.ingestion.schedule import b3_ingest_reference_date, yahoo_ingest_reference_date
 
 BRT = ZoneInfo("America/Sao_Paulo")
 
@@ -31,3 +31,18 @@ BRT = ZoneInfo("America/Sao_Paulo")
 )
 def test_b3_ingest_reference_date(now: datetime, expected: date) -> None:
     assert b3_ingest_reference_date(now) == expected
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        # Scheduled cron 00:00 BRT: UTC date has already rolled; use yesterday BRT.
+        (datetime(2026, 8, 31, 0, 0, tzinfo=BRT), date(2026, 8, 30)),
+        (datetime(2026, 8, 31, 3, 0, tzinfo=UTC), date(2026, 8, 30)),
+        (datetime(2026, 8, 31, 12, 0, tzinfo=BRT), date(2026, 8, 30)),
+        # 03:00 UTC 1 Sep = 00:00 BRT 1 Sep → yesterday 31 Aug.
+        (datetime(2026, 9, 1, 3, 0, tzinfo=UTC), date(2026, 8, 31)),
+    ],
+)
+def test_yahoo_ingest_reference_date_is_yesterday_brt(now: datetime, expected: date) -> None:
+    assert yahoo_ingest_reference_date(now) == expected

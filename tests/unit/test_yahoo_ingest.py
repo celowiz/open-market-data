@@ -6,7 +6,8 @@ from zipfile import ZipFile
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session
 
 from marketdata.api.main import create_app
 from marketdata.config import get_settings
@@ -15,7 +16,12 @@ from marketdata.ingestion.b3 import ingest_b3
 from marketdata.ingestion.yahoo import ingest_yahoo
 from marketdata.providers.yahoo import YahooQuoteRecord
 from marketdata.storage.database import create_db_engine, create_session_factory
-from marketdata.storage.models import InstrumentIdentifierRow, InstrumentQuoteRow, SourceRow
+from marketdata.storage.models import (
+    Base,
+    InstrumentIdentifierRow,
+    InstrumentQuoteRow,
+    SourceRow,
+)
 from marketdata.storage.object_store import LocalFileObjectStorage
 from marketdata.storage.repositories import resolve_instrument_id
 
@@ -183,3 +189,95 @@ def test_yahoo_quotes_are_visible_on_public_api_alongside_b3_petr4(db_session, t
     visible_b3 = client.get("/v1/quotes/PETR4", params={"source": "b3"})
     assert visible_b3.status_code == 200
     assert visible_b3.json()["quotes"]
+
+
+class _PartialYahooProvider:
+    name = "yahoo"
+
+    def fetch_history(self, symbol: str, *, start, end):
+        del start, end
+        if symbol == "MISSING.SA":
+            raise RuntimeError("No data found for MISSING.SA")
+        return [
+            YahooQuoteRecord(
+                symbol=symbol,
+                reference_date=date(2026, 8, 21),
+                value=Decimal("42.11"),
+                currency="BRL",
+                price_type=PriceType.CLOSE,
+                source_field="Close",
+            ),
+            YahooQuoteRecord(
+                symbol=symbol,
+                reference_date=date(2026, 8, 21),
+                value=Decimal("40.00"),
+                currency="BRL",
+                price_type=PriceType.ADJUSTED_CLOSE,
+                source_field="Adj Close",
+            ),
+        ]
+
+
+@pytest.mark.db
+def test_yahoo_ingest_skips_missing_symbol_and_persists_adj_close_column(
+    db_session, tmp_path
+) -> None:
+    storage = LocalFileObjectStorage(tmp_path)
+    result = ingest_yahoo(
+        db_session,
+        reference_date=date(2026, 8, 21),
+        symbols=["PETR4.SA", "MISSING.SA"],
+        storage=storage,
+        provider=_PartialYahooProvider(),
+    )
+    db_session.commit()
+    assert result["status"]
+    assert int(result["inserted"]) + int(result["updated"]) + int(result["skipped"]) >= 2
+
+    instrument_id = resolve_instrument_id(db_session, "PETR4.SA")
+    assert instrument_id is not None
+    close = db_session.scalar(
+        select(InstrumentQuoteRow).where(
+            InstrumentQuoteRow.instrument_id == instrument_id,
+            InstrumentQuoteRow.price_type == PriceType.CLOSE.value,
+        )
+    )
+    adj = db_session.scalar(
+        select(InstrumentQuoteRow).where(
+            InstrumentQuoteRow.instrument_id == instrument_id,
+            InstrumentQuoteRow.price_type == PriceType.ADJUSTED_CLOSE.value,
+        )
+    )
+    assert close is not None
+    assert Decimal(close.value) == Decimal("42.11")
+    assert close.extra.get("source_field") == "Close"
+    assert adj is not None
+    assert Decimal(adj.value) == Decimal("40.00")
+    assert adj.extra.get("source_field") == "Adj Close"
+    assert resolve_instrument_id(db_session, "MISSING.SA") is None
+
+    yahoo_petr = TestClient(create_app()).get("/v1/quotes/PETR4.SA")
+    assert yahoo_petr.status_code == 200
+    assert yahoo_petr.json()["quotes"][0]["source"] == "yahoo"
+
+
+def test_ingest_yahoo_missing_symbol_does_not_fail_sqlite_job(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'yahoo.db'}", future=True)
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    try:
+        result = ingest_yahoo(
+            session,
+            reference_date=date(2026, 8, 21),
+            symbols=["PETR4.SA", "MISSING.SA"],
+            storage=LocalFileObjectStorage(tmp_path),
+            provider=_PartialYahooProvider(),
+        )
+        session.commit()
+        assert int(result["inserted"]) >= 2
+        assert int(result["symbols_skipped"]) >= 1
+        count = session.scalar(select(func.count()).select_from(InstrumentQuoteRow))
+        assert count >= 2
+    finally:
+        session.close()
+        engine.dispose()

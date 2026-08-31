@@ -54,25 +54,54 @@ def parse_yahoo_history(
 ) -> list[YahooQuoteRecord]:
     records: list[YahooQuoteRecord] = []
     for row in rows:
-        close = row.get("Close")
-        if _is_missing_close(close):
-            continue
         reference = _row_date(row)
         if reference is None:
             continue
-        try:
-            value = exact_decimal(str(close).strip())
-        except Exception:
-            continue
-        records.append(
-            YahooQuoteRecord(
-                symbol=symbol,
-                reference_date=reference,
-                value=value,
-                currency=currency,
+        close = _column_value(row, "Close")
+        if not _is_missing_close(close):
+            try:
+                value = exact_decimal(str(close).strip())
+            except Exception:
+                pass
+            else:
+                records.append(
+                    YahooQuoteRecord(
+                        symbol=symbol,
+                        reference_date=reference,
+                        value=value,
+                        currency=currency,
+                        price_type=PriceType.CLOSE,
+                        source_field="Close",
+                    )
+                )
+        adj = _column_value(row, "Adj Close", "AdjClose")
+        if not _is_missing_close(adj):
+            try:
+                adj_value = exact_decimal(str(adj).strip())
+            except Exception:
+                continue
+            records.append(
+                YahooQuoteRecord(
+                    symbol=symbol,
+                    reference_date=reference,
+                    value=adj_value,
+                    currency=currency,
+                    price_type=PriceType.ADJUSTED_CLOSE,
+                    source_field="Adj Close",
+                )
             )
-        )
     return records
+
+
+def _column_value(row: Mapping[str, object], *names: str) -> object:
+    lowered = {name.lower() for name in names}
+    for name in names:
+        if name in row:
+            return row[name]
+    for key, value in row.items():
+        if str(key).strip().lower() in lowered:
+            return value
+    return None
 
 
 def _frame_to_row_maps(frame: Any) -> list[dict[str, object]]:
@@ -87,7 +116,8 @@ def _frame_to_row_maps(frame: Any) -> list[dict[str, object]]:
         else:
             item["date"] = date.fromisoformat(str(index)[:10])
         for column in series.index:
-            item[str(column)] = series[column]
+            label = column[0] if isinstance(column, tuple) else column
+            item[str(label)] = series[column]
         rows.append(item)
     return rows
 

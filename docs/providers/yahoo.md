@@ -1,7 +1,7 @@
 # Yahoo Finance (local / POC)
 
-Unofficial global EOD for local coverage experiments (AAPL, MSFT, SPY,
-ASML.AS, …). Not a licensed public equity feed.
+Unofficial global EOD for local coverage experiments and the scratch B3 equity
+universe (`PETR4.SA`, …). Not a licensed public equity feed.
 
 `yfinance` is used only inside `providers/yahoo.py`. Domain, ingestion, API, and
 CLI must not import it.
@@ -26,28 +26,37 @@ and [`adr/0013-yahoo-gating.md`](../adr/0013-yahoo-gating.md).
 
 ## Price semantics
 
-History `Close` → `CLOSE`. Do not use `Adj Close` for daily valuation.
-`auto_adjust=False` on the history call. `is_official` is always false.
+History `Close` → `CLOSE` (session close; daily valuation). History `Adj Close`
+→ `ADJUSTED_CLOSE` using Yahoo's column as published — do not rebuild adjusted
+close from dividends. `auto_adjust=False` on the history call. `is_official` is
+always false.
+
+Default symbols are scratch-universe B3 equities mapped as `{TICKER}.SA`
+(`config/instruments.scratch.csv`). Futures (`WIN*` / `IND*` / `WDO*` / `DOL*` /
+`DI1*`) are skipped. There is no AAPL default.
 
 ## Identity
 
 Instrument primary key is a UUID. External keys:
 
-- `SOURCE_ID` — Yahoo symbol (for example `AAPL`, `ASML.AS`)
+- `SOURCE_ID` — Yahoo symbol (for example `PETR4.SA`, `AAPL`)
 - `YAHOO_SYMBOL` — same value
-- `TICKER` — lookup alias only; not the primary key
+- `TICKER` — lookup alias only; not the primary key. Scratch B3 names use the
+  `.SA` suffix so they do not collide with official B3 `PETR4`.
 
 ## Commands
 
 ```bash
 uv run marketdata ingest yahoo --date 2026-08-21
-uv run marketdata ingest yahoo --date 2026-08-21 --symbol AAPL --symbol MSFT
+uv run marketdata ingest yahoo --date 2026-08-21 --symbol PETR4.SA --symbol VALE3.SA
 ```
 
-`--date` is required. `--symbol` is repeatable and defaults to `AAPL`.
+`--date` is required. `--symbol` is repeatable; when omitted, ingest uses the
+scratch equity universe (`{TICKER}.SA`). GitHub Actions `ingest-yahoo.yml` runs
+nightly at 00:00 America/Sao_Paulo and defaults `--date` to yesterday BRT.
 
-Empty history (weekend or holiday) skips that symbol and does not fabricate a
-close.
+Empty history (weekend, holiday, or a missing Yahoo symbol) skips that symbol
+and does not fail the job or fabricate a close.
 
 ## Historical backfill (local / POC)
 
@@ -62,12 +71,14 @@ uv run marketdata backfill yahoo --start 2020-01-01 --end 2026-08-24 --symbol AA
 
 Behavior:
 
-- Default symbols match daily ingest (`AAPL` unless `--symbol` is passed).
+- Default symbols match daily ingest (scratch `{TICKER}.SA` equities unless
+  `--symbol` is passed).
 - The `[start, end]` window is inclusive. Ingestion calls
   `YahooProvider.fetch_history(symbol, start=start, end=end + 1 day)` so the
   last session is included the same way as daily ingest (yfinance `end` is
   exclusive).
-- Persists `Close` as `CLOSE`. Never `Adj Close`.
+- Persists `Close` as `CLOSE` and Yahoo `Adj Close` as `ADJUSTED_CLOSE`. Never
+  recomputes adj from dividends.
 - Raw JSON: `raw/yahoo/backfill/{symbol}/{start}_{end}.json` with `close` stored
   as a decimal string (not a binary float).
 - Object-storage checkpoint: `state/backfill/yahoo.json` (`provider="yahoo"`),

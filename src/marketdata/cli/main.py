@@ -73,6 +73,9 @@ _RESULT_KEYS = (
     "empty_days",
     "months",
     "status",
+    "series_skipped",
+    "skipped_futures",
+    "symbols_skipped",
 )
 
 
@@ -214,7 +217,8 @@ def ingest_bcb_command(
     typer.echo(
         "BCB ingest "
         f"run={result['run_id']} inserted={result['inserted']} "
-        f"updated={result['updated']} skipped={result['skipped']}"
+        f"updated={result['updated']} skipped={result['skipped']} "
+        f"series_skipped={result.get('series_skipped', 0)}"
     )
 
 
@@ -248,7 +252,7 @@ def ingest_b3_command(
 _YAHOO_SYMBOL_OPTION = typer.Option(
     None,
     "--symbol",
-    help="Yahoo symbol (repeatable). Defaults to AAPL.",
+    help="Yahoo symbol (repeatable). Default: scratch equities as {TICKER}.SA.",
 )
 
 
@@ -276,7 +280,8 @@ def ingest_yahoo_command(
         "Yahoo ingest "
         f"run={result['run_id']} artifacts={result['artifacts']} "
         f"inserted={result['inserted']} updated={result['updated']} "
-        f"skipped={result['skipped']}"
+        f"skipped={result['skipped']} skipped_futures={result.get('skipped_futures', 0)} "
+        f"symbols_skipped={result.get('symbols_skipped', 0)}"
     )
 
 
@@ -575,7 +580,10 @@ def publish_datasets_command(
     """Publish ODbL Parquet snapshots plus atomic latest manifests."""
     from marketdata.datasets.manifest import CATALOG_NAMES
     from marketdata.datasets.publish import publish_datasets
-    from marketdata.storage.object_store import build_object_storage
+    from marketdata.storage.object_store import (
+        build_object_storage,
+        public_publication_storage_configured,
+    )
 
     settings = get_settings()
     if not settings.public_dataset_publication_enabled:
@@ -584,6 +592,9 @@ def publish_datasets_command(
         )
     if settings.public_dataset_format.lower() != "parquet":
         raise typer.BadParameter("Phase 9 supports parquet only (PUBLIC_DATASET_FORMAT=parquet)")
+    if not dry_run and not public_publication_storage_configured(settings):
+        typer.echo("Publish datasets skipped: object storage is not s3 (R2 is not configured).")
+        raise typer.Exit(code=0)
     snapshot = date.fromisoformat(date_value)
     requested = datasets or None
     if requested:

@@ -85,6 +85,28 @@ def test_cli_publish_datasets_requires_publication_flag() -> None:
     assert "PUBLIC_DATASET_PUBLICATION_ENABLED" in result.output
 
 
+def test_cli_publish_datasets_skips_when_object_storage_is_not_s3(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = type(
+        "S",
+        (),
+        {
+            "public_dataset_publication_enabled": True,
+            "public_dataset_format": "parquet",
+            "object_storage_backend": "local",
+            "object_storage_bucket": "",
+            "public_data_base_url": "",
+            "database_url": "",
+        },
+    )()
+    monkeypatch.setattr("marketdata.cli.main.get_settings", lambda: settings)
+    result = runner.invoke(app, ["publish", "datasets", "--date", "2026-08-21"])
+    assert result.exit_code == 0, result.output
+    assert "skip" in result.output.lower()
+    assert "s3" in result.output.lower() or "r2" in result.output.lower()
+
+
 def test_cli_backfill_help_lists_providers() -> None:
     result = runner.invoke(app, ["backfill", "--help"])
     assert result.exit_code == 0

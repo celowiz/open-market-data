@@ -1,6 +1,11 @@
 import pytest
 
-from marketdata.storage.object_store import LocalFileObjectStorage, ObjectStorageError
+from marketdata.config import Settings
+from marketdata.storage.object_store import (
+    LocalFileObjectStorage,
+    ObjectStorageError,
+    public_publication_storage_configured,
+)
 
 
 def test_local_object_storage_round_trip(tmp_path) -> None:
@@ -30,3 +35,12 @@ def test_local_object_storage_replace_overwrites(tmp_path) -> None:
     assert store.retrieve("public/manifests/quotes-latest.json") == b"v2-complete"
     leftovers = list(tmp_path.rglob(".tmp-*"))
     assert leftovers == []
+
+
+def test_public_publication_storage_configured_requires_s3_backend() -> None:
+    local = Settings(_env_file=None, object_storage_backend="local")
+    unset = Settings(_env_file=None, object_storage_backend="")
+    s3 = Settings(_env_file=None, object_storage_backend="s3", object_storage_bucket="datasets")
+    assert public_publication_storage_configured(local) is False
+    assert public_publication_storage_configured(unset) is False
+    assert public_publication_storage_configured(s3) is True
