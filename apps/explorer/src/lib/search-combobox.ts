@@ -1,26 +1,37 @@
-import { BRAZIL_HOME_EXAMPLES, type HomeExample } from "./examples.ts";
-import type { InstrumentSearchItem } from "./types.ts";
+import type { InstrumentSearchItem } from "./types";
 
 export const SEARCH_DEBOUNCE_MS = 300;
 
+export type SearchShortcut = {
+  title: string;
+  identifier: string;
+  href: string;
+};
+
 export type SearchComboboxOption =
-  | { kind: "shortcut"; id: string; example: HomeExample }
+  | { kind: "shortcut"; id: string; example: SearchShortcut }
   | { kind: "instrument"; id: string; item: InstrumentSearchItem };
 
-export function searchShortcutExamples(): HomeExample[] {
-  return BRAZIL_HOME_EXAMPLES;
-}
+export const SEARCH_SHORTCUT_IDENTIFIERS = [
+  "LTN:2029-01-01",
+  "BCB:CDI_DAILY",
+  "00017024000153",
+  "PETR4",
+  "DI1F27",
+] as const;
 
 export function comboboxOptions({
   query,
   instruments,
+  shortcuts,
 }: {
   query: string;
   instruments: InstrumentSearchItem[] | null;
+  shortcuts: SearchShortcut[];
 }): SearchComboboxOption[] {
   const trimmed = query.trim();
   if (!trimmed) {
-    return searchShortcutExamples().map((example) => ({
+    return shortcuts.map((example) => ({
       kind: "shortcut",
       id: `shortcut:${example.identifier}`,
       example,

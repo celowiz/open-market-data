@@ -18,6 +18,7 @@ import { EmptyState, LoadingState } from "@/components/Status";
 import { searchInstruments } from "@/lib/api";
 import { kindForIdentifier } from "@/lib/asset";
 import { copy } from "@/lib/copy";
+import { BRAZIL_HOME_EXAMPLES } from "@/lib/examples";
 import {
   comboboxOptions,
   moveActiveIndex,
@@ -58,7 +59,6 @@ export function InstrumentSearch({
   const apiReady = api.status === "ok";
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(!compact);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [payload, setPayload] = useState<SearchPayload>({
     q: "",
     instruments: null,
@@ -96,19 +96,20 @@ export function InstrumentSearch({
   const results = payload.q === trimmed ? payload.instruments : null;
   const error = payload.q === trimmed ? payload.error : null;
   const options = useMemo(
-    () => comboboxOptions({ query, instruments: results }),
+    () => comboboxOptions({ query, instruments: results, shortcuts: BRAZIL_HOME_EXAMPLES }),
     [query, results],
   );
   const optionsKey = options.map((option) => option.id).join("|");
   const showPanel = compact ? open : true;
-  const expanded = showPanel;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [indexedKey, setIndexedKey] = useState(optionsKey);
+  if (optionsKey !== indexedKey) {
+    setIndexedKey(optionsKey);
+    setActiveIndex(options.length > 0 ? 0 : -1);
+  }
   const activeOption = activeIndex >= 0 ? options[activeIndex] : undefined;
   const activeDescendant =
-    expanded && activeOption ? optionDomId(listboxId, activeIndex) : undefined;
-
-  useEffect(() => {
-    setActiveIndex(options.length > 0 ? 0 : -1);
-  }, [optionsKey, options.length]);
+    showPanel && activeOption ? optionDomId(listboxId, activeIndex) : undefined;
 
   useEffect(() => {
     if (!compact || !open) {

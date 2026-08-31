@@ -5,12 +5,20 @@ import {
   comboboxOptions,
   moveActiveIndex,
   optionDomId,
-  searchShortcutExamples,
+  SEARCH_SHORTCUT_IDENTIFIERS,
 } from "./search-combobox.ts";
 
+const shortcuts = SEARCH_SHORTCUT_IDENTIFIERS.map((identifier) => ({
+  title: identifier,
+  identifier,
+  href: `/${identifier}`,
+}));
+
 test("empty query yields Brazilian shortcut chips, not Yahoo", () => {
-  const options = comboboxOptions({ query: "   ", instruments: null });
-  const ids = options.map((option) => (option.kind === "shortcut" ? option.example.identifier : option.id));
+  const options = comboboxOptions({ query: "   ", instruments: null, shortcuts });
+  const ids = options.map((option) =>
+    option.kind === "shortcut" ? option.example.identifier : option.id,
+  );
   assert.deepEqual(ids, [
     "LTN:2029-01-01",
     "BCB:CDI_DAILY",
@@ -19,13 +27,13 @@ test("empty query yields Brazilian shortcut chips, not Yahoo", () => {
     "DI1F27",
   ]);
   assert.equal(
-    searchShortcutExamples().some((example) => example.identifier === "AAPL"),
+    SEARCH_SHORTCUT_IDENTIFIERS.some((identifier) => identifier === "AAPL"),
     false,
   );
 });
 
 test("non-empty query never sends shortcut chips and ignores stale instruments", () => {
-  assert.deepEqual(comboboxOptions({ query: "PETR", instruments: null }), []);
+  assert.deepEqual(comboboxOptions({ query: "PETR", instruments: null, shortcuts }), []);
   const options = comboboxOptions({
     query: "PETR",
     instruments: [
@@ -39,6 +47,7 @@ test("non-empty query never sends shortcut chips and ignores stale instruments",
         quote_count: 48,
       },
     ],
+    shortcuts,
   });
   assert.equal(options.length, 1);
   assert.equal(options[0]?.kind, "instrument");
