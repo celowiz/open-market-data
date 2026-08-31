@@ -230,7 +230,7 @@ export function InstrumentSearch({
           trimmed
             ? "block w-full px-3 py-3 text-left hover:bg-elevated"
             : "inline-flex min-h-11 items-center rounded-full border border-border bg-elevated px-3 py-2 text-sm text-foreground hover:border-accent/40",
-          selected && (trimmed ? "bg-elevated" : "border-accent/60"),
+          selected && "bg-accent/20 ring-1 ring-accent",
           trimmed && "min-h-11",
         );
         if (option.kind === "shortcut") {
@@ -242,7 +242,11 @@ export function InstrumentSearch({
                 aria-selected={selected}
                 href={option.example.href}
                 className={rowClass}
-                onMouseEnter={() => setActiveIndex(index)}
+                onPointerMove={(event) => {
+                  if (event.pointerType === "mouse") {
+                    setActiveIndex(index);
+                  }
+                }}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => {
                   setOpen(false);
@@ -264,7 +268,11 @@ export function InstrumentSearch({
                 role="option"
                 aria-selected={selected}
                 className={rowClass}
-                onMouseEnter={() => setActiveIndex(index)}
+                onPointerMove={(event) => {
+                  if (event.pointerType === "mouse") {
+                    setActiveIndex(index);
+                  }
+                }}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => selectInstrument(option.item)}
               >
@@ -277,7 +285,11 @@ export function InstrumentSearch({
                 aria-selected={selected}
                 href={hrefForInstrument(option.item)}
                 className={rowClass}
-                onMouseEnter={() => setActiveIndex(index)}
+                onPointerMove={(event) => {
+                  if (event.pointerType === "mouse") {
+                    setActiveIndex(index);
+                  }
+                }}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => {
                   setOpen(false);
