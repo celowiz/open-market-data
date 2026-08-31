@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from marketdata.domain.enums import IngestionRunStatus, RedistributionPolicy
 from marketdata.ingestion.checkpoint import (
     BackfillCheckpoint,
+    effective_last_completed,
     load_checkpoint,
     save_checkpoint,
-    should_resume,
 )
 from marketdata.providers.bcb import SGS_SERIES, BcbProvider, chunk_date_range
 from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
@@ -16,6 +16,7 @@ from marketdata.storage.repositories import (
     finish_ingestion_run,
     get_or_create_market_series,
     get_or_create_source,
+    max_observation_reference_date,
     start_ingestion_run,
     store_raw_artifact,
     upsert_series_observation,
@@ -149,12 +150,6 @@ def ingest_bcb(
         raise
 
 
-def _checkpoint_completed_through(last_completed: str | None) -> date | None:
-    if not last_completed:
-        return None
-    return date.fromisoformat(last_completed)
-
-
 def _save_bcb_checkpoint(
     store,
     *,
@@ -207,9 +202,11 @@ def backfill_bcb(
     source = _ensure_bcb_source(session)
     run = start_ingestion_run(session, provider=bcb.name, source_id=source.id, reference_date=end)
     checkpoint = load_checkpoint(object_store, "bcb")
-    completed_through: date | None = None
-    if should_resume(checkpoint, start, end, resume=resume) and checkpoint is not None:
-        completed_through = _checkpoint_completed_through(checkpoint.last_completed)
+    db_last = None
+    if resume:
+        db_last = max_observation_reference_date(session, "bcb", start=start, end=end)
+    token = effective_last_completed(checkpoint, start, end, db_last, resume=resume)
+    completed_through = date.fromisoformat(token) if token else None
     _save_bcb_checkpoint(
         object_store,
         start=start,

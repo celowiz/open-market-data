@@ -211,6 +211,31 @@ def test_backfill_bcb_resume_skips_chunks_through_last_completed(tmp_path) -> No
     assert all(chunk_end > first_end for _series_id, _start, chunk_end in provider.calls)
 
 
+def test_backfill_bcb_missing_checkpoint_resumes_after_db_max(tmp_path, monkeypatch) -> None:
+    session = _sqlite_session()
+    storage = LocalFileObjectStorage(tmp_path)
+    chunks = chunk_date_range(BACKFILL_START, BACKFILL_END, years=10)
+    first_end = chunks[0][1]
+    monkeypatch.setattr(
+        "marketdata.ingestion.bcb.max_observation_reference_date",
+        lambda *_args, **_kwargs: first_end,
+    )
+    provider = FakeBcbProvider()
+
+    backfill_bcb(
+        session,
+        start=BACKFILL_START,
+        end=BACKFILL_END,
+        storage=storage,
+        provider=provider,
+        resume=True,
+    )
+
+    remaining = chunks[1:]
+    assert len(provider.calls) == len(SGS_SERIES) * len(remaining)
+    assert all(chunk_end > first_end for _series_id, _start, chunk_end in provider.calls)
+
+
 def test_backfill_bcb_commits_completed_chunk_if_later_chunk_fails(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'bcb.db'}", future=True)
     Base.metadata.create_all(engine)

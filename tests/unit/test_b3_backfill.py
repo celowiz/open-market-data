@@ -29,6 +29,9 @@ class _RecordingSession:
     def rollback(self) -> None:
         self.rollbacks += 1
 
+    def scalar(self, *_args, **_kwargs):
+        return None
+
 
 def _ok_day(**_kwargs) -> dict[str, int | str]:
     return {
@@ -110,6 +113,89 @@ def test_backfill_skips_empty_zip_without_failing(tmp_path, monkeypatch) -> None
     assert checkpoint is not None
     assert checkpoint.last_completed == "2026-08-21"
     assert checkpoint.status == "succeeded"
+
+
+def test_backfill_missing_checkpoint_resumes_after_db_max(tmp_path, monkeypatch) -> None:
+    ingested: list[date] = []
+
+    def fake_day(session, *, reference_date, **kwargs):
+        ingested.append(reference_date)
+        return _ok_day()
+
+    monkeypatch.setattr("marketdata.ingestion.b3._ingest_b3_day", fake_day)
+    monkeypatch.setattr(
+        "marketdata.ingestion.b3.max_quote_reference_date",
+        lambda *_args, **_kwargs: date(2026, 8, 21),
+    )
+    result = backfill_b3(
+        MagicMock(),
+        start=date(2026, 8, 21),
+        end=date(2026, 8, 24),
+        storage=LocalFileObjectStorage(tmp_path),
+        provider=_FakeProvider(),
+        resume=True,
+    )
+    assert ingested == [date(2026, 8, 24)]
+    assert result["status"] == "succeeded"
+
+
+def test_backfill_checkpoint_wins_if_newer_than_db_max(tmp_path, monkeypatch) -> None:
+    ingested: list[date] = []
+
+    def fake_day(session, *, reference_date, **kwargs):
+        ingested.append(reference_date)
+        return _ok_day()
+
+    monkeypatch.setattr("marketdata.ingestion.b3._ingest_b3_day", fake_day)
+    monkeypatch.setattr(
+        "marketdata.ingestion.b3.max_quote_reference_date",
+        lambda *_args, **_kwargs: date(2026, 8, 21),
+    )
+    storage = LocalFileObjectStorage(tmp_path)
+    save_checkpoint(
+        storage,
+        BackfillCheckpoint(
+            provider="b3",
+            start="2026-08-21",
+            end="2026-08-24",
+            last_completed="2026-08-23",
+            status="running",
+        ),
+    )
+    result = backfill_b3(
+        MagicMock(),
+        start=date(2026, 8, 21),
+        end=date(2026, 8, 24),
+        storage=storage,
+        provider=_FakeProvider(),
+        resume=True,
+    )
+    assert ingested == [date(2026, 8, 24)]
+    assert result["status"] == "succeeded"
+
+
+def test_backfill_empty_db_without_checkpoint_starts_at_start(tmp_path, monkeypatch) -> None:
+    ingested: list[date] = []
+
+    def fake_day(session, *, reference_date, **kwargs):
+        ingested.append(reference_date)
+        return _ok_day()
+
+    monkeypatch.setattr("marketdata.ingestion.b3._ingest_b3_day", fake_day)
+    monkeypatch.setattr(
+        "marketdata.ingestion.b3.max_quote_reference_date",
+        lambda *_args, **_kwargs: None,
+    )
+    result = backfill_b3(
+        MagicMock(),
+        start=date(2026, 8, 21),
+        end=date(2026, 8, 24),
+        storage=LocalFileObjectStorage(tmp_path),
+        provider=_FakeProvider(),
+        resume=True,
+    )
+    assert ingested == [date(2026, 8, 21), date(2026, 8, 24)]
+    assert result["status"] == "succeeded"
 
 
 def test_backfill_resume_skips_completed_days(tmp_path, monkeypatch) -> None:

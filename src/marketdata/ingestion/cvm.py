@@ -12,9 +12,9 @@ from marketdata.config import get_settings
 from marketdata.domain.enums import IngestionRunStatus, PriceType
 from marketdata.ingestion.checkpoint import (
     BackfillCheckpoint,
+    effective_last_completed,
     load_checkpoint,
     save_checkpoint,
-    should_resume,
 )
 from marketdata.providers.cvm import (
     CvmCadastroClass,
@@ -48,6 +48,7 @@ from marketdata.storage.repositories import (
     get_or_create_cvm_source,
     get_or_create_fund_instrument,
     load_quote_keys,
+    max_quote_reference_date,
     start_ingestion_run,
     store_raw_artifact,
 )
@@ -410,8 +411,11 @@ def backfill_cvm(
     object_store = storage or build_object_storage()
     window_as_of = as_of or date.today()
     existing = load_checkpoint(object_store, CVM_CHECKPOINT_PROVIDER)
-    resuming = should_resume(existing, start, end, resume=resume)
-    last_completed = existing.last_completed if resuming and existing is not None else None
+    db_last: str | None = None
+    if resume:
+        db_max = max_quote_reference_date(session, CVM_CHECKPOINT_PROVIDER, start=start, end=end)
+        db_last = _month_token(db_max.year, db_max.month) if db_max is not None else None
+    last_completed = effective_last_completed(existing, start, end, db_last, resume=resume)
     _save_cvm_checkpoint(
         object_store,
         start=start,

@@ -94,7 +94,9 @@ Historical backfill (`--lookback-days` does **not** apply). Months inside the
 live 12-month `DADOS/` window use monthly ZIPs; older months use that year's
 HIST ZIP **once**, stored at `raw/cvm/hist/inf_diario_fi_{YYYY}.zip`. Progress
 is checkpointed after each month (`last_completed=YYYY-MM`) and that month is
-`COMMIT`ted to Postgres so a cancelled job keeps completed months. Optional
+`COMMIT`ted to Postgres so a cancelled job keeps completed months. When the
+checkpoint file is missing, backfill uses `max(instrument_quotes.reference_date)`
+for source `cvm` in the requested range (converted to `YYYY-MM`). Optional
 `--max-months` is a safety cap (default unlimited).
 
 ```bash

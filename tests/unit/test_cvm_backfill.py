@@ -259,3 +259,39 @@ def test_backfill_resumes_from_monthly_checkpoint(sqlite_session, tmp_path) -> N
     assert checkpoint is not None
     assert checkpoint.last_completed == "2018-02"
     assert checkpoint.status == "succeeded"
+
+
+def test_backfill_resumes_from_db_max_when_checkpoint_missing(sqlite_session, tmp_path) -> None:
+    hist_zip = _zip_members(
+        {
+            "inf_diario_fi_201801.csv": _informe_csv(date(2018, 1, 15), "1.25"),
+            "inf_diario_fi_201802.csv": _informe_csv(date(2018, 2, 15), "2.50"),
+        }
+    )
+    provider = _FakeCvm(hist={2018: hist_zip})
+    storage = LocalFileObjectStorage(tmp_path)
+    kwargs = dict(
+        start=date(2018, 1, 1),
+        end=date(2018, 2, 28),
+        storage=storage,
+        provider=provider,
+        as_of=date(2026, 8, 24),
+        resume=True,
+    )
+
+    first = backfill_cvm(sqlite_session, max_months=1, **kwargs)
+    assert int(first["inserted"]) == 1
+    checkpoint_path = tmp_path / "state" / "backfill" / "cvm.json"
+    assert checkpoint_path.is_file()
+    checkpoint_path.unlink()
+
+    second = backfill_cvm(sqlite_session, **kwargs)
+    assert int(second["inserted"]) == 1
+    assert int(second["months"]) == 1
+    assert int(second["skipped"]) == 0
+    dates = {row.reference_date for row in sqlite_session.scalars(select(InstrumentQuoteRow))}
+    assert dates == {date(2018, 1, 15), date(2018, 2, 15)}
+    checkpoint = load_checkpoint(storage, "cvm")
+    assert checkpoint is not None
+    assert checkpoint.last_completed == "2018-02"
+    assert checkpoint.status == "succeeded"

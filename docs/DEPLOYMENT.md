@@ -282,7 +282,9 @@ another Railway service:
 
 - B3 scratch universe (IBOV/SMLL LAST + existing MVP futures regex); a 2024
   slice is running. Do not claim multi-year B3 history is loaded. Do **not**
-  pass `--cotahist`.
+  pass `--cotahist`. After a 6-hour kill, re-dispatch **b3** with the **same**
+  start/end (resume from checkpoint or Neon max date). Do not use
+  `/v1/coverage` as a progress bar.
 - CVM persist stays Multimercado+Ações (`CVM_CLASSES`). `ingest-cvm.yml`
   stays dispatch-only.
 - Tesouro ingest stays currently-traded titles only
@@ -478,7 +480,16 @@ schedule together with those crons.
 
 `ingest-all.yml` calls `marketdata ingest all` when dispatched. `backfill.yml`
 calls `marketdata backfill <provider> --start --end`. GitHub-hosted jobs cap
-at 6 hours; a full CVM HIST span should run locally.
+at 6 hours. After a timeout, re-dispatch the **same** provider with the **same**
+start/end. The job restores `data/state/backfill/` (cache + previous artifact)
+and the CLI falls back to Neon `max(reference_date)` for that source so
+already-committed days are not downloaded again. Do not pass `--force`. Do
+not hammer `GET /v1/coverage` as a progress bar (it times out while the writer
+is hot); poll a single ticker history instead, for example
+`GET /v1/quotes/PETR4/history?source=b3`. The manual escape is still
+`start=` the calendar day after the last committed date.
+
+Optional S3 extra (not required for local filesystem):
 
 Optional S3 extra (not required for local filesystem):
 

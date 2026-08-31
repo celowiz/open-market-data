@@ -57,3 +57,37 @@ def should_resume(
     if checkpoint is None or force or not resume:
         return False
     return checkpoint.start == _as_range_token(start) and checkpoint.end == _as_range_token(end)
+
+
+def _completed_token(value: date | str | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat() if isinstance(value, date) else value
+
+
+def effective_last_completed(
+    checkpoint: BackfillCheckpoint | None,
+    start: date | str,
+    end: date | str,
+    db_last: date | str | None,
+    *,
+    resume: bool = True,
+    force: bool = False,
+) -> str | None:
+    """Return the later of a matching checkpoint and a persisted max date.
+
+    GitHub-hosted runners are ephemeral, so ``state/backfill/*.json`` is often
+    missing. ``db_last`` is ``max(reference_date)`` already stored for that
+    source in ``[start, end]``. A newer checkpoint still wins (weekends and
+    empty days are checkpointed without quotes). ``--force`` / ``resume=False``
+    ignore both and start at ``start``.
+    """
+    if force or not resume:
+        return None
+    file_last = None
+    if should_resume(checkpoint, start, end, resume=True, force=False):
+        file_last = checkpoint.last_completed if checkpoint is not None else None
+    candidates = [token for token in (file_last, _completed_token(db_last)) if token]
+    if not candidates:
+        return None
+    return max(candidates)
