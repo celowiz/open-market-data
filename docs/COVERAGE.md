@@ -103,14 +103,39 @@ No migration. Existing `(instrument_id, reference_date)` indexes are enough.
 Prefetch is read-only (`SELECT`); it does not lock `instrument_quotes` and is
 safe while backfill inserts.
 
-Neighboring Explorer reads:
+## Serving read path (API)
 
+Inventory of `/v1` reads on Neon Free (~139 MB / ~350k quotes, history to 2004).
+Coverage is the highest-priority fix; neighboring Explorer reads follow.
+
+- `GET /v1/coverage` — see **Read path (API)** above. Prefetch, not a new contract.
+- `GET /v1/coverage/span` — cheap `min`/`max`/`count` aggregate from #15. Unchanged;
+  Explorer uses it for backfill progress. Do not replace it with the engine.
 - `GET /v1/instruments` used `SELECT DISTINCT instrument_id FROM instrument_quotes`
   (seq scan, ~167ms on Neon plus transfer). It now uses `LATERAL … LIMIT 1`
   correlated to `instruments` so PostgreSQL nested-loops the unique quote
-  index (~59ms for 21 rows, scales with instrument count).
-- Quote history hydrates `source` and `raw_artifact_sha256` in two IN queries
-  per page instead of `session.get` per row.
+  index (~59ms for 21 rows, scales with instrument count). Source names on the
+  page use `EXISTS` against `sources` instead of `DISTINCT` over quote history.
+  Identifiers join `sources` in one query (no per-identifier `session.get`).
+- `GET /v1/quotes/{id}` and `/history` — quote SQL itself is sub-millisecond on
+  the unique quote index; live ~8.8s for 17 PETR4 rows was per-row
+  `session.get` for source and artifact. History is now one statement: quote +
+  `sources.name` + `raw_artifacts.sha256` (LEFT JOIN), `DISTINCT ON` date/type,
+  limit 501. Visibility is `SELECT id … LIMIT 1`, not a full quote row.
+- `GET /v1/quotes/{id}/latest` and `GET /v1/funds/.../quotes[/latest]` share that
+  joined statement.
+- `GET /v1/series/{code}/observations` already used `DISTINCT ON` + `limit`.
+  Latest now `LIMIT 1`. Series resolve joins `sources` (no extra PK get).
+- `GET /v1/sources` filters `public_api_enabled` **and** canonical provider
+  names (`b3`/`bcb`/`cvm`/`tesouro`/`yahoo`) in SQL. `include_test=true` keeps
+  the public-api filter and still lists leftover test rows.
+- `GET /v1/health` — no database. No change.
+- `GET /v1/datasets` — five small JSON manifests from object storage. No change.
+- Engine/session: `bind_database` is process-lifetime (`deps.py`). Not a
+  per-request engine.
+
+Explorer `HISTORY_PAGE_SIZE` is 500 (API default 500, max 5000 unchanged).
+No ingest/backfill/workflow changes. No migration; existing indexes are enough.
 
 ## Out of scope
 

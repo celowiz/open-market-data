@@ -360,17 +360,16 @@ class SessionCoverageStore:
         if not instrument_ids:
             return
         wanted = reference_date.isoformat()
-        events = self._session.scalars(
-            select(QualityEventRow).where(
+        rows = self._session.scalars(
+            select(QualityEventRow.instrument_id).where(
                 QualityEventRow.instrument_id.in_(instrument_ids),
                 QualityEventRow.event_type == "NO_PUBLIC_PRICE",
+                QualityEventRow.extra["reference_date"].as_string() == wanted,
             )
         )
-        for event in events:
-            if event.instrument_id is None:
-                continue
-            if event.extra.get("reference_date") == wanted:
-                self._no_public.add((event.instrument_id, reference_date))
+        for instrument_id in rows:
+            if instrument_id is not None:
+                self._no_public.add((instrument_id, reference_date))
 
     def source(self, name: str) -> SourceView | None:
         if self._source_cache is not None:
@@ -452,6 +451,7 @@ class SessionCoverageStore:
                 SourceRow.name == source_name,
             )
             .order_by(InstrumentQuoteRow.revision.desc())
+            .limit(1)
         )
         if row is None:
             return None
@@ -505,10 +505,13 @@ class SessionCoverageStore:
         if self._no_public is not None and reference_date == self._prefetch_date:
             return (instrument_id, reference_date) in self._no_public
         wanted = reference_date.isoformat()
-        events = self._session.scalars(
-            select(QualityEventRow).where(
-                QualityEventRow.instrument_id == instrument_id,
-                QualityEventRow.event_type == "NO_PUBLIC_PRICE",
+        return (
+            self._session.scalar(
+                select(QualityEventRow.id).where(
+                    QualityEventRow.instrument_id == instrument_id,
+                    QualityEventRow.event_type == "NO_PUBLIC_PRICE",
+                    QualityEventRow.extra["reference_date"].as_string() == wanted,
+                )
             )
+            is not None
         )
-        return any(event.extra.get("reference_date") == wanted for event in events)

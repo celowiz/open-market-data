@@ -437,6 +437,78 @@ def test_instruments_visibility_sql_uses_lateral_not_full_quotes_distinct() -> N
     assert "DISTINCT" not in sql
 
 
+def test_quote_history_sql_joins_source_and_artifact() -> None:
+    from uuid import uuid4
+
+    from sqlalchemy.dialects import postgresql
+
+    from marketdata.api.access import public_quotes_with_provenance_stmt
+    from marketdata.storage.models import InstrumentQuoteRow
+
+    stmt = (
+        public_quotes_with_provenance_stmt(uuid4())
+        .distinct(InstrumentQuoteRow.reference_date, InstrumentQuoteRow.price_type)
+        .order_by(
+            InstrumentQuoteRow.reference_date.desc(),
+            InstrumentQuoteRow.price_type.asc(),
+            InstrumentQuoteRow.revision.desc(),
+            InstrumentQuoteRow.id.asc(),
+        )
+        .limit(501)
+    )
+    sql = str(stmt.compile(dialect=postgresql.dialect())).upper()
+    assert "RAW_ARTIFACTS" in sql
+    assert "LEFT OUTER JOIN" in sql
+    assert "SOURCES" in sql
+    assert "PUBLIC_API_ENABLED" in sql
+
+
+def test_instrument_visibility_selects_quote_id_not_full_row() -> None:
+    from uuid import uuid4
+
+    from sqlalchemy.dialects import postgresql
+
+    from marketdata.api.access import public_quote_exists_stmt
+
+    sql = str(public_quote_exists_stmt(uuid4()).compile(dialect=postgresql.dialect())).upper()
+    assert "INSTRUMENT_QUOTES.ID" in sql
+    assert "LIMIT" in sql
+    assert "RAW_ARTIFACTS" not in sql
+
+
+def test_sources_list_filters_public_api_in_sql() -> None:
+    from sqlalchemy.dialects import postgresql
+
+    from marketdata.api.routes.sources import public_sources_stmt
+
+    default_sql = str(
+        public_sources_stmt().compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    ).upper()
+    assert "PUBLIC_API_ENABLED" in default_sql
+    assert "TRUE" in default_sql
+    assert "LOWER" in default_sql
+    assert "'B3'" in default_sql
+    with_tests = str(
+        public_sources_stmt(include_test=True).compile(dialect=postgresql.dialect())
+    ).upper()
+    assert "PUBLIC_API_ENABLED" in with_tests
+    assert "LOWER" not in with_tests
+
+
+def test_instrument_source_names_use_exists_not_quotes_distinct() -> None:
+    from uuid import uuid4
+
+    from sqlalchemy.dialects import postgresql
+
+    from marketdata.api.routes.instruments import public_source_names_stmt
+
+    sql = str(public_source_names_stmt([uuid4()]).compile(dialect=postgresql.dialect())).upper()
+    assert "EXISTS" in sql
+    assert "DISTINCT" not in sql
+
+
 def test_instruments_invalid_cursor_returns_400() -> None:
     response = _client().get("/v1/instruments", params={"cursor": "not-a-uuid"})
     assert response.status_code == 400

@@ -4,16 +4,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from marketdata.api.access import instrument_visible_on_public_api, public_quotes_stmt
+from marketdata.api.access import (
+    instrument_visible_on_public_api,
+    public_quotes_with_provenance_stmt,
+)
 from marketdata.api.deps import get_db
 from marketdata.api.query import (
     DEFAULT_HISTORY_LIMIT,
     MAX_HISTORY_LIMIT,
     apply_history_window,
-    load_history_page,
+    load_history_result_rows,
     parse_history_window,
 )
-from marketdata.api.routes.funds import QuoteResponse, _to_quote, quote_responses
+from marketdata.api.routes.funds import QuoteResponse, _latest_public_quote, quotes_from_joined_rows
 from marketdata.api.span import load_instrument_spans
 from marketdata.storage.models import InstrumentQuoteRow
 from marketdata.storage.repositories import resolve_instrument_id
@@ -55,14 +58,14 @@ def list_quotes(
 ) -> QuotesResponse:
     window = parse_history_window(start=start, end=end, date_filter=date_filter, cursor=cursor)
     instrument_id = _visible_instrument(session, identifier, source)
-    stmt = public_quotes_stmt(instrument_id, source_name=source)
+    stmt = public_quotes_with_provenance_stmt(instrument_id, source_name=source)
     stmt = apply_history_window(stmt, InstrumentQuoteRow.reference_date, window)
     if price_type is not None:
         stmt = stmt.where(InstrumentQuoteRow.price_type == price_type)
-    rows, next_cursor = load_history_page(
+    rows, next_cursor = load_history_result_rows(
         session,
         stmt,
-        date_attr="reference_date",
+        date_of=lambda row: row[0].reference_date,
         distinct_on=(InstrumentQuoteRow.reference_date, InstrumentQuoteRow.price_type),
         order_by=(
             InstrumentQuoteRow.reference_date.desc(),
@@ -76,7 +79,7 @@ def list_quotes(
     return QuotesResponse(
         instrument_id=str(instrument_id),
         identifier=identifier,
-        quotes=quote_responses(session, rows),
+        quotes=quotes_from_joined_rows(rows),
         next_cursor=next_cursor,
         first_quote_date=span.min_date if span is not None else None,
         last_quote_date=span.max_date if span is not None else None,
@@ -92,12 +95,4 @@ def latest_quote(
     source: str | None = Query(default=None),
 ) -> QuoteResponse:
     instrument_id = _visible_instrument(session, identifier, source)
-    stmt = public_quotes_stmt(instrument_id, source_name=source)
-    if price_type is not None:
-        stmt = stmt.where(InstrumentQuoteRow.price_type == price_type)
-    row = session.scalar(
-        stmt.order_by(InstrumentQuoteRow.reference_date.desc(), InstrumentQuoteRow.revision.desc())
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="quote not found")
-    return _to_quote(session, row)
+    return _latest_public_quote(session, instrument_id, source_name=source, price_type=price_type)

@@ -84,3 +84,17 @@ def load_history_page(
     page_stmt = stmt.distinct(*distinct_on).order_by(*order_by).limit(limit + 1)
     rows = list(session.scalars(page_stmt).all())
     return paginate_by_date(rows, limit=limit, date_of=lambda row: getattr(row, date_attr))
+
+
+def load_history_result_rows(
+    session: Session,
+    stmt: Select[Any],
+    *,
+    date_of: Callable[[Any], date],
+    distinct_on: tuple[Any, ...],
+    order_by: tuple[Any, ...],
+    limit: int,
+) -> tuple[list[Any], date | None]:
+    page_stmt = stmt.distinct(*distinct_on).order_by(*order_by).limit(limit + 1)
+    rows = list(session.execute(page_stmt).all())
+    return paginate_by_date(rows, limit=limit, date_of=date_of)

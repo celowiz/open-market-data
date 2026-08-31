@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from marketdata.api.access import series_source_visible_on_public_api
+from marketdata.api.access import source_row_allows_public_api
 from marketdata.api.deps import get_db
 from marketdata.api.query import (
     DEFAULT_HISTORY_LIMIT,
@@ -37,15 +37,21 @@ class SeriesHistoryResponse(BaseModel):
     next_cursor: date | None = None
 
 
-def _series_by_code(session: Session, code: str) -> MarketSeriesRow:
-    row = session.scalar(select(MarketSeriesRow).where(MarketSeriesRow.code == code))
-    if row is None:
-        row = session.scalar(
-            select(MarketSeriesRow).where(MarketSeriesRow.source_series_id == code)
-        )
-    if row is None or not series_source_visible_on_public_api(session, row.source_id):
+def _series_with_source(session: Session, code: str) -> tuple[MarketSeriesRow, SourceRow]:
+    joined = session.execute(
+        select(MarketSeriesRow, SourceRow)
+        .join(SourceRow, SourceRow.id == MarketSeriesRow.source_id)
+        .where(MarketSeriesRow.code == code)
+    ).first()
+    if joined is None:
+        joined = session.execute(
+            select(MarketSeriesRow, SourceRow)
+            .join(SourceRow, SourceRow.id == MarketSeriesRow.source_id)
+            .where(MarketSeriesRow.source_series_id == code)
+        ).first()
+    if joined is None or not source_row_allows_public_api(joined[1]):
         raise HTTPException(status_code=404, detail="series not found")
-    return row
+    return joined[0], joined[1]
 
 
 def _to_observation(
@@ -61,14 +67,9 @@ def _to_observation(
     )
 
 
-def _series_source_name(session: Session, series: MarketSeriesRow) -> str:
-    source = session.get(SourceRow, series.source_id)
-    return source.name if source else "bcb"
-
-
 @router.get("/series/{code}/latest", response_model=SeriesObservationResponse)
 def series_latest(code: str, session: Session = Depends(get_db)) -> SeriesObservationResponse:
-    series = _series_by_code(session, code)
+    series, source = _series_with_source(session, code)
     row = session.scalar(
         select(MarketSeriesObservationRow)
         .where(MarketSeriesObservationRow.series_id == series.id)
@@ -76,10 +77,11 @@ def series_latest(code: str, session: Session = Depends(get_db)) -> SeriesObserv
             MarketSeriesObservationRow.reference_date.desc(),
             MarketSeriesObservationRow.revision.desc(),
         )
+        .limit(1)
     )
     if row is None:
         raise HTTPException(status_code=404, detail="observation not found")
-    return _to_observation(series, row, _series_source_name(session, series))
+    return _to_observation(series, row, source.name)
 
 
 @router.get("/series/{code}/observations", response_model=SeriesHistoryResponse)
@@ -93,7 +95,7 @@ def series_observations(
     session: Session = Depends(get_db),
 ) -> SeriesHistoryResponse:
     window = parse_history_window(start=start, end=end, date_filter=date_filter, cursor=cursor)
-    series = _series_by_code(session, code)
+    series, source = _series_with_source(session, code)
     stmt = select(MarketSeriesObservationRow).where(
         MarketSeriesObservationRow.series_id == series.id
     )
@@ -110,10 +112,9 @@ def series_observations(
         ),
         limit=limit,
     )
-    source_name = _series_source_name(session, series)
     return SeriesHistoryResponse(
         series=series.code,
         unit=series.unit,
-        observations=[_to_observation(series, row, source_name) for row in rows],
+        observations=[_to_observation(series, row, source.name) for row in rows],
         next_cursor=next_cursor,
     )

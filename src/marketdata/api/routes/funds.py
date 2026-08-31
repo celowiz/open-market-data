@@ -1,23 +1,27 @@
 from datetime import date
 from decimal import Decimal
+from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from marketdata.api.access import instrument_visible_on_public_api, public_quotes_stmt
+from marketdata.api.access import (
+    instrument_visible_on_public_api,
+    public_quotes_with_provenance_stmt,
+)
 from marketdata.api.deps import get_db
 from marketdata.api.query import (
     DEFAULT_HISTORY_LIMIT,
     MAX_HISTORY_LIMIT,
     apply_history_window,
-    load_history_page,
+    load_history_result_rows,
     parse_history_window,
 )
 from marketdata.domain.enums import PriceType
 from marketdata.domain.errors import decimal_json
-from marketdata.storage.models import InstrumentQuoteRow, RawArtifactRow, SourceRow
+from marketdata.storage.models import InstrumentQuoteRow
 from marketdata.storage.repositories import resolve_instrument_id
 
 router = APIRouter()
@@ -43,44 +47,46 @@ class FundQuotesResponse(BaseModel):
     next_cursor: date | None = None
 
 
-def quote_responses(session: Session, rows: list[InstrumentQuoteRow]) -> list[QuoteResponse]:
-    if not rows:
-        return []
-    source_ids = {row.source_id for row in rows}
-    artifact_ids = {row.raw_artifact_id for row in rows if row.raw_artifact_id is not None}
-    sources = {
-        source.id: source.name
-        for source in session.scalars(select(SourceRow).where(SourceRow.id.in_(source_ids)))
-    }
-    artifacts: dict[object, str] = {}
-    if artifact_ids:
-        artifacts = {
-            artifact.id: artifact.sha256
-            for artifact in session.scalars(
-                select(RawArtifactRow).where(RawArtifactRow.id.in_(artifact_ids))
-            )
-        }
-    return [
-        QuoteResponse(
-            date=row.reference_date,
-            price=decimal_json(Decimal(row.value)),
-            currency=row.currency,
-            price_type=row.price_type,
-            source=sources.get(row.source_id, "unknown"),
-            official=row.is_official,
-            revision=row.revision,
-            retrieved_at=row.retrieved_at.isoformat() if row.retrieved_at else None,
-            raw_artifact_sha256=(
-                artifacts.get(row.raw_artifact_id) if row.raw_artifact_id is not None else None
-            ),
-            unit=row.unit,
-        )
-        for row in rows
-    ]
+def quote_from_parts(
+    row: InstrumentQuoteRow, source_name: str, artifact_sha: str | None
+) -> QuoteResponse:
+    return QuoteResponse(
+        date=row.reference_date,
+        price=decimal_json(Decimal(row.value)),
+        currency=row.currency,
+        price_type=row.price_type,
+        source=source_name or "unknown",
+        official=row.is_official,
+        revision=row.revision,
+        retrieved_at=row.retrieved_at.isoformat() if row.retrieved_at else None,
+        raw_artifact_sha256=artifact_sha,
+        unit=row.unit,
+    )
 
 
-def _to_quote(session: Session, row: InstrumentQuoteRow) -> QuoteResponse:
-    return quote_responses(session, [row])[0]
+def quotes_from_joined_rows(rows: list[Any]) -> list[QuoteResponse]:
+    return [quote_from_parts(quote, source_name, sha) for quote, source_name, sha in rows]
+
+
+def _latest_public_quote(
+    session: Session,
+    instrument_id: UUID,
+    *,
+    source_name: str | None = None,
+    price_type: str | None = None,
+) -> QuoteResponse:
+    stmt = public_quotes_with_provenance_stmt(instrument_id, source_name=source_name)
+    if price_type is not None:
+        stmt = stmt.where(InstrumentQuoteRow.price_type == price_type)
+    joined = session.execute(
+        stmt.order_by(
+            InstrumentQuoteRow.reference_date.desc(), InstrumentQuoteRow.revision.desc()
+        ).limit(1)
+    ).first()
+    if joined is None:
+        raise HTTPException(status_code=404, detail="quote not found")
+    quote, source_name_value, sha = joined
+    return quote_from_parts(quote, source_name_value, sha)
 
 
 @router.get("/funds/{identifier}/quotes", response_model=FundQuotesResponse)
@@ -97,14 +103,14 @@ def fund_quotes(
     instrument_id = resolve_instrument_id(session, identifier)
     if instrument_id is None or not instrument_visible_on_public_api(session, instrument_id):
         raise HTTPException(status_code=404, detail="instrument not found")
-    stmt = public_quotes_stmt(instrument_id).where(
+    stmt = public_quotes_with_provenance_stmt(instrument_id).where(
         InstrumentQuoteRow.price_type == PriceType.FUND_NAV.value,
     )
     stmt = apply_history_window(stmt, InstrumentQuoteRow.reference_date, window)
-    rows, next_cursor = load_history_page(
+    rows, next_cursor = load_history_result_rows(
         session,
         stmt,
-        date_attr="reference_date",
+        date_of=lambda row: row[0].reference_date,
         distinct_on=(InstrumentQuoteRow.reference_date,),
         order_by=(
             InstrumentQuoteRow.reference_date.desc(),
@@ -116,7 +122,7 @@ def fund_quotes(
     return FundQuotesResponse(
         instrument_id=str(instrument_id),
         identifier=identifier,
-        quotes=quote_responses(session, rows),
+        quotes=quotes_from_joined_rows(rows),
         next_cursor=next_cursor,
     )
 
@@ -126,11 +132,4 @@ def fund_latest_quote(identifier: str, session: Session = Depends(get_db)) -> Qu
     instrument_id = resolve_instrument_id(session, identifier)
     if instrument_id is None or not instrument_visible_on_public_api(session, instrument_id):
         raise HTTPException(status_code=404, detail="instrument not found")
-    row = session.scalar(
-        public_quotes_stmt(instrument_id)
-        .where(InstrumentQuoteRow.price_type == PriceType.FUND_NAV.value)
-        .order_by(InstrumentQuoteRow.reference_date.desc(), InstrumentQuoteRow.revision.desc())
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="quote not found")
-    return _to_quote(session, row)
+    return _latest_public_quote(session, instrument_id, price_type=PriceType.FUND_NAV.value)

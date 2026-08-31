@@ -28,6 +28,7 @@ export class ApiError extends Error {
   }
 }
 
+/** Explorer page size. The API default is also 500 (max 5000 remains available). */
 export const HISTORY_PAGE_SIZE = 500;
 export const COVERAGE_PAGE_SIZE = 100;
 export const INSTRUMENT_PAGE_SIZE = 20;
