@@ -36,7 +36,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/80 bg-canvas/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3">
+      <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-3 px-4 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -60,7 +60,7 @@ export function SiteHeader() {
               href="/status"
               aria-current={pathname === "/status" ? "page" : undefined}
               className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium lg:hidden",
+                "inline-flex min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium lg:hidden",
                 api.status === "ok"
                   ? "border-up/40 text-up"
                   : api.status === "unreachable"
@@ -85,7 +85,7 @@ export function SiteHeader() {
           <div className="flex flex-col gap-2 lg:flex-1 lg:flex-row lg:items-center lg:justify-end lg:gap-4">
             <nav
               aria-label={copy.nav.main}
-              className="-mx-1 flex gap-1 overflow-x-auto px-1 lg:justify-end"
+              className="flex flex-wrap gap-1 lg:justify-end"
             >
               {NAV.map((item) => {
                 const current =
@@ -98,7 +98,7 @@ export function SiteHeader() {
                     href={item.href}
                     aria-current={current ? "page" : undefined}
                     className={cn(
-                      "shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                      "inline-flex min-h-11 items-center rounded-full px-3 py-2 text-sm font-medium transition-colors",
                       current
                         ? "bg-accent text-accent-fg"
                         : "text-muted hover:bg-elevated hover:text-foreground",
@@ -113,7 +113,7 @@ export function SiteHeader() {
               href="/status"
               aria-current={pathname === "/status" ? "page" : undefined}
               className={cn(
-                "hidden items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium lg:inline-flex",
+                "hidden min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium lg:inline-flex",
                 api.status === "ok"
                   ? "border-up/40 text-up"
                   : api.status === "unreachable"

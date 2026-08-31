@@ -223,14 +223,16 @@ function HomeHero({
       ) : null}
       <RangeChips value={rangeKey} disabled={!apiReady} onChange={(key) => onRange(key)} />
       {points.length > 0 ? (
-        <PriceChart
-          variant="hero"
-          label={example.identifier}
-          priceType={lastPoint?.priceType}
-          unit={lastPoint?.unit}
-          kind={lastPoint?.kind}
-          rows={points.map((point) => ({ date: point.date, raw: point.raw }))}
-        />
+        <div className="-mx-4 min-w-0 sm:mx-0">
+          <PriceChart
+            variant="hero"
+            label={example.identifier}
+            priceType={lastPoint?.priceType}
+            unit={lastPoint?.unit}
+            kind={lastPoint?.kind}
+            rows={points.map((point) => ({ date: point.date, raw: point.raw }))}
+          />
+        </div>
       ) : null}
       {history.status === "success" && points.length === 0 ? (
         <EmptyState>

@@ -30,7 +30,7 @@ export function SkeletonBlock({ label = copy.common.loading }: { label?: string 
 
 export function ChartSkeleton({ label = copy.common.loading }: { label?: string }) {
   return (
-    <div role="status" aria-live="polite" className="flex h-[18rem] flex-col justify-end gap-3 sm:h-[24rem]">
+    <div role="status" aria-live="polite" className="flex h-[260px] flex-col justify-end gap-3 sm:h-[24rem]">
       <span className="sr-only">{label}</span>
       <div className="skeleton h-full w-full rounded-2xl" />
     </div>

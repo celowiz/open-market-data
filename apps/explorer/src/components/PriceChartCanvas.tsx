@@ -279,7 +279,7 @@ export function PriceChartCanvas({
     <div
       className={cn(
         "relative w-full",
-        hero ? "h-[18rem] sm:h-[24rem] lg:h-[28rem]" : "h-64 rounded-2xl border border-border bg-surface p-2 sm:h-80",
+        hero ? "h-[260px] sm:h-[24rem] lg:h-[28rem]" : "h-64 rounded-2xl border border-border bg-surface p-2 sm:h-80",
       )}
     >
       <div ref={containerRef} className="h-full w-full" />

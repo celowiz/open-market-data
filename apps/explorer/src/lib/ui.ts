@@ -1,5 +1,5 @@
 export const fieldClass =
-  "rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground placeholder:text-muted transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-11 rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground placeholder:text-muted transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
 export const cardClass = "rounded-2xl border border-border bg-surface";
 
@@ -11,7 +11,7 @@ export const btnAccent =
 
 export const linkClass = "font-medium text-accent hover:underline";
 
-export const tableWrapClass = "overflow-x-auto rounded-2xl border border-border bg-surface";
+export const tableWrapClass = "max-w-full overflow-x-auto rounded-2xl border border-border bg-surface";
 
 export const thClass = "px-3 py-2.5 text-xs font-medium uppercase tracking-wide text-muted";
 
