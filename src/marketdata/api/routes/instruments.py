@@ -3,10 +3,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, exists, lateral, literal, or_, select, true
 from sqlalchemy.orm import Session
 
-from marketdata.api.access import source_row_allows_public_api
 from marketdata.api.deps import get_db
 from marketdata.api.span import load_instrument_spans
 from marketdata.storage.models import (
@@ -60,15 +59,20 @@ def _ilike_contains(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _visible_instrument_ids(*, source_name: str | None = None):
+def instrument_visibility_lateral(*, source_name: str | None = None):
+    """LATERAL LIMIT 1 so visibility is an index lookup per instrument, not a quotes seq scan."""
     stmt = (
-        select(InstrumentQuoteRow.instrument_id)
+        select(literal(True))
+        .select_from(InstrumentQuoteRow)
         .join(SourceRow, SourceRow.id == InstrumentQuoteRow.source_id)
-        .where(SourceRow.public_api_enabled.is_(True))
+        .where(
+            InstrumentQuoteRow.instrument_id == InstrumentRow.id,
+            SourceRow.public_api_enabled.is_(True),
+        )
     )
     if source_name is not None:
         stmt = stmt.where(SourceRow.name == source_name)
-    return stmt.distinct()
+    return lateral(stmt.limit(1).correlate(InstrumentRow)).alias("visible_quote")
 
 
 def _matching_instrument_ids(*, q: str):
@@ -99,26 +103,39 @@ def _public_identifier_values_by_instrument(
         select(
             InstrumentIdentifierRow.instrument_id,
             InstrumentIdentifierRow.identifier_value,
-            InstrumentIdentifierRow.source_id,
+            SourceRow.id,
+            SourceRow.public_api_enabled,
         )
+        .outerjoin(SourceRow, SourceRow.id == InstrumentIdentifierRow.source_id)
         .where(InstrumentIdentifierRow.instrument_id.in_(instrument_ids))
         .order_by(InstrumentIdentifierRow.identifier_value)
     ).all()
-    source_ids = {source_id for _, _, source_id in rows if source_id is not None}
-    sources_by_id: dict[UUID, SourceRow] = {}
-    if source_ids:
-        for source in session.scalars(select(SourceRow).where(SourceRow.id.in_(source_ids))):
-            sources_by_id[source.id] = source
     seen: dict[UUID, set[str]] = {instrument_id: set() for instrument_id in instrument_ids}
-    for instrument_id, value, source_id in rows:
-        if source_id is not None:
-            source = sources_by_id.get(source_id)
-            if source is None or not source_row_allows_public_api(source):
-                continue
+    for instrument_id, value, source_id, public_api_enabled in rows:
+        if source_id is not None and not public_api_enabled:
+            continue
         if value not in seen[instrument_id]:
             seen[instrument_id].add(value)
             result[instrument_id].append(value)
     return result
+
+
+def public_source_names_stmt(instrument_ids: list[UUID]):
+    """EXISTS LIMIT-style lookup so listing sources does not scan quote history."""
+    return (
+        select(InstrumentRow.id, SourceRow.name)
+        .where(
+            InstrumentRow.id.in_(instrument_ids),
+            SourceRow.public_api_enabled.is_(True),
+            exists(
+                select(InstrumentQuoteRow.id).where(
+                    InstrumentQuoteRow.instrument_id == InstrumentRow.id,
+                    InstrumentQuoteRow.source_id == SourceRow.id,
+                )
+            ),
+        )
+        .order_by(InstrumentRow.id, SourceRow.name)
+    )
 
 
 def _public_source_names_by_instrument(
@@ -127,16 +144,7 @@ def _public_source_names_by_instrument(
     result: dict[UUID, list[str]] = {instrument_id: [] for instrument_id in instrument_ids}
     if not instrument_ids:
         return result
-    rows = session.execute(
-        select(InstrumentQuoteRow.instrument_id, SourceRow.name)
-        .join(SourceRow, SourceRow.id == InstrumentQuoteRow.source_id)
-        .where(
-            InstrumentQuoteRow.instrument_id.in_(instrument_ids),
-            SourceRow.public_api_enabled.is_(True),
-        )
-        .distinct()
-        .order_by(InstrumentQuoteRow.instrument_id, SourceRow.name)
-    ).all()
+    rows = session.execute(public_source_names_stmt(instrument_ids)).all()
     for instrument_id, name in rows:
         if name not in result[instrument_id]:
             result[instrument_id].append(name)
@@ -166,7 +174,7 @@ def search_instruments(
 
     stmt = (
         select(InstrumentRow)
-        .where(InstrumentRow.id.in_(_visible_instrument_ids(source_name=source_name)))
+        .join(instrument_visibility_lateral(source_name=source_name), true())
         .order_by(InstrumentRow.name, InstrumentRow.id)
     )
     if query is not None:

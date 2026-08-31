@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
-from marketdata.api.canonical_sources import is_canonical_source_name
+from marketdata.api.canonical_sources import canonical_source_names
 from marketdata.api.deps import get_db
 from marketdata.storage.models import SourceRow
 
@@ -21,6 +21,13 @@ class SourceResponse(BaseModel):
     data_license: str | None = None
 
 
+def public_sources_stmt(*, include_test: bool = False) -> Select[tuple[SourceRow]]:
+    stmt = select(SourceRow).where(SourceRow.public_api_enabled.is_(True))
+    if not include_test:
+        stmt = stmt.where(func.lower(SourceRow.name).in_(sorted(canonical_source_names())))
+    return stmt.order_by(SourceRow.name)
+
+
 @router.get("/sources", response_model=list[SourceResponse])
 def list_sources(
     include_test: bool = Query(
@@ -32,7 +39,7 @@ def list_sources(
     ),
     session: Session = Depends(get_db),
 ) -> list[SourceResponse]:
-    rows = session.scalars(select(SourceRow).order_by(SourceRow.name)).all()
+    rows = session.scalars(public_sources_stmt(include_test=include_test)).all()
     return [
         SourceResponse(
             name=row.name,
@@ -45,5 +52,4 @@ def list_sources(
             data_license=row.data_license,
         )
         for row in rows
-        if row.public_api_enabled and (include_test or is_canonical_source_name(row.name))
     ]

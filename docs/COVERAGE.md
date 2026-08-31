@@ -69,6 +69,74 @@ The committed example is an **incomplete snapshot**. See
 at coverage time. US rows are a ticker experiment, not licensed index-constituent
 redistribution.
 
+## Read path (API)
+
+`GET /v1/coverage` still scores the **whole** named CSV, then slices
+`results[cursor:cursor+limit]`. Totals (`priced`, `missing_reason_counts`) are
+universe-wide. The contract is unchanged.
+
+The slow path was not a missing index and not a Python date walk. For each
+CSV row the store issued separate SQL for source, identifier resolve, the
+session quote, `NO_PUBLIC_PRICE` events, ingest success, and `MAX(reference_date)`
+when the session was missing. Scratch is ~165 names. On Neon Free
+(`instrument_quotes` ~139 MB / ~350k rows, history back to 2004) that is
+hundreds of Railway→Neon round trips. A 2024-06-03 scratch request took ~199s
+with 146 `STALE` results.
+
+`SessionCoverageStore.prefetch_universe` now loads that snapshot in a handful
+of SELECTs, then `_evaluate_row` answers from memory:
+
+1. `sources` for preferred providers in the CSV.
+2. `instrument_identifiers` for all tickers/ISINs in the CSV
+   (`ix_instrument_identifiers_type_value`).
+3. `instrument_quotes` for those instrument ids on the requested date
+   (`uq_instrument_quotes_identity` / `(instrument_id, reference_date)`).
+   Highest `revision` wins in Python.
+4. `MAX(reference_date)` grouped by `(instrument_id, price_type, source)` for
+   `reference_date < :date` — Nested Loop + index-only scan on
+   `uq_instrument_quotes_identity`, not a seq scan. EXPLAIN ANALYZE for three
+   IBOV names was <1ms.
+5. Successful `ingestion_runs` for those providers and date.
+6. `quality_events` with `event_type = NO_PUBLIC_PRICE` for those ids.
+
+No migration. Existing `(instrument_id, reference_date)` indexes are enough.
+Prefetch is read-only (`SELECT`); it does not lock `instrument_quotes` and is
+safe while backfill inserts.
+
+## Serving read path (API)
+
+Inventory of `/v1` reads on Neon Free (~139 MB / ~350k quotes, history to 2004).
+Coverage is the highest-priority fix; neighboring Explorer reads follow.
+
+- `GET /v1/coverage` — see **Read path (API)** above. Prefetch, not a new contract.
+- `GET /v1/coverage/span` — cheap `min`/`max`/`count` aggregate from #15. Unchanged;
+  Explorer uses it for backfill progress. Do not replace it with the engine.
+- `GET /v1/instruments` used `SELECT DISTINCT instrument_id FROM instrument_quotes`
+  (seq scan, ~167ms on Neon plus transfer). It now uses `LATERAL … LIMIT 1`
+  correlated to `instruments` so PostgreSQL nested-loops the unique quote
+  index (~59ms for 21 rows, scales with instrument count). Source names on the
+  page use `EXISTS` against `sources` instead of `DISTINCT` over quote history.
+  Identifiers join `sources` in one query (no per-identifier `session.get`).
+- `GET /v1/quotes/{id}` and `/history` — quote SQL itself is sub-millisecond on
+  the unique quote index; live ~8.8s for 17 PETR4 rows was per-row
+  `session.get` for source and artifact. History is now one statement: quote +
+  `sources.name` + `raw_artifacts.sha256` (LEFT JOIN), `DISTINCT ON` date/type,
+  limit 501. Visibility is `SELECT id … LIMIT 1`, not a full quote row.
+- `GET /v1/quotes/{id}/latest` and `GET /v1/funds/.../quotes[/latest]` share that
+  joined statement.
+- `GET /v1/series/{code}/observations` already used `DISTINCT ON` + `limit`.
+  Latest now `LIMIT 1`. Series resolve joins `sources` (no extra PK get).
+- `GET /v1/sources` filters `public_api_enabled` **and** canonical provider
+  names (`b3`/`bcb`/`cvm`/`tesouro`/`yahoo`) in SQL. `include_test=true` keeps
+  the public-api filter and still lists leftover test rows.
+- `GET /v1/health` — no database. No change.
+- `GET /v1/datasets` — five small JSON manifests from object storage. No change.
+- Engine/session: `bind_database` is process-lifetime (`deps.py`). Not a
+  per-request engine.
+
+Explorer `HISTORY_PAGE_SIZE` is 500 (API default 500, max 5000 unchanged).
+No ingest/backfill/workflow changes. No migration; existing indexes are enough.
+
 ## Out of scope
 
 Live rebalancing, licensed US index feeds, ANBIMA, fair-value fills, funds,
