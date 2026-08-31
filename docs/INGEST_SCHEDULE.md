@@ -6,10 +6,15 @@ below are **America/Sao_Paulo (BRT, UTC−3)**. Brazil has not used DST since
 UTC expressions here and in `.github/workflows/`.
 
 Workflows invoke the project CLI (ADR-0006). They do not reimplement downloads
-in YAML. Each ingest job uses `concurrency.group` per provider with
-`cancel-in-progress: false` (a second B3 job waits; it does not kill the first
-and hammer Pesquisa por Pregão). HTTP retries stay in the CLI (`httpx` /
-tenacity). YAML does not tight-loop the source.
+in YAML. Neon-writing workflows share one GitHub Actions concurrency group,
+`neon-writes`, with `cancel-in-progress: false`: `backfill.yml`,
+`ingest-all.yml`, `ingest-b3.yml`, `ingest-bcb.yml`, `ingest-cvm.yml`,
+`ingest-tesouro.yml`, and `ingest-yahoo.yml`. The group is repository-scoped,
+so a nightly B3 ingest waits behind an in-progress backfill instead of writing
+in parallel. An in-progress run is not cancelled. `ci.yml`, `explorer.yml`,
+and `publish-datasets.yml` are not in that group; they do not write to
+Postgres. HTTP retries stay in the CLI (`httpx` / tenacity). YAML does not
+tight-loop the source.
 
 If `DATABASE_URL` is not configured as a GitHub Actions **secret**, the job
 exits before any provider HTTP. The secret must be set in the repository
@@ -90,10 +95,17 @@ in git, workflow YAML, or these docs. Scheduled (and dispatch) jobs fail at
 `ingest-all.yml` stays dispatch-only. Do not add its cron while per-provider
 BCB / B3 / Tesouro schedules are enabled.
 
-`ingest-yahoo.yml` stays dispatch-only (ADR-0013). Do not add a cron unless
-operators explicitly want Yahoo on a schedule **and** `YAHOO_PROVIDER_ENABLED`
-is intentional. Yahoo is currently visible on the public API; it is still not
-published as Parquet.
+Official ingest/backfill jobs that can run provider `all` or Yahoo
+(`ingest-all.yml`, `backfill.yml`) set `YAHOO_PROVIDER_ENABLED=false` in job
+`env:`. The same flag is set on the official per-provider workflows (CVM, B3,
+Tesouro, BCB) as a shared env baseline. Python defaults `yahoo_provider_enabled`
+to true, so without this Actions env `ingest all` / `backfill all` would still
+pull Yahoo.
+
+`ingest-yahoo.yml` stays dispatch-only (ADR-0013) and does **not** set
+`YAHOO_PROVIDER_ENABLED=false`, so an explicit Yahoo dispatch still ingests.
+Do not add a Yahoo cron. Yahoo is currently visible on the public API; it is
+still not published as Parquet.
 
 `publish-datasets.yml` requires the Actions variable
 `PUBLIC_DATASET_PUBLICATION_ENABLED=true`. Leave that variable unset or

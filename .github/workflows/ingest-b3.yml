@@ -15,8 +15,9 @@ on:
         description: "Reference date YYYY-MM-DD (empty = B3 trading date from schedule helper)"
         required: false
 
+# Shared with backfill and other ingest workflows so only one Neon writer runs at a time.
 concurrency:
-  group: ingest-b3
+  group: neon-writes
   cancel-in-progress: false
 
 permissions:
@@ -39,6 +40,7 @@ jobs:
       OBJECT_STORAGE_REGION: ${{ vars.OBJECT_STORAGE_REGION || 'auto' }}
       INGEST_UNIVERSE: ${{ vars.INGEST_UNIVERSE }}
       B3_EQUITY_UNIVERSE_PATH: ${{ vars.B3_EQUITY_UNIVERSE_PATH }}
+      YAHOO_PROVIDER_ENABLED: "false"
       PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v5
