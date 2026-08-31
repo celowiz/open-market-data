@@ -48,7 +48,6 @@ from marketdata.storage.repositories import (
     get_or_create_cvm_source,
     get_or_create_fund_instrument,
     load_quote_keys,
-    max_quote_reference_date,
     start_ingestion_run,
     store_raw_artifact,
 )
@@ -411,11 +410,9 @@ def backfill_cvm(
     object_store = storage or build_object_storage()
     window_as_of = as_of or date.today()
     existing = load_checkpoint(object_store, CVM_CHECKPOINT_PROVIDER)
-    db_last: str | None = None
-    if resume:
-        db_max = max_quote_reference_date(session, CVM_CHECKPOINT_PROVIDER, start=start, end=end)
-        db_last = _month_token(db_max.year, db_max.month) if db_max is not None else None
-    last_completed = effective_last_completed(existing, start, end, db_last, resume=resume)
+    # Day-level Neon max() is B3-only. CVM months are not atomic (commits every
+    # 1000 rows) and a later month from ingest-cvm must not skip earlier HIST.
+    last_completed = effective_last_completed(existing, start, end, None, resume=resume)
     _save_cvm_checkpoint(
         object_store,
         start=start,

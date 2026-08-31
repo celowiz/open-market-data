@@ -912,6 +912,9 @@ def backfill_b3(
     checkpoint = load_checkpoint(object_store, "b3")
     db_last = None
     if resume:
+        # Each B3 calendar day is one COMMIT. max(quote date) in [start, end]
+        # is the last finished day for this slice (scratch rows included).
+        # Do not copy this onto BCB/CVM: daily ingest dates are not a prefix.
         db_last = max_quote_reference_date(session, "b3", start=start, end=end)
     token = effective_last_completed(checkpoint, start, end, db_last, resume=resume)
     resume_after = date.fromisoformat(token) if token else None

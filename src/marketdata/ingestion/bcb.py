@@ -16,7 +16,6 @@ from marketdata.storage.repositories import (
     finish_ingestion_run,
     get_or_create_market_series,
     get_or_create_source,
-    max_observation_reference_date,
     start_ingestion_run,
     store_raw_artifact,
     upsert_series_observation,
@@ -202,10 +201,9 @@ def backfill_bcb(
     source = _ensure_bcb_source(session)
     run = start_ingestion_run(session, provider=bcb.name, source_id=source.id, reference_date=end)
     checkpoint = load_checkpoint(object_store, "bcb")
-    db_last = None
-    if resume:
-        db_last = max_observation_reference_date(session, "bcb", start=start, end=end)
-    token = effective_last_completed(checkpoint, start, end, db_last, resume=resume)
+    # Do not use max(market_series_observations.reference_date): daily ingest
+    # writes a recent date that would skip earlier 10-year backfill chunks.
+    token = effective_last_completed(checkpoint, start, end, None, resume=resume)
     completed_through = date.fromisoformat(token) if token else None
     _save_bcb_checkpoint(
         object_store,
