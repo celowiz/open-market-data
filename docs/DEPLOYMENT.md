@@ -434,10 +434,11 @@ Used when `OBJECT_STORAGE_BACKEND=s3`. Leave empty for local filesystem.
 | `API_PORT` | `8000` (local uvicorn only) |
 
 Health check for the host: **`GET /v1/health`** (liveness; no database).
-Optional readiness: **`GET /v1/health?ready=1`** runs `SELECT 1` against
-PostgreSQL and returns HTTP 503 if `DATABASE_URL` is missing or the ping
-fails. Railway still uses liveness until the Deployment Engineer points the
-probe at `ready=1`.
+Readiness: **`GET /v1/ready`** (same semantics as **`GET /v1/health?ready=1`**)
+runs `SELECT 1` against PostgreSQL and returns HTTP 503 if `DATABASE_URL` is
+missing or the ping fails. Railway's probe path cannot include a query
+string; after merge and deploy, the Deployment Engineer can point the probe
+at `/v1/ready`.
 
 Suggested Railway release command (not configured by this repository):
 `alembic upgrade head`.
