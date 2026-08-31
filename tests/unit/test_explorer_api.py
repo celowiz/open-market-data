@@ -367,6 +367,8 @@ def test_history_limit_schema_default_500_max_5000() -> None:
         assert schema["default"] == 500
         assert schema["maximum"] == 5000
         assert schema["minimum"] == 1
+    quotes = spec["components"]["schemas"]["QuotesResponse"]["properties"]
+    assert {"first_quote_date", "last_quote_date", "quote_count"} <= set(quotes)
 
 
 def test_quotes_limit_5001_is_unprocessable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -469,6 +471,9 @@ def test_quotes_history_alias_start_end_and_revision_dedup(explorer_seed) -> Non
     assert isinstance(jan5["price"], str)
     assert Decimal(jan5["price"]) == Decimal("10.50")
     assert jan5["revision"] == 2
+    assert ranged.json()["first_quote_date"] == "2026-01-05"
+    assert ranged.json()["last_quote_date"] == "2026-01-07"
+    assert ranged.json()["quote_count"] == 3
 
 
 @pytest.mark.db

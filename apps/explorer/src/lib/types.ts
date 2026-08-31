@@ -32,6 +32,9 @@ export type QuotesResponse = {
   identifier: string;
   quotes: QuoteResponse[];
   next_cursor: string | null;
+  first_quote_date?: string | null;
+  last_quote_date?: string | null;
+  quote_count?: number | null;
 };
 
 export type SeriesObservationResponse = {

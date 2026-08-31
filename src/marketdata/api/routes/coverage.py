@@ -135,9 +135,18 @@ def _span_for_row(
     source: str | None,
     spans: dict[tuple[UUID, str], QuoteSpan],
 ) -> QuoteSpan | None:
-    if instrument_id is None or source is None:
+    if instrument_id is None:
         return None
-    return spans.get((instrument_id, source))
+    if source is not None:
+        return spans.get((instrument_id, source))
+    matching = [item for (iid, _), item in spans.items() if iid == instrument_id]
+    if not matching:
+        return None
+    return QuoteSpan(
+        min_date=min(item.min_date for item in matching),
+        max_date=max(item.max_date for item in matching),
+        quote_count=sum(item.quote_count for item in matching),
+    )
 
 
 @router.get("/coverage/span", response_model=CoverageSpanResponse)

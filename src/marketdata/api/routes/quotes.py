@@ -14,6 +14,7 @@ from marketdata.api.query import (
     parse_history_window,
 )
 from marketdata.api.routes.funds import QuoteResponse, _to_quote
+from marketdata.api.span import load_instrument_spans
 from marketdata.storage.models import InstrumentQuoteRow
 from marketdata.storage.repositories import resolve_instrument_id
 
@@ -25,6 +26,9 @@ class QuotesResponse(BaseModel):
     identifier: str
     quotes: list[QuoteResponse]
     next_cursor: date | None = None
+    first_quote_date: date | None = None
+    last_quote_date: date | None = None
+    quote_count: int | None = None
 
 
 def _visible_instrument(session: Session, identifier: str, source_name: str | None):
@@ -68,11 +72,15 @@ def list_quotes(
         ),
         limit=limit,
     )
+    span = load_instrument_spans(session, [instrument_id], source_name=source).get(instrument_id)
     return QuotesResponse(
         instrument_id=str(instrument_id),
         identifier=identifier,
         quotes=[_to_quote(session, row) for row in rows],
         next_cursor=next_cursor,
+        first_quote_date=span.min_date if span is not None else None,
+        last_quote_date=span.max_date if span is not None else None,
+        quote_count=span.quote_count if span is not None else 0,
     )
 
 

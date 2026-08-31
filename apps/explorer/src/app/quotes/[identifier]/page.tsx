@@ -13,7 +13,7 @@ import { PriceTypeFilters } from "@/components/PriceTypeFilters";
 import { ProvenanceStrip } from "@/components/ProvenanceStrip";
 import { QuotesTable } from "@/components/QuotesTable";
 import { EmptyState, LoadingState } from "@/components/Status";
-import { fetchQuoteHistory, listInstruments } from "@/lib/api";
+import { fetchQuoteHistory } from "@/lib/api";
 import { copy } from "@/lib/copy";
 import { defaultHistoryRange, routeParam } from "@/lib/dates";
 import {
@@ -24,8 +24,7 @@ import {
   isTesouroIdentifier,
   tesouroCompanionPriceType,
 } from "@/lib/identifiers";
-import { formatPregoes, hasQuoteSpan, pickInstrumentMatch } from "@/lib/span";
-import { useClientFetch } from "@/lib/use-client-fetch";
+import { formatPregoes, hasQuoteSpan } from "@/lib/span";
 import { useHistoryPages } from "@/lib/use-history-pages";
 
 function QuoteHistoryPage() {
@@ -93,19 +92,6 @@ function QuoteHistoryPage() {
     cursorOf: (page) => page.next_cursor,
   });
 
-  const span = useClientFetch(
-    `quote-span:${identifier}:${applied.source}`,
-    async () => {
-      const data = await listInstruments({
-        q: identifier,
-        source: applied.source || undefined,
-        limit: 5,
-      });
-      return pickInstrumentMatch(data.instruments, identifier);
-    },
-    { enabled: apiReady && Boolean(identifier) },
-  );
-
   function applyFilters(range?: DateRangeValue, nextPriceType = priceType) {
     const next = {
       start: range?.start ?? start,
@@ -137,18 +123,18 @@ function QuoteHistoryPage() {
           <code className="font-mono text-xs">GET /v1/quotes/{"{identifier}"}/history</code>
         </p>
         <LatestHeadline kind="quote" identifier={identifier} priceType={applied.price_type} />
-        {span.status === "success" && span.data && hasQuoteSpan(span.data) ? (
+        {history.firstPage && hasQuoteSpan(history.firstPage) ? (
           <p className="mt-2 text-sm text-slate-600">
             {copy.common.firstQuote}:{" "}
-            <span className="font-mono">{span.data.first_quote_date ?? "—"}</span>
+            <span className="font-mono">{history.firstPage.first_quote_date ?? "—"}</span>
             {" · "}
             {copy.common.lastQuote}:{" "}
-            <span className="font-mono">{span.data.last_quote_date ?? "—"}</span>
+            <span className="font-mono">{history.firstPage.last_quote_date ?? "—"}</span>
             {" · "}
-            {formatPregoes(span.data.quote_count)}
+            {formatPregoes(history.firstPage.quote_count)}
           </p>
         ) : null}
-        {span.status === "success" && (!span.data || !hasQuoteSpan(span.data)) ? (
+        {history.status === "success" && (!history.firstPage || !hasQuoteSpan(history.firstPage)) ? (
           <p className="mt-2 text-sm text-slate-600">{copy.common.historyLoading}</p>
         ) : null}
       </header>

@@ -1,7 +1,10 @@
+from functools import lru_cache
+
 from marketdata.providers.bootstrap import register_default_providers
 from marketdata.providers.registry import registry
 
 
+@lru_cache(maxsize=1)
 def canonical_source_names() -> frozenset[str]:
     """Source.name values that belong to registered providers.
 
