@@ -8,6 +8,7 @@ import { DateRangeForm, type DateRangeValue } from "@/components/DateRangeForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { LatestHeadline } from "@/components/LatestHeadline";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
+import { PageShell } from "@/components/PageShell";
 import { PriceChart } from "@/components/PriceChart";
 import { PriceTypeFilters } from "@/components/PriceTypeFilters";
 import { ProvenanceStrip } from "@/components/ProvenanceStrip";
@@ -24,8 +25,11 @@ import {
   isTesouroIdentifier,
   tesouroCompanionPriceType,
 } from "@/lib/identifiers";
-import { formatPregoes, hasQuoteSpan } from "@/lib/span";
+import { formatQuoteSpan, hasQuoteSpan } from "@/lib/span";
+import { fieldClass } from "@/lib/ui";
 import { useHistoryPages } from "@/lib/use-history-pages";
+import { windowDeltaFromRows } from "@/lib/window-delta";
+import { DeltaBadge } from "@/components/DeltaBadge";
 
 function QuoteHistoryPage() {
   const params = useParams<{ identifier: string }>();
@@ -113,29 +117,25 @@ function QuoteHistoryPage() {
   const quotes = history.items;
   const primaryUnit = quotes[0]?.unit ?? quotes[0]?.price_type ?? "PU";
   const companionUnit = companion.items[0]?.unit ?? companionType ?? "YIELD";
+  const windowDelta = windowDeltaFromRows(quotes.map((quote) => ({ date: quote.date, raw: quote.price })));
+  const spanLabel = history.firstPage ? formatQuoteSpan(history.firstPage) : null;
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
-      <header>
-        <p className="text-sm text-slate-500">Cotações de instrumentos</p>
-        <h1 className="font-mono text-2xl font-semibold text-slate-900">{identifier || "—"}</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          <code className="font-mono text-xs">GET /v1/quotes/{"{identifier}"}/history</code>
-        </p>
+    <PageShell>
+      <header className="flex flex-col gap-1">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">Cotação</p>
+        <h1 className="font-mono text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {identifier || "—"}
+        </h1>
         <LatestHeadline kind="quote" identifier={identifier} priceType={applied.price_type} />
-        {history.firstPage && hasQuoteSpan(history.firstPage) ? (
-          <p className="mt-2 text-sm text-slate-600">
-            {copy.common.firstQuote}:{" "}
-            <span className="font-mono">{history.firstPage.first_quote_date ?? "—"}</span>
-            {" · "}
-            {copy.common.lastQuote}:{" "}
-            <span className="font-mono">{history.firstPage.last_quote_date ?? "—"}</span>
-            {" · "}
-            {formatPregoes(history.firstPage.quote_count)}
+        {windowDelta ? (
+          <p className="text-sm text-muted">
+            {copy.common.windowChange}: <DeltaBadge delta={windowDelta} />
           </p>
         ) : null}
+        {spanLabel ? <p className="font-mono text-xs text-muted">{spanLabel}</p> : null}
         {history.status === "success" && (!history.firstPage || !hasQuoteSpan(history.firstPage)) ? (
-          <p className="mt-2 text-sm text-slate-600">{copy.common.historyLoading}</p>
+          <p className="text-sm text-muted">{copy.common.historyLoading}</p>
         ) : null}
       </header>
 
@@ -173,7 +173,7 @@ function QuoteHistoryPage() {
           <>
             {tesouro || future ? null : (
               <div className="flex flex-col gap-1">
-                <label htmlFor="price-type" className="text-sm font-medium text-slate-800">
+                <label htmlFor="price-type" className="text-sm font-medium text-foreground">
                   {copy.common.priceType}
                 </label>
                 <input
@@ -184,12 +184,12 @@ function QuoteHistoryPage() {
                   value={priceType}
                   disabled={!apiReady}
                   onChange={(event) => setPriceType(event.target.value)}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                  className={fieldClass}
                 />
               </div>
             )}
             <div className="flex flex-col gap-1">
-              <label htmlFor="quote-source" className="text-sm font-medium text-slate-800">
+              <label htmlFor="quote-source" className="text-sm font-medium text-foreground">
                 {copy.common.source}
               </label>
               <input
@@ -200,7 +200,7 @@ function QuoteHistoryPage() {
                 value={source}
                 disabled={!apiReady}
                 onChange={(event) => setSource(event.target.value)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                className={fieldClass}
               />
             </div>
           </>
@@ -217,15 +217,15 @@ function QuoteHistoryPage() {
 
       {history.status === "success" || quotes.length > 0 ? (
         <>
-          <ProvenanceStrip items={quotes} />
           {quotes.length === 0 ? (
             <EmptyState>
               <p>Nenhuma cotação neste intervalo.</p>
-              <p className="mt-2 text-xs text-slate-500">{copy.common.historyLoading}</p>
+              <p className="mt-2 text-xs">{copy.common.historyLoading}</p>
             </EmptyState>
           ) : (
             <>
               <PriceChart
+                variant="hero"
                 label={`${applied.price_type || "Preço"} (${primaryUnit})`}
                 priceType={applied.price_type || quotes[0]?.price_type}
                 unit={quotes[0]?.unit}
@@ -233,7 +233,7 @@ function QuoteHistoryPage() {
               />
               {tesouro && companionType && companion.items.length > 0 ? (
                 <section className="flex flex-col gap-2">
-                  <h2 className="text-sm font-semibold text-slate-900">
+                  <h2 className="text-sm font-semibold text-foreground">
                     Série complementar {companionType} ({companionUnit}) — eixo separado
                   </h2>
                   <PriceChart
@@ -244,6 +244,7 @@ function QuoteHistoryPage() {
                   />
                 </section>
               ) : null}
+              <ProvenanceStrip items={quotes} />
               <QuotesTable quotes={quotes} />
               <LoadMoreButton
                 hasMore={history.hasMore}
@@ -259,7 +260,7 @@ function QuoteHistoryPage() {
           )}
         </>
       ) : null}
-    </div>
+    </PageShell>
   );
 }
 
@@ -267,9 +268,9 @@ export default function QuoteHistoryRoute() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-6xl px-4 py-8">
+        <PageShell>
           <LoadingState label="Carregando página de cotações…" />
-        </div>
+        </PageShell>
       }
     >
       <QuoteHistoryPage />

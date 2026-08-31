@@ -162,10 +162,10 @@ function ComparePageInner() {
   const loadingMore = panes.some((pane) => pane.history.loadingMore);
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Comparar séries</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-foreground">Comparar séries</h1>
+        <p className="mt-1 text-sm text-muted">
           Sobreposição com N chamadas a{" "}
           <code className="font-mono text-xs">GET /v1/series/{"{code}"}/observations</code>. Séries
           com unidades diferentes (percent_per_day, percent_per_year, PTAX) ficam em gráficos
@@ -173,11 +173,11 @@ function ComparePageInner() {
         </p>
       </header>
 
-      <fieldset className="rounded-lg border border-slate-200 bg-white p-4">
-        <legend className="text-sm font-medium text-slate-800">Séries BCB</legend>
+      <fieldset className="rounded-2xl border border-border bg-surface p-4">
+        <legend className="text-sm font-medium text-foreground">Séries BCB</legend>
         <div className="mt-2 flex flex-col gap-2">
           {KNOWN_BCB_SERIES.map((item) => (
-            <label key={item.code} className="flex items-center gap-2 text-sm text-slate-800">
+            <label key={item.code} className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={selected.includes(item.code)}
@@ -186,8 +186,8 @@ function ComparePageInner() {
               />
               <span>
                 {item.name}{" "}
-                <span className="font-mono text-xs text-teal-800">{item.code}</span>{" "}
-                <span className="text-xs text-slate-500">({item.unit})</span>
+                <span className="font-mono text-xs text-accent">{item.code}</span>{" "}
+                <span className="text-xs text-muted">({item.unit})</span>
               </span>
             </label>
           ))}
@@ -213,7 +213,7 @@ function ComparePageInner() {
       {apiReady && groups.size > 0
         ? [...groups.entries()].map(([unit, series]) => (
             <section key={unit} className="flex flex-col gap-2">
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-foreground">
                 Unidade <span className="font-mono">{unit}</span>
               </h2>
               <PriceChart series={series} />
@@ -244,7 +244,7 @@ export default function ComparePage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-8">
           <LoadingState label="Carregando comparação…" />
         </div>
       }

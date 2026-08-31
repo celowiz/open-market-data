@@ -10,9 +10,10 @@ export const copy = {
     series: "Séries",
     compare: "Comparar",
     sources: "Fontes",
-    datasets: "Conjuntos de dados",
+    datasets: "Dados",
     coverage: "Cobertura",
     main: "Principal",
+    status: "Status",
   },
   header: {
     subtitlePublic: "Explorador somente leitura da API pública /v1",
@@ -61,6 +62,13 @@ export const copy = {
     historyLoading:
       "O histórico ainda está sendo carregado. Datas e totais aparecem quando as cotações chegam ao banco.",
     openHistory: "Abrir histórico",
+    examples: "Exemplos",
+    watchlist: "Lista",
+    searchAssets: "Buscar ativos",
+    windowChange: "Variação no período carregado",
+    noDelta: "Sem variação: é preciso ao menos dois preços no período.",
+    curatedEmptySearch:
+      "Digite um nome ou identificador para buscar. Sem consulta, mostramos exemplos — a API exige q=.",
   },
   shortcuts: {
     oneMonth: "1M",

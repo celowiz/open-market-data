@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { formatPregoes, hasQuoteSpan, pickInstrumentMatch } from "./span.ts";
+import { formatPregoes, formatQuoteSpan, hasQuoteSpan, pickInstrumentMatch } from "./span.ts";
 
 test("formats pregão counts in pt-BR", () => {
   assert.equal(formatPregoes(null), "—");
@@ -16,6 +16,18 @@ test("hasQuoteSpan is true when any span field is present", () => {
   assert.equal(hasQuoteSpan({ quote_count: 0 }), false);
   assert.equal(hasQuoteSpan({ first_quote_date: "2024-01-02" }), true);
   assert.equal(hasQuoteSpan({ quote_count: 3 }), true);
+});
+
+test("formatQuoteSpan prints date range and pregão count", () => {
+  assert.equal(formatQuoteSpan({}), null);
+  assert.equal(
+    formatQuoteSpan({
+      first_quote_date: "2024-01-02",
+      last_quote_date: "2024-08-21",
+      quote_count: 48,
+    }),
+    "2024-01-02 → 2024-08-21 · 48 pregões",
+  );
 });
 
 test("pickInstrumentMatch prefers an exact identifier", () => {

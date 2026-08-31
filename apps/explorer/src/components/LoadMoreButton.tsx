@@ -1,4 +1,5 @@
 import { copy } from "@/lib/copy";
+import { btnGhost } from "@/lib/ui";
 
 export function LoadMoreButton({
   hasMore,
@@ -15,12 +16,7 @@ export function LoadMoreButton({
     return null;
   }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading || disabled}
-      className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-    >
+    <button type="button" onClick={onClick} disabled={loading || disabled} className={btnGhost}>
       {loading ? copy.common.loading : copy.common.loadMore}
     </button>
   );

@@ -55,3 +55,9 @@ export const HOME_EXAMPLES: HomeExample[] = [
 
 export const BRAZIL_HOME_EXAMPLES = HOME_EXAMPLES.filter((item) => item.identifier !== "AAPL");
 export const SECONDARY_HOME_EXAMPLES = HOME_EXAMPLES.filter((item) => item.identifier === "AAPL");
+
+/** Default home hero: PETR4 first, then the other Brazilian examples. */
+export const DEFAULT_HERO_EXAMPLES: HomeExample[] = [
+  ...HOME_EXAMPLES.filter((item) => item.identifier === "PETR4"),
+  ...BRAZIL_HOME_EXAMPLES.filter((item) => item.identifier !== "PETR4"),
+];

@@ -20,6 +20,18 @@ export function hasQuoteSpan(span: QuoteSpanFields): boolean {
   );
 }
 
+export function formatQuoteSpan(span: QuoteSpanFields): string | null {
+  if (!hasQuoteSpan(span)) {
+    return null;
+  }
+  const start = span.first_quote_date ?? null;
+  const end = span.last_quote_date ?? null;
+  const range = start && end ? `${start} → ${end}` : (start ?? end);
+  const count = span.quote_count != null ? formatPregoes(span.quote_count) : null;
+  const text = [range, count].filter(Boolean).join(" · ");
+  return text || null;
+}
+
 export function pickInstrumentMatch(
   items: InstrumentSearchItem[],
   identifier: string,

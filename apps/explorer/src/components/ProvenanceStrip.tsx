@@ -48,46 +48,42 @@ export function ProvenanceStrip({
   return (
     <section
       aria-label="Proveniência"
-      className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+      className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground"
     >
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Proveniência
-      </h2>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Proveniência</h2>
       <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <dt className="text-xs text-slate-500">Fonte</dt>
+          <dt className="text-xs text-muted">Fonte</dt>
           <dd>{sources.join(", ") || "n/d"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Tipo de preço</dt>
+          <dt className="text-xs text-muted">Tipo de preço</dt>
           <dd className="font-mono">{priceTypes.join(", ") || "n/d"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Oficial</dt>
+          <dt className="text-xs text-muted">Oficial</dt>
           <dd>{officialLabel}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Revisão</dt>
+          <dt className="text-xs text-muted">Revisão</dt>
           <dd>{revisionLabel}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Unidade / moeda</dt>
-          <dd>
-            {[...units, ...currencies].join(" · ") || "n/d"}
-          </dd>
+          <dt className="text-xs text-muted">Unidade / moeda</dt>
+          <dd>{[...units, ...currencies].join(" · ") || "n/d"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Recuperado em</dt>
+          <dt className="text-xs text-muted">Recuperado em</dt>
           <dd className="break-all font-mono text-xs">{retrieved ?? "n/d"}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-xs text-slate-500">SHA-256 do artefato bruto</dt>
+          <dt className="text-xs text-muted">SHA-256 do artefato bruto</dt>
           <dd className="break-all font-mono text-xs" title={sha ?? undefined}>
             {sha ?? "n/d"}
           </dd>
         </div>
       </dl>
-      <p className="mt-3 text-xs text-slate-500">
+      <p className="mt-3 text-xs text-muted">
         Os valores são exibidos exatamente como a API pública os devolve. Respostas vazias ou 404
         não são preenchidas com preços inventados. Os eixos do gráfico usam Number() só para
         plotagem.

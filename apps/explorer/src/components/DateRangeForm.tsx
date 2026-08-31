@@ -2,14 +2,12 @@
 
 import type { ReactNode } from "react";
 
+import { RangeChips, type DateRangeValue, type RangeKey } from "@/components/RangeChips";
 import { copy, offlineFormHint } from "@/lib/copy";
-import { addUtcMonths, addUtcYears, defaultHistoryRange, todayIso } from "@/lib/dates";
+import { btnAccent, fieldClass } from "@/lib/ui";
 import { useLocalPageOrigin } from "@/lib/use-local-origin";
 
-export type DateRangeValue = {
-  start: string;
-  end: string;
-};
+export type { DateRangeValue, RangeKey };
 
 type DateRangeFormProps = {
   start: string;
@@ -22,6 +20,8 @@ type DateRangeFormProps = {
   disabled?: boolean;
   disabledHint?: string;
   showShortcuts?: boolean;
+  activeRange?: RangeKey;
+  onRangeKey?: (key: RangeKey, range: DateRangeValue) => void;
 };
 
 export function DateRangeForm({
@@ -35,21 +35,15 @@ export function DateRangeForm({
   disabled = false,
   disabledHint,
   showShortcuts = true,
+  activeRange,
+  onRangeKey,
 }: DateRangeFormProps) {
-  const today = todayIso();
-  const fiveYear = defaultHistoryRange(5);
   const localOrigin = useLocalPageOrigin();
   const hint = disabledHint ?? (disabled ? offlineFormHint(localOrigin) : undefined);
 
-  function applyRange(nextStart: string, nextEnd: string) {
-    onStartChange(nextStart);
-    onEndChange(nextEnd);
-    onSubmit({ start: nextStart, end: nextEnd });
-  }
-
   return (
     <form
-      className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4"
+      className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (!disabled) {
@@ -58,48 +52,24 @@ export function DateRangeForm({
       }}
     >
       {showShortcuts ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-slate-800">{copy.shortcuts.range}</p>
-          <div role="group" aria-label={copy.shortcuts.range} className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => applyRange(addUtcMonths(today, -1), today)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {copy.shortcuts.oneMonth}
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => applyRange(addUtcYears(today, -1), today)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {copy.shortcuts.oneYear}
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => applyRange(fiveYear.start, today)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {copy.shortcuts.fiveYears}
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => applyRange("", today)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {copy.shortcuts.max}
-            </button>
-          </div>
-        </div>
+        <RangeChips
+          value={activeRange}
+          disabled={disabled}
+          onChange={(key, range) => {
+            if (onRangeKey) {
+              onRangeKey(key, range);
+              return;
+            }
+            onStartChange(range.start);
+            onEndChange(range.end);
+            onSubmit(range);
+          }}
+        />
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1">
-          <label htmlFor="start-date" className="text-sm font-medium text-slate-800">
+          <label htmlFor="start-date" className="text-sm font-medium text-foreground">
             {copy.common.startDate}
           </label>
           <input
@@ -109,11 +79,11 @@ export function DateRangeForm({
             value={start}
             disabled={disabled}
             onChange={(event) => onStartChange(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+            className={fieldClass}
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="end-date" className="text-sm font-medium text-slate-800">
+          <label htmlFor="end-date" className="text-sm font-medium text-foreground">
             {copy.common.endDate}
           </label>
           <input
@@ -123,21 +93,17 @@ export function DateRangeForm({
             value={end}
             disabled={disabled}
             onChange={(event) => onEndChange(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+            className={fieldClass}
           />
         </div>
         <div className="contents">{extra}</div>
         <div className="flex items-end">
-          <button
-            type="submit"
-            disabled={disabled}
-            className="w-full rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
+          <button type="submit" disabled={disabled} className={`w-full ${btnAccent}`}>
             {submitLabel}
           </button>
         </div>
       </div>
-      {disabled && hint ? <p className="text-sm text-slate-600">{hint}</p> : null}
+      {disabled && hint ? <p className="text-sm text-muted">{hint}</p> : null}
     </form>
   );
 }

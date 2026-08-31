@@ -46,44 +46,44 @@ export function CoverageChart({
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Motivos de ausência (universo)</h2>
-        <p className="mt-1 text-xs text-slate-500">
+      <section className="rounded-2xl border border-border bg-surface p-4">
+        <h2 className="text-sm font-semibold text-foreground">Motivos de ausência (universo)</h2>
+        <p className="mt-1 text-xs text-muted">
           Contagens do relatório completo, não só da página carregada.
         </p>
         {reasons.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-600">Nenhum motivo de ausência neste universo.</p>
+          <p className="mt-4 text-sm text-muted">Nenhum motivo de ausência neste universo.</p>
         ) : (
           <div className="mt-3 h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={reasons} margin={{ top: 8, right: 8, left: 0, bottom: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={36} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2b35" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9a9ba8" }} interval={0} angle={-20} textAnchor="end" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#9a9ba8" }} width={36} />
                 <Tooltip />
-                <Bar dataKey="count" name="Quantidade" fill="#0f766e" isAnimationActive={false} />
+                <Bar dataKey="count" name="Quantidade" fill="#d2ff3f" isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         )}
       </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Priced vs ausente por classe</h2>
-        <p className="mt-1 text-xs text-slate-500">
+      <section className="rounded-2xl border border-border bg-surface p-4">
+        <h2 className="text-sm font-semibold text-foreground">Priced vs ausente por classe</h2>
+        <p className="mt-1 text-xs text-muted">
           Calculado nas linhas já carregadas ({rows.length} de {data.universe_size}).
         </p>
         {classes.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-600">Nenhuma linha carregada ainda.</p>
+          <p className="mt-4 text-sm text-muted">Nenhuma linha carregada ainda.</p>
         ) : (
           <div className="mt-3 h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={classes} margin={{ top: 8, right: 8, left: 0, bottom: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={36} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2b35" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9a9ba8" }} interval={0} angle={-20} textAnchor="end" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#9a9ba8" }} width={36} />
                 <Tooltip />
-                <Bar dataKey="priced" name="Com preço" fill="#0f766e" isAnimationActive={false} />
-                <Bar dataKey="missing" name="Ausente" fill="#94a3b8" isAnimationActive={false} />
+                <Bar dataKey="priced" name="Com preço" fill="#d2ff3f" isAnimationActive={false} />
+                <Bar dataKey="missing" name="Ausente" fill="#3a3b46" isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>

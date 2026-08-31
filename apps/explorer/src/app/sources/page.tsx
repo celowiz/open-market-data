@@ -15,10 +15,10 @@ export default function SourcesPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Fontes</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-foreground">Fontes</h1>
+        <p className="mt-1 text-sm text-muted">
           Fontes visíveis na API pública, de{" "}
           <code className="font-mono text-xs">GET /v1/sources</code>. A lista padrão mostra as fontes
           dos provedores registrados (b3, bcb, cvm, tesouro, yahoo), não linhas de teste.
@@ -31,7 +31,7 @@ export default function SourcesPage() {
       {state.status === "success" && state.data.length === 0 ? (
         <EmptyState>
           <p>A API devolveu uma lista de fontes vazia.</p>
-          <p className="mt-2 text-xs text-slate-500">{copy.common.backfillSecondary}</p>
+          <p className="mt-2 text-xs text-muted">{copy.common.backfillSecondary}</p>
         </EmptyState>
       ) : null}
       {state.status === "success" && state.data.length > 0 ? (

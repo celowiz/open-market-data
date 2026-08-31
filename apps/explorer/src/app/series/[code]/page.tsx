@@ -65,19 +65,15 @@ function SeriesPage() {
   const unit = history.firstPage?.unit ?? observations[0]?.unit ?? "";
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <p className="text-sm text-slate-500">Série de mercado</p>
-        <h1 className="font-mono text-2xl font-semibold text-slate-900">{code || "—"}</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          <code className="font-mono text-xs">GET /v1/series/{"{code}"}/observations</code>
-          {unit ? (
-            <>
-              {" "}
-              · unidade <span className="font-mono">{unit}</span>
-            </>
-          ) : null}
-        </p>
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">Série de mercado</p>
+        <h1 className="font-mono text-2xl font-semibold tracking-tight text-foreground">{code || "—"}</h1>
+        {unit ? (
+          <p className="mt-1 text-sm text-muted">
+            Unidade <span className="font-mono">{unit}</span>
+          </p>
+        ) : null}
         <LatestHeadline kind="series" identifier={code} />
       </header>
 
@@ -112,7 +108,7 @@ function SeriesPage() {
           {observations.length === 0 ? (
             <EmptyState>
               <p>Nenhuma observação neste intervalo.</p>
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs text-muted">
                 Operadores: rode <code className="font-mono">marketdata backfill bcb</code> se
                 esperava histórico de CDI / SELIC / PTAX.
               </p>
@@ -120,6 +116,7 @@ function SeriesPage() {
           ) : (
             <>
               <PriceChart
+                variant="hero"
                 label={unit || "Valor"}
                 kind="series"
                 unit={unit}
@@ -143,7 +140,7 @@ export default function SeriesRoute() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-8">
           <LoadingState label="Carregando página da série…" />
         </div>
       }

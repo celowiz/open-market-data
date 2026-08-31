@@ -27,27 +27,27 @@ function isCoverageUniverse(value: string): value is CoverageUniverse {
 
 function CoverageSpanSummary({ data }: { data: CoverageSpanResponse }) {
   return (
-    <section className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+    <section className="grid gap-3 rounded-2xl border border-border bg-elevated p-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
       <div>
-        <p className="text-xs text-slate-500">Universo</p>
+        <p className="text-xs text-muted">Universo</p>
         <p>{data.universe}</p>
       </div>
       <div>
-        <p className="text-xs text-slate-500">Com histórico</p>
+        <p className="text-xs text-muted">Com histórico</p>
         <p>
           {data.instruments_with_quotes} / {data.universe_size}
         </p>
       </div>
       <div>
-        <p className="text-xs text-slate-500">{copy.common.firstQuote}</p>
+        <p className="text-xs text-muted">{copy.common.firstQuote}</p>
         <p className="font-mono">{data.min_date ?? "—"}</p>
       </div>
       <div>
-        <p className="text-xs text-slate-500">{copy.common.lastQuote}</p>
+        <p className="text-xs text-muted">{copy.common.lastQuote}</p>
         <p className="font-mono">{data.max_date ?? "—"}</p>
       </div>
       <div>
-        <p className="text-xs text-slate-500">{copy.common.sessions}</p>
+        <p className="text-xs text-muted">{copy.common.sessions}</p>
         <p className="font-mono tabular-nums">{formatPregoes(data.quote_count)}</p>
       </div>
     </section>
@@ -92,10 +92,10 @@ export default function CoveragePage() {
     history.status === "error" && (isNotFoundError(history.error) || isTimeoutError(history.error));
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
       <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Cobertura</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-foreground">Cobertura</h1>
+        <p className="mt-1 text-sm text-muted">
           Resumo rápido de <code className="font-mono text-xs">GET /v1/coverage/span</code> (primeira e
           última data no banco). O motor completo por data{" "}
           <code className="font-mono text-xs">GET /v1/coverage?date=</code> continua disponível abaixo e
@@ -103,9 +103,9 @@ export default function CoveragePage() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-end">
         <div className="flex flex-col gap-1">
-          <label htmlFor="coverage-universe" className="text-sm font-medium text-slate-800">
+          <label htmlFor="coverage-universe" className="text-sm font-medium text-foreground">
             Universo
           </label>
           <select
@@ -119,7 +119,7 @@ export default function CoveragePage() {
                 setUniverse(next);
               }
             }}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+            className="rounded-xl border border-border px-3 py-2 text-sm disabled:bg-elevated"
           >
             <option value="scratch">scratch</option>
             <option value="example">example</option>
@@ -128,7 +128,7 @@ export default function CoveragePage() {
         </div>
       </div>
       {!apiReady && api.status === "unreachable" ? (
-        <p className="text-sm text-slate-600">{offlineFormHint(localOrigin)}</p>
+        <p className="text-sm text-muted">{offlineFormHint(localOrigin)}</p>
       ) : null}
 
       {api.status !== "unreachable" && span.status === "loading" ? (
@@ -138,7 +138,7 @@ export default function CoveragePage() {
         isNotFoundError(span.error) || isTimeoutError(span.error) ? (
           <EmptyState>
             <p>O intervalo deste universo ainda não está disponível.</p>
-            <p className="mt-2 text-xs text-slate-500">{copy.common.historyLoading}</p>
+            <p className="mt-2 text-xs text-muted">{copy.common.historyLoading}</p>
           </EmptyState>
         ) : (
           <ErrorBanner error={span.error} />
@@ -149,7 +149,7 @@ export default function CoveragePage() {
           <CoverageSpanSummary data={span.data} />
           <EmptyState>
             <p>Nenhuma cotação deste universo chegou ainda.</p>
-            <p className="mt-2 text-xs text-slate-500">{copy.common.historyLoading}</p>
+            <p className="mt-2 text-xs text-muted">{copy.common.historyLoading}</p>
           </EmptyState>
         </>
       ) : null}
@@ -158,7 +158,7 @@ export default function CoveragePage() {
       ) : null}
 
       <form
-        className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-end"
+        className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-end"
         onSubmit={(event) => {
           event.preventDefault();
           if (apiReady) {
@@ -167,7 +167,7 @@ export default function CoveragePage() {
         }}
       >
         <div className="flex flex-col gap-1">
-          <label htmlFor="coverage-date" className="text-sm font-medium text-slate-800">
+          <label htmlFor="coverage-date" className="text-sm font-medium text-foreground">
             Data de referência
           </label>
           <input
@@ -178,18 +178,18 @@ export default function CoveragePage() {
             value={dateInput}
             disabled={!apiReady}
             onChange={(event) => setDateInput(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+            className="rounded-xl border border-border px-3 py-2 text-sm disabled:bg-elevated"
           />
         </div>
         <button
           type="submit"
           disabled={!apiReady}
-          className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:brightness-110 disabled:cursor-not-allowed disabled:bg-elevated"
         >
           Carregar cobertura do dia
         </button>
       </form>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted">
         Esta consulta por data usa o motor completo e pode ser lenta enquanto a ingestão está
         gravando. O resumo acima não depende dela.
       </p>
@@ -200,7 +200,7 @@ export default function CoveragePage() {
       {dateCoveragePending ? null : history.status === "error" && dateCoverageUnavailable ? (
         <EmptyState>
           <p>A cobertura desta data ainda não está disponível ou a consulta excedeu o tempo.</p>
-          <p className="mt-2 text-xs text-slate-500">{copy.common.historyLoading}</p>
+          <p className="mt-2 text-xs text-muted">{copy.common.historyLoading}</p>
         </EmptyState>
       ) : null}
       {dateCoveragePending ? null : history.status === "error" && !dateCoverageUnavailable ? (
@@ -209,25 +209,25 @@ export default function CoveragePage() {
 
       {data && (history.status === "success" || rows.length > 0) ? (
         <>
-          <section className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid gap-3 rounded-2xl border border-border bg-elevated p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="text-xs text-slate-500">Data</p>
+              <p className="text-xs text-muted">Data</p>
               <p className="font-mono">{data.date}</p>
             </div>
             <div>
-              <p className="text-xs text-slate-500">Universo</p>
+              <p className="text-xs text-muted">Universo</p>
               <p>
                 {data.universe} ({data.mode})
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-500">Com preço</p>
+              <p className="text-xs text-muted">Com preço</p>
               <p>
                 {data.priced} / {data.universe_size} ({data.priced_pct})
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-500">Motivos de ausência</p>
+              <p className="text-xs text-muted">Motivos de ausência</p>
               <p>
                 {Object.keys(data.missing_reason_counts).length === 0
                   ? "—"
@@ -243,13 +243,13 @@ export default function CoveragePage() {
           {rows.length === 0 ? (
             <EmptyState>
               <p>A cobertura não devolveu linhas para esta data.</p>
-              <p className="mt-2 text-xs text-slate-500">{copy.common.historyLoading}</p>
+              <p className="mt-2 text-xs text-muted">{copy.common.historyLoading}</p>
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-2xl border border-border bg-surface">
               <table className="min-w-full text-left text-sm">
                 <caption className="sr-only">Resultados de cobertura</caption>
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                <thead className="bg-elevated text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-medium">
                       Instrumento
@@ -284,12 +284,12 @@ export default function CoveragePage() {
                   {rows.map((row, index) => (
                     <tr
                       key={`${row.instrument}-${row.reference_date}-${index}`}
-                      className="border-t border-slate-100"
+                      className="border-t border-border/80"
                     >
                       <td className="px-3 py-2 font-mono">
                         <Link
                           href={hrefForIdentifier(row.instrument, row.asset_class)}
-                          className="text-teal-800 hover:underline"
+                          className="text-accent hover:underline"
                         >
                           {row.instrument}
                         </Link>
