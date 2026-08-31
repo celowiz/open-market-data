@@ -129,7 +129,8 @@ Coverage is the highest-priority fix; neighboring Explorer reads follow.
 - `GET /v1/sources` filters `public_api_enabled` **and** canonical provider
   names (`b3`/`bcb`/`cvm`/`tesouro`/`yahoo`) in SQL. `include_test=true` keeps
   the public-api filter and still lists leftover test rows.
-- `GET /v1/health` — no database. No change.
+- `GET /v1/health` — no database. Optional `ready=1` pings Postgres (`SELECT 1`)
+  and is unused by coverage.
 - `GET /v1/datasets` — five small JSON manifests from object storage. No change.
 - Engine/session: `bind_database` is process-lifetime (`deps.py`). Not a
   per-request engine.
