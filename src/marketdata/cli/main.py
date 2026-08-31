@@ -114,6 +114,21 @@ def _run_jobs(
     return failed
 
 
+def _provider_enabled(settings: object, provider: str) -> bool:
+    return bool(getattr(settings, f"{provider}_provider_enabled"))
+
+
+def _echo_disabled(provider: str, action: str) -> None:
+    typer.echo(f"{action} skipped ({provider}_provider_enabled=false)")
+
+
+def _skip_disabled_provider(provider: str, action: str) -> bool:
+    if _provider_enabled(get_settings(), provider):
+        return False
+    _echo_disabled(provider, action)
+    return True
+
+
 _START_OPTION = typer.Option(..., "--start", help="Inclusive start date YYYY-MM-DD")
 _END_OPTION = typer.Option(..., "--end", help="Inclusive end date YYYY-MM-DD")
 _RESUME_OPTION = typer.Option(
@@ -131,6 +146,8 @@ def ingest_cvm_command(
     """Fetch CVM Informe Diário ZIPs, persist fund NAVs, and record provenance."""
     from marketdata.ingestion.cvm import ingest_cvm
 
+    if _skip_disabled_provider("cvm", "CVM ingest"):
+        return
     reference = date.fromisoformat(date_value)
     session = _session()
     try:
@@ -156,6 +173,8 @@ def ingest_tesouro_command(
     """Ingest Tesouro Direto CKAN quotes for a reference date."""
     from marketdata.ingestion.tesouro import ingest_tesouro
 
+    if _skip_disabled_provider("tesouro", "Tesouro ingest"):
+        return
     reference = date.fromisoformat(date_value)
     session = _session()
     try:
@@ -180,6 +199,8 @@ def ingest_bcb_command(
     """Ingest BCB SGS series for a reference date."""
     from marketdata.ingestion.bcb import ingest_bcb
 
+    if _skip_disabled_provider("bcb", "BCB ingest"):
+        return
     reference = date.fromisoformat(date_value)
     session = _session()
     try:
@@ -204,6 +225,8 @@ def ingest_b3_command(
     """Ingest B3 BVBG.186 last trades, BVBG.187 settlement, and OTC credit prints."""
     from marketdata.ingestion.b3 import ingest_b3
 
+    if _skip_disabled_provider("b3", "B3 ingest"):
+        return
     reference = date.fromisoformat(date_value)
     session = _session()
     try:
@@ -237,6 +260,8 @@ def ingest_yahoo_command(
     """Ingest unofficial Yahoo Finance EOD closes for local/POC coverage."""
     from marketdata.ingestion.yahoo import ingest_yahoo
 
+    if _skip_disabled_provider("yahoo", "Yahoo ingest"):
+        return
     reference = date.fromisoformat(date_value)
     session = _session()
     try:
@@ -268,18 +293,23 @@ def ingest_all_command(
 
     reference = date.fromisoformat(date_value)
     settings = get_settings()
-    jobs: list[tuple[str, Callable[[Session], Mapping[str, object]]]] = [
-        ("CVM ingest", lambda session: ingest_cvm(session, reference_date=reference)),
-        ("Tesouro ingest", lambda session: ingest_tesouro(session, reference_date=reference)),
-        ("BCB ingest", lambda session: ingest_bcb(session, reference_date=reference)),
-        ("B3 ingest", lambda session: ingest_b3(session, reference_date=reference)),
+    candidates: list[tuple[str, str, Callable[[Session], Mapping[str, object]]]] = [
+        ("cvm", "CVM ingest", lambda session: ingest_cvm(session, reference_date=reference)),
+        (
+            "tesouro",
+            "Tesouro ingest",
+            lambda session: ingest_tesouro(session, reference_date=reference),
+        ),
+        ("bcb", "BCB ingest", lambda session: ingest_bcb(session, reference_date=reference)),
+        ("b3", "B3 ingest", lambda session: ingest_b3(session, reference_date=reference)),
+        ("yahoo", "Yahoo ingest", lambda session: ingest_yahoo(session, reference_date=reference)),
     ]
-    if settings.yahoo_provider_enabled:
-        jobs.append(
-            ("Yahoo ingest", lambda session: ingest_yahoo(session, reference_date=reference))
-        )
-    else:
-        typer.echo("Yahoo ingest skipped (yahoo_provider_enabled=false)")
+    jobs: list[tuple[str, Callable[[Session], Mapping[str, object]]]] = []
+    for provider, label, work in candidates:
+        if _provider_enabled(settings, provider):
+            jobs.append((label, work))
+        else:
+            _echo_disabled(provider, label)
     session = _session()
     try:
         failed = _run_jobs(session, jobs)
@@ -303,6 +333,8 @@ def backfill_cvm_command(
     """Backfill CVM Informe Diario months for --start/--end."""
     from marketdata.ingestion.cvm import backfill_cvm
 
+    if _skip_disabled_provider("cvm", "CVM backfill"):
+        return
     start = date.fromisoformat(start_value)
     end = date.fromisoformat(end_value)
     result = _with_session(
@@ -326,6 +358,8 @@ def backfill_tesouro_command(
     """Backfill Tesouro Direto quotes from one CKAN CSV for --start/--end."""
     from marketdata.ingestion.tesouro import backfill_tesouro
 
+    if _skip_disabled_provider("tesouro", "Tesouro backfill"):
+        return
     start = date.fromisoformat(start_value)
     end = date.fromisoformat(end_value)
     result = _with_session(
@@ -343,6 +377,8 @@ def backfill_bcb_command(
     """Backfill BCB SGS series for --start/--end using 10-year chunks."""
     from marketdata.ingestion.bcb import backfill_bcb
 
+    if _skip_disabled_provider("bcb", "BCB backfill"):
+        return
     start = date.fromisoformat(start_value)
     end = date.fromisoformat(end_value)
     result = _with_session(
@@ -370,6 +406,8 @@ def backfill_b3_command(
     """Backfill B3 trading days for --start/--end; weekends and empty ZIPs are skipped."""
     from marketdata.ingestion.b3 import backfill_b3
 
+    if _skip_disabled_provider("b3", "B3 backfill"):
+        return
     start = date.fromisoformat(start_value)
     end = date.fromisoformat(end_value)
     result = _with_session(
@@ -394,6 +432,8 @@ def backfill_yahoo_command(
     """Backfill unofficial Yahoo Finance history (local store; not public API)."""
     from marketdata.ingestion.yahoo import backfill_yahoo
 
+    if _skip_disabled_provider("yahoo", "Yahoo backfill"):
+        return
     start = date.fromisoformat(start_value)
     end = date.fromisoformat(end_value)
     result = _with_session(
@@ -423,33 +463,39 @@ def backfill_all_command(
     start = date.fromisoformat(start_value)
     end = date.fromisoformat(end_value)
     settings = get_settings()
-    jobs: list[tuple[str, Callable[[Session], Mapping[str, object]]]] = [
+    candidates: list[tuple[str, str, Callable[[Session], Mapping[str, object]]]] = [
         (
+            "tesouro",
             "Tesouro backfill",
             lambda session: backfill_tesouro(session, start=start, end=end, resume=resume),
         ),
         (
+            "bcb",
             "BCB backfill",
             lambda session: backfill_bcb(session, start=start, end=end, resume=resume),
         ),
         (
+            "cvm",
             "CVM backfill",
             lambda session: backfill_cvm(session, start=start, end=end, resume=resume),
         ),
         (
+            "b3",
             "B3 backfill",
             lambda session: backfill_b3(session, start=start, end=end, resume=resume),
         ),
+        (
+            "yahoo",
+            "Yahoo backfill",
+            lambda session: backfill_yahoo(session, start=start, end=end),
+        ),
     ]
-    if settings.yahoo_provider_enabled:
-        jobs.append(
-            (
-                "Yahoo backfill",
-                lambda session: backfill_yahoo(session, start=start, end=end),
-            )
-        )
-    else:
-        typer.echo("Yahoo backfill skipped (yahoo_provider_enabled=false)")
+    jobs: list[tuple[str, Callable[[Session], Mapping[str, object]]]] = []
+    for provider, label, work in candidates:
+        if _provider_enabled(settings, provider):
+            jobs.append((label, work))
+        else:
+            _echo_disabled(provider, label)
     session = _session()
     try:
         failed = _run_jobs(session, jobs)

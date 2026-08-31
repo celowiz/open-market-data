@@ -271,6 +271,10 @@ def test_backfill_b3_maps_cotahist_and_delay(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_backfill_yahoo_does_not_pass_resume(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_session(monkeypatch)
+    monkeypatch.setattr(
+        "marketdata.cli.main.get_settings",
+        lambda: _provider_settings(yahoo_provider_enabled=True),
+    )
     captured: dict[str, object] = {}
 
     def fake_backfill(db_session, *, start, end, symbols=None):
@@ -298,11 +302,24 @@ def test_backfill_yahoo_does_not_pass_resume(monkeypatch: pytest.MonkeyPatch) ->
     assert captured["start"] == date(2020, 1, 1)
 
 
+def _provider_settings(**overrides: bool) -> object:
+    flags = {
+        "cvm_provider_enabled": True,
+        "b3_provider_enabled": True,
+        "tesouro_provider_enabled": True,
+        "bcb_provider_enabled": True,
+        "yahoo_provider_enabled": False,
+        "anbima_provider_enabled": False,
+    }
+    flags.update(overrides)
+    return type("S", (), flags)()
+
+
 def test_backfill_all_order_and_yahoo_skip(monkeypatch: pytest.MonkeyPatch) -> None:
     session = _patch_session(monkeypatch)
     monkeypatch.setattr(
         "marketdata.cli.main.get_settings",
-        lambda: type("S", (), {"yahoo_provider_enabled": False})(),
+        lambda: _provider_settings(yahoo_provider_enabled=False),
     )
     called: list[str] = []
 
@@ -336,7 +353,7 @@ def test_ingest_all_continues_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     session = _patch_session(monkeypatch)
     monkeypatch.setattr(
         "marketdata.cli.main.get_settings",
-        lambda: type("S", (), {"yahoo_provider_enabled": True})(),
+        lambda: _provider_settings(yahoo_provider_enabled=True),
     )
     called: list[str] = []
 
@@ -363,3 +380,113 @@ def test_ingest_all_continues_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     assert session.commits == 4
     assert session.closed is True
     assert "failed" in result.output.lower()
+
+
+def test_ingest_all_skips_disabled_live_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _patch_session(monkeypatch)
+    monkeypatch.setattr(
+        "marketdata.cli.main.get_settings",
+        lambda: _provider_settings(
+            cvm_provider_enabled=False,
+            tesouro_provider_enabled=False,
+            yahoo_provider_enabled=False,
+        ),
+    )
+    called: list[str] = []
+
+    def track(name: str):
+        def fake(db_session, **kwargs):
+            called.append(name)
+            return _ok_result()
+
+        return fake
+
+    def must_skip(name: str):
+        def fake(*_args, **_kwargs):
+            raise AssertionError(f"{name} must be skipped when disabled")
+
+        return fake
+
+    monkeypatch.setattr("marketdata.ingestion.cvm.ingest_cvm", must_skip("cvm"))
+    monkeypatch.setattr("marketdata.ingestion.tesouro.ingest_tesouro", must_skip("tesouro"))
+    monkeypatch.setattr("marketdata.ingestion.bcb.ingest_bcb", track("bcb"))
+    monkeypatch.setattr("marketdata.ingestion.b3.ingest_b3", track("b3"))
+    monkeypatch.setattr("marketdata.ingestion.yahoo.ingest_yahoo", must_skip("yahoo"))
+    result = runner.invoke(app, ["ingest", "all", "--date", "2026-08-24"])
+    assert result.exit_code == 0, result.output
+    assert called == ["bcb", "b3"]
+    assert session.closed is True
+    assert "cvm ingest skipped" in result.output.lower()
+    assert "tesouro ingest skipped" in result.output.lower()
+    assert "yahoo ingest skipped" in result.output.lower()
+
+
+def test_backfill_all_skips_disabled_live_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _patch_session(monkeypatch)
+    monkeypatch.setattr(
+        "marketdata.cli.main.get_settings",
+        lambda: _provider_settings(
+            b3_provider_enabled=False,
+            bcb_provider_enabled=False,
+            yahoo_provider_enabled=False,
+        ),
+    )
+    called: list[str] = []
+
+    def track(name: str):
+        def fake(db_session, **kwargs):
+            called.append(name)
+            return _ok_result()
+
+        return fake
+
+    def must_skip(name: str):
+        def fake(*_args, **_kwargs):
+            raise AssertionError(f"{name} must be skipped when disabled")
+
+        return fake
+
+    monkeypatch.setattr("marketdata.ingestion.tesouro.backfill_tesouro", track("tesouro"))
+    monkeypatch.setattr("marketdata.ingestion.bcb.backfill_bcb", must_skip("bcb"))
+    monkeypatch.setattr("marketdata.ingestion.cvm.backfill_cvm", track("cvm"))
+    monkeypatch.setattr("marketdata.ingestion.b3.backfill_b3", must_skip("b3"))
+    monkeypatch.setattr("marketdata.ingestion.yahoo.backfill_yahoo", must_skip("yahoo"))
+    result = runner.invoke(
+        app,
+        ["backfill", "all", "--start", "2024-01-01", "--end", "2024-01-31"],
+    )
+    assert result.exit_code == 0, result.output
+    assert called == ["tesouro", "cvm"]
+    assert session.closed is True
+    assert "bcb backfill skipped" in result.output.lower()
+    assert "b3 backfill skipped" in result.output.lower()
+
+
+def test_ingest_cvm_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "marketdata.cli.main.get_settings",
+        lambda: _provider_settings(cvm_provider_enabled=False),
+    )
+
+    def fail_cvm(*_args, **_kwargs):
+        raise AssertionError("cvm ingest must be skipped when disabled")
+
+    monkeypatch.setattr("marketdata.ingestion.cvm.ingest_cvm", fail_cvm)
+    result = runner.invoke(app, ["ingest", "cvm", "--date", "2026-08-24"])
+    assert result.exit_code == 0, result.output
+    assert "cvm ingest skipped" in result.output.lower()
+
+
+def test_ingest_yahoo_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "marketdata.cli.main.get_settings",
+        lambda: _provider_settings(yahoo_provider_enabled=False),
+    )
+
+    def fail_yahoo(*_args, **_kwargs):
+        raise AssertionError("yahoo ingest must be skipped when disabled")
+
+    monkeypatch.setattr("marketdata.ingestion.yahoo.ingest_yahoo", fail_yahoo)
+    result = runner.invoke(app, ["ingest", "yahoo", "--date", "2026-08-24"])
+    assert result.exit_code == 0, result.output
+    assert "yahoo ingest skipped" in result.output.lower()

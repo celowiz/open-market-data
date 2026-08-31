@@ -210,9 +210,10 @@ For a $0-scratch / Neon Free run:
 - CVM persist honors `CVM_CLASSES=Multimercado,Ações`. `ingest-cvm.yml` stays
   dispatch-only. Do not re-enable its cron.
 - Tesouro persist honors `TESOURO_CURRENT_TITLES_ONLY` (default true).
-- `CVM_PROVIDER_ENABLED` and `TESOURO_PROVIDER_ENABLED` exist in Settings but
-  are currently ignored by ingest/backfill (only `yahoo_provider_enabled` is
-  wired).
+- `CVM_PROVIDER_ENABLED`, `B3_PROVIDER_ENABLED`, `TESOURO_PROVIDER_ENABLED`,
+  and `BCB_PROVIDER_ENABLED` are honored by `ingest` / `backfill` (including
+  `all` and individual commands). Set a flag false to skip that provider.
+  `YAHOO_PROVIDER_ENABLED` defaults false (ADR-0013). ANBIMA stays disabled.
 - Do **not** enable COTAHIST (`--cotahist`).
 - Keep `marketdata ingest b3` (186 filtered + 187 as-is). Prefer BCB if you
   still want a cheap official series.

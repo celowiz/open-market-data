@@ -6,9 +6,28 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: open_market_data
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d open_market_data"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/open_market_data
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
@@ -17,12 +36,14 @@ jobs:
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --frozen --group dev
       - name: Ruff check
         run: uv run ruff check .
       - name: Ruff format
         run: uv run ruff format --check .
       - name: Type check
         run: uv run pyright
+      - name: Apply migrations
+        run: uv run alembic upgrade head
       - name: Tests
         run: uv run pytest

@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     tesouro_current_titles_only: bool = True
     cvm_classes: str = ""
     bcb_provider_enabled: bool = True
-    yahoo_provider_enabled: bool = True
+    yahoo_provider_enabled: bool = False
     anbima_provider_enabled: bool = False
 
 
