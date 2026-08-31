@@ -24,6 +24,7 @@ import {
   isTesouroIdentifier,
   tesouroCompanionPriceType,
 } from "@/lib/identifiers";
+import { formatPregoes, hasQuoteSpan } from "@/lib/span";
 import { useHistoryPages } from "@/lib/use-history-pages";
 
 function QuoteHistoryPage() {
@@ -122,6 +123,20 @@ function QuoteHistoryPage() {
           <code className="font-mono text-xs">GET /v1/quotes/{"{identifier}"}/history</code>
         </p>
         <LatestHeadline kind="quote" identifier={identifier} priceType={applied.price_type} />
+        {history.firstPage && hasQuoteSpan(history.firstPage) ? (
+          <p className="mt-2 text-sm text-slate-600">
+            {copy.common.firstQuote}:{" "}
+            <span className="font-mono">{history.firstPage.first_quote_date ?? "—"}</span>
+            {" · "}
+            {copy.common.lastQuote}:{" "}
+            <span className="font-mono">{history.firstPage.last_quote_date ?? "—"}</span>
+            {" · "}
+            {formatPregoes(history.firstPage.quote_count)}
+          </p>
+        ) : null}
+        {history.status === "success" && (!history.firstPage || !hasQuoteSpan(history.firstPage)) ? (
+          <p className="mt-2 text-sm text-slate-600">{copy.common.historyLoading}</p>
+        ) : null}
       </header>
 
       {tesouro ? (
@@ -206,7 +221,7 @@ function QuoteHistoryPage() {
           {quotes.length === 0 ? (
             <EmptyState>
               <p>Nenhuma cotação neste intervalo.</p>
-              <p className="mt-2 text-xs text-slate-500">{copy.common.backfillSecondary}</p>
+              <p className="mt-2 text-xs text-slate-500">{copy.common.historyLoading}</p>
             </EmptyState>
           ) : (
             <>

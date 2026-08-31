@@ -313,3 +313,98 @@ def test_cli_public_flag_prices_yahoo(db_session, tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "AAPL  PRICED  CLOSE  185.64" in result.output
     assert "PETR4  PRICED  LAST  32.51" in result.output
+
+
+def test_coverage_span_openapi_is_cheap_and_does_not_require_date() -> None:
+    spec = TestClient(create_app()).get("/openapi.json").json()
+    operation = spec["paths"]["/v1/coverage/span"]["get"]
+    params = {item["name"]: item for item in operation["parameters"]}
+    assert "date" not in params
+    assert params["universe"]["schema"]["default"] == "example"
+    assert params["source"].get("required") is not True
+    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    if "$ref" in schema:
+        name = schema["$ref"].rsplit("/", 1)[-1]
+        schema = spec["components"]["schemas"][name]
+    assert {
+        "universe",
+        "universe_size",
+        "instruments_with_quotes",
+        "min_date",
+        "max_date",
+        "quote_count",
+        "results",
+    } <= set(schema["properties"])
+    assert "priced" not in schema["properties"]
+    item = spec["components"]["schemas"]["CoverageSpanItem"]
+    assert {
+        "ticker",
+        "instrument_id",
+        "source",
+        "min_date",
+        "max_date",
+        "quote_count",
+    } <= set(item["properties"])
+
+
+@pytest.mark.db
+def test_coverage_span_scratch_returns_min_max_count(db_session, tmp_path: Path) -> None:
+    _seed_quotes(db_session)
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "instruments.scratch.csv").write_text(
+        TINY.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    client = _client(tmp_path)
+    response = client.get("/v1/coverage/span", params={"universe": "scratch"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["universe"] == "scratch"
+    assert body["universe_size"] == 5
+    assert body["instruments_with_quotes"] == 3
+    assert body["min_date"] == REF.isoformat()
+    assert body["max_date"] == REF.isoformat()
+    assert body["quote_count"] == 3
+    by_ticker = {row["ticker"]: row for row in body["results"]}
+    assert set(by_ticker) == {"PETR4", "DI1F27", "AAPL", "UNKNOWN1", "CVMSTUB"}
+    assert by_ticker["PETR4"]["source"] == "b3"
+    assert by_ticker["PETR4"]["min_date"] == REF.isoformat()
+    assert by_ticker["PETR4"]["quote_count"] == 1
+    assert by_ticker["PETR4"]["instrument_id"]
+    assert by_ticker["UNKNOWN1"]["quote_count"] == 0
+    assert by_ticker["UNKNOWN1"]["min_date"] is None
+    assert by_ticker["CVMSTUB"]["quote_count"] == 0
+
+
+@pytest.mark.db
+def test_coverage_span_source_filter_hides_other_providers(db_session, tmp_path: Path) -> None:
+    _seed_quotes(db_session)
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "instruments.scratch.csv").write_text(
+        TINY.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    client = _client(tmp_path)
+    response = client.get(
+        "/v1/coverage/span",
+        params={"universe": "scratch", "source": "b3"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "b3"
+    assert body["instruments_with_quotes"] == 2
+    by_ticker = {row["ticker"]: row for row in body["results"]}
+    assert by_ticker["PETR4"]["quote_count"] == 1
+    assert by_ticker["DI1F27"]["quote_count"] == 1
+    assert by_ticker["AAPL"]["quote_count"] == 0
+
+
+@pytest.mark.db
+def test_coverage_span_scratch_missing_is_404(db_session, tmp_path: Path) -> None:
+    _seed_quotes(db_session)
+    client = _client(_seed_universe(tmp_path))
+    response = client.get("/v1/coverage/span", params={"universe": "scratch"})
+    assert response.status_code == 404
+    assert response.json()["detail"] == "universe not found"

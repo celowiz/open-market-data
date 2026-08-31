@@ -4,6 +4,9 @@ export type InstrumentSearchItem = {
   asset_class: string;
   identifiers: string[];
   sources?: string[];
+  first_quote_date?: string | null;
+  last_quote_date?: string | null;
+  quote_count?: number | null;
 };
 
 export type InstrumentsResponse = {
@@ -29,6 +32,9 @@ export type QuotesResponse = {
   identifier: string;
   quotes: QuoteResponse[];
   next_cursor: string | null;
+  first_quote_date?: string | null;
+  last_quote_date?: string | null;
+  quote_count?: number | null;
 };
 
 export type SeriesObservationResponse = {
@@ -125,4 +131,29 @@ export type CoverageQuery = {
   universe?: CoverageUniverse;
   limit?: number;
   cursor?: number;
+};
+
+export type CoverageSpanItem = {
+  ticker: string;
+  instrument_id: string | null;
+  source: string | null;
+  min_date: string | null;
+  max_date: string | null;
+  quote_count: number;
+};
+
+export type CoverageSpanResponse = {
+  universe: string;
+  universe_size: number;
+  instruments_with_quotes: number;
+  min_date: string | null;
+  max_date: string | null;
+  quote_count: number;
+  source?: string | null;
+  results: CoverageSpanItem[];
+};
+
+export type CoverageSpanQuery = {
+  universe?: CoverageUniverse;
+  source?: string;
 };

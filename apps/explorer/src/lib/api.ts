@@ -2,6 +2,8 @@ import { copy } from "@/lib/copy";
 import type {
   CoverageQuery,
   CoverageResponse,
+  CoverageSpanQuery,
+  CoverageSpanResponse,
   DatasetListing,
   FundQuotesResponse,
   HealthResponse,
@@ -155,6 +157,14 @@ export function isNotFoundError(error: unknown): boolean {
   }
   const message = formatApiError(error).toLowerCase();
   return message.includes("404") || message.includes("not found");
+}
+
+export function isTimeoutError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 408 || error.status === 504 || error.status === 524;
+  }
+  const message = formatApiError(error).toLowerCase();
+  return /timeout|timed out|504|524/.test(message);
 }
 
 export async function apiFetch<T>(
@@ -337,6 +347,19 @@ export function fetchCoverage(params: CoverageQuery, signal?: AbortSignal): Prom
       universe: params.universe,
       limit: params.limit ?? COVERAGE_PAGE_SIZE,
       cursor: params.cursor,
+    },
+    signal,
+  });
+}
+
+export function fetchCoverageSpan(
+  params: CoverageSpanQuery = {},
+  signal?: AbortSignal,
+): Promise<CoverageSpanResponse> {
+  return apiFetch<CoverageSpanResponse>("/v1/coverage/span", {
+    query: {
+      universe: params.universe,
+      source: params.source,
     },
     signal,
   });

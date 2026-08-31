@@ -275,6 +275,11 @@ backend. See [`DATASETS.md`](DATASETS.md).
   Pagination uses `limit` (default 20, max 100) and an opaque `cursor`;
   `next_cursor` is present when more rows remain. Optional
   `source` and `asset_class` filters use existing columns (no extra table).
+  Each row includes `first_quote_date`, `last_quote_date`, and `quote_count`
+  (distinct reference dates) from a cheap aggregate, not the coverage engine.
+- `GET /v1/sources` defaults to registered provider names (`b3`, `bcb`,
+  `cvm`, `tesouro`, `yahoo`). Pass `include_test=true` to list leftover CI
+  source rows. Do not DELETE those rows from Postgres.
 - No arbitrary SQL endpoint. Yahoo remains 404 on public quotes.
 
 Small queries go to the API. Large historical extracts go to Parquet

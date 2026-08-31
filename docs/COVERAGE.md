@@ -19,6 +19,7 @@ Default universe path: `config/instruments.csv` if present, else
 
 ```text
 GET /v1/coverage?date=YYYY-MM-DD&universe=example|operator|scratch
+GET /v1/coverage/span?universe=example|operator|scratch
 ```
 
 `universe` is a name, never a filesystem path. `example` is the committed
@@ -26,6 +27,12 @@ coverage seed (includes US ticker experiments). `scratch` is the committed
 IBOV/SMLL/futures list used by `INGEST_UNIVERSE=scratch`. `operator` is
 gitignored `config/instruments.csv` (404 if missing). There is no `/v1/yahoo`
 route.
+
+`GET /v1/coverage/span` is a cheap `min`/`max`/`count` aggregate of quotes
+already stored for that universe. It does **not** run the date-by-date
+coverage engine (which is too slow to use as a backfill progress bar).
+Optional `source=b3` filters the aggregate. The Explorer coverage page
+loads span for the summary and only calls `/v1/coverage?date=` on demand.
 
 The API always uses **public** mode. The CLI defaults to **local** mode.
 `--public` applies the same gate as the API (`public_api_enabled`).
