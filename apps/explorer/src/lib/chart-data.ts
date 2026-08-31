@@ -13,14 +13,33 @@ export type ChartSeries = {
   kind?: "quote" | "series";
 };
 
-export type ChartPoint = Record<string, string | number | null | undefined>;
+export type LineSeriesValuePoint = {
+  time: string;
+  value: number;
+};
 
-/** Break the line only for a real outage, not ordinary weekends or long weekends. */
-export const OUTAGE_BREAK_DAYS = 7;
-export const GAP_MARKER_SUFFIX = "~gap";
+export type LineSeriesWhitespacePoint = {
+  time: string;
+};
 
-export function isGapMarkerDate(date: string): boolean {
-  return date.endsWith(GAP_MARKER_SUFFIX);
+export type LineSeriesPoint = LineSeriesValuePoint | LineSeriesWhitespacePoint;
+
+export type ChartTime =
+  | string
+  | number
+  | {
+      year: number;
+      month: number;
+      day: number;
+    };
+
+const SAO_PAULO = "America/Sao_Paulo";
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function addUtcDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
 }
 
 function utcDayDiff(start: string, end: string): number {
@@ -29,50 +48,133 @@ function utcDayDiff(start: string, end: string): number {
   return Math.round((to - from) / 86_400_000);
 }
 
-function withOutageBreaks(rows: ChartRow[]): Array<{ date: string; raw: string | null }> {
-  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
-  const out: Array<{ date: string; raw: string | null }> = [];
-  for (let index = 0; index < sorted.length; index += 1) {
-    const current = sorted[index];
+export function isWhitespacePoint(point: LineSeriesPoint): point is LineSeriesWhitespacePoint {
+  return !("value" in point);
+}
+
+function parseIsoDay(date: string): { year: number; month: number; day: number } | null {
+  const match = ISO_DAY.exec(date);
+  if (!match) {
+    return null;
+  }
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function toIsoDay(parts: { year: number; month: number; day: number }): string {
+  const month = String(parts.month).padStart(2, "0");
+  const day = String(parts.day).padStart(2, "0");
+  return `${parts.year}-${month}-${day}`;
+}
+
+function uniqueSortedValues(rows: ChartRow[]): LineSeriesValuePoint[] {
+  const latest = new Map<string, number>();
+  for (const row of rows) {
+    const parsed = parseIsoDay(row.date);
+    if (!parsed) {
+      continue;
+    }
+    if (row.raw.trim() === "") {
+      continue;
+    }
+    const value = Number(row.raw);
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    latest.set(toIsoDay(parsed), value);
+  }
+  return [...latest.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([time, value]) => ({ time, value }));
+}
+
+function fillCalendarGaps(points: LineSeriesValuePoint[]): LineSeriesPoint[] {
+  const out: LineSeriesPoint[] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
     if (index > 0) {
-      const previous = sorted[index - 1];
-      if (utcDayDiff(previous.date, current.date) > OUTAGE_BREAK_DAYS) {
-        out.push({ date: `${previous.date}${GAP_MARKER_SUFFIX}`, raw: null });
+      const previous = points[index - 1];
+      const gap = utcDayDiff(previous.time, current.time);
+      for (let offset = 1; offset < gap; offset += 1) {
+        out.push({ time: addUtcDays(previous.time, offset) });
       }
     }
-    out.push({ date: current.date, raw: current.raw });
+    out.push(current);
   }
   return out;
 }
 
-export function buildChartData(series: ChartSeries[]): ChartPoint[] {
-  const dates = new Set<string>();
-  const byKey = new Map<string, Map<string, number | null>>();
-  for (const item of series) {
-    const map = new Map<string, number | null>();
-    for (const row of withOutageBreaks(item.rows)) {
-      dates.add(row.date);
-      if (row.raw === null) {
-        map.set(row.date, null);
-        continue;
-      }
-      const value = Number(row.raw);
-      if (Number.isFinite(value)) {
-        map.set(row.date, value);
-      }
+export function toLineSeriesData(rows: ChartRow[]): LineSeriesPoint[] {
+  return fillCalendarGaps(uniqueSortedValues(rows));
+}
+
+function businessDayDate(time: ChartTime): Date | null {
+  if (typeof time === "string") {
+    const parsed = parseIsoDay(time);
+    if (!parsed) {
+      return null;
     }
-    byKey.set(item.key, map);
+    return new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day, 12));
   }
-  return [...dates]
-    .sort((a, b) => a.localeCompare(b))
-    .map((date) => {
-      const point: ChartPoint = { date };
-      for (const item of series) {
-        const map = byKey.get(item.key);
-        if (map?.has(date)) {
-          point[item.key] = map.get(date);
-        }
-      }
-      return point;
-    });
+  if (typeof time === "number") {
+    return new Date(time * 1000);
+  }
+  if (time && typeof time === "object" && "year" in time) {
+    return new Date(Date.UTC(time.year, time.month - 1, time.day, 12));
+  }
+  return null;
+}
+
+export function formatChartTime(time: ChartTime): string {
+  const date = businessDayDate(time);
+  if (!date) {
+    return String(time);
+  }
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: SAO_PAULO,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+export function timeToIsoDay(time: ChartTime): string | null {
+  if (typeof time === "string") {
+    const parsed = parseIsoDay(time);
+    return parsed ? toIsoDay(parsed) : null;
+  }
+  if (typeof time === "number") {
+    return null;
+  }
+  if (time && typeof time === "object" && "year" in time) {
+    return toIsoDay(time);
+  }
+  return null;
+}
+
+export function formatChartTick(time: ChartTime): string {
+  const date = businessDayDate(time);
+  if (!date) {
+    return String(time);
+  }
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: SAO_PAULO,
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+}
+
+export function rawByDate(rows: ChartRow[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    const parsed = parseIsoDay(row.date);
+    if (!parsed) {
+      continue;
+    }
+    map.set(toIsoDay(parsed), row.raw);
+  }
+  return map;
 }

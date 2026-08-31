@@ -1,15 +1,3 @@
-"use client";
-
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
 import type { CoverageItemResponse, CoverageResponse } from "@/lib/types";
 
 function reasonBars(counts: Record<string, number>): Array<{ name: string; count: number }> {
@@ -34,6 +22,49 @@ function assetClassBars(
   return [...byClass.entries()].map(([name, counts]) => ({ name, ...counts }));
 }
 
+function CountBar({ label, count, max }: { label: string; count: number; max: number }) {
+  const width = max > 0 ? Math.max((count / max) * 100, count > 0 ? 2 : 0) : 0;
+  return (
+    <li>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="truncate text-foreground">{label}</span>
+        <span className="font-mono tabular-nums text-muted">{count}</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-elevated">
+        <div className="h-full rounded-full bg-accent" style={{ width: `${width}%` }} />
+      </div>
+    </li>
+  );
+}
+
+function SplitBar({
+  name,
+  priced,
+  missing,
+}: {
+  name: string;
+  priced: number;
+  missing: number;
+}) {
+  const total = priced + missing;
+  const pricedWidth = total > 0 ? (priced / total) * 100 : 0;
+  const missingWidth = total > 0 ? (missing / total) * 100 : 0;
+  return (
+    <li>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="truncate text-foreground">{name}</span>
+        <span className="font-mono tabular-nums text-muted">
+          {priced}/{total}
+        </span>
+      </div>
+      <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-elevated">
+        <div className="h-full bg-accent" style={{ width: `${pricedWidth}%` }} />
+        <div className="h-full bg-border" style={{ width: `${missingWidth}%` }} />
+      </div>
+    </li>
+  );
+}
+
 export function CoverageChart({
   data,
   rows,
@@ -43,6 +74,7 @@ export function CoverageChart({
 }) {
   const reasons = reasonBars(data.missing_reason_counts);
   const classes = assetClassBars(rows);
+  const reasonMax = Math.max(...reasons.map((row) => row.count), 0);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -54,17 +86,11 @@ export function CoverageChart({
         {reasons.length === 0 ? (
           <p className="mt-4 text-sm text-muted">Nenhum motivo de ausência neste universo.</p>
         ) : (
-          <div className="mt-3 h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={reasons} margin={{ top: 8, right: 8, left: 0, bottom: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2b35" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9a9ba8" }} interval={0} angle={-20} textAnchor="end" />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#9a9ba8" }} width={36} />
-                <Tooltip />
-                <Bar dataKey="count" name="Quantidade" fill="#d2ff3f" isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <ul className="mt-3 flex flex-col gap-3">
+            {reasons.map((row) => (
+              <CountBar key={row.name} label={row.name} count={row.count} max={reasonMax} />
+            ))}
+          </ul>
         )}
       </section>
       <section className="rounded-2xl border border-border bg-surface p-4">
@@ -75,18 +101,11 @@ export function CoverageChart({
         {classes.length === 0 ? (
           <p className="mt-4 text-sm text-muted">Nenhuma linha carregada ainda.</p>
         ) : (
-          <div className="mt-3 h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={classes} margin={{ top: 8, right: 8, left: 0, bottom: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2b35" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9a9ba8" }} interval={0} angle={-20} textAnchor="end" />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#9a9ba8" }} width={36} />
-                <Tooltip />
-                <Bar dataKey="priced" name="Com preço" fill="#d2ff3f" isAnimationActive={false} />
-                <Bar dataKey="missing" name="Ausente" fill="#3a3b46" isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <ul className="mt-3 flex flex-col gap-3">
+            {classes.map((row) => (
+              <SplitBar key={row.name} name={row.name} priced={row.priced} missing={row.missing} />
+            ))}
+          </ul>
         )}
       </section>
     </div>
