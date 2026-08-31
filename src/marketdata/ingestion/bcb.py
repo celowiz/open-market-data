@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from logging import getLogger
 
 from sqlalchemy.orm import Session
 
@@ -10,7 +11,12 @@ from marketdata.ingestion.checkpoint import (
     load_checkpoint,
     save_checkpoint,
 )
-from marketdata.providers.bcb import SGS_SERIES, BcbProvider, chunk_date_range
+from marketdata.providers.bcb import (
+    SGS_SERIES,
+    BcbProvider,
+    chunk_date_range,
+    is_missing_sgs_values,
+)
 from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
 from marketdata.storage.repositories import (
     finish_ingestion_run,
@@ -23,6 +29,7 @@ from marketdata.storage.repositories import (
 
 _BACKFILL_FLUSH_EVERY = 1000
 _SGS_SOURCE_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs"
+logger = getLogger(__name__)
 
 
 def _ensure_bcb_source(session: Session):
@@ -64,11 +71,35 @@ def ingest_bcb(
     payload_rows: list[dict[str, str]] = []
     try:
         fetched: list[tuple[str, str, str, str, date, object]] = []
+        series_skipped = 0
         if observations is None:
             for code, series_id, name, unit in SGS_SERIES:
-                for ref, value in bcb.fetch_series(
-                    series_id, start=reference_date, end=reference_date
-                ):
+                try:
+                    rows = list(
+                        bcb.fetch_series(series_id, start=reference_date, end=reference_date)
+                    )
+                except Exception as exc:
+                    if not is_missing_sgs_values(exc):
+                        raise
+                    logger.info(
+                        "bcb skip missing SGS series code=%s id=%s date=%s: %s",
+                        code,
+                        series_id,
+                        reference_date,
+                        exc,
+                    )
+                    series_skipped += 1
+                    continue
+                if not rows:
+                    logger.info(
+                        "bcb skip empty SGS series code=%s id=%s date=%s",
+                        code,
+                        series_id,
+                        reference_date,
+                    )
+                    series_skipped += 1
+                    continue
+                for ref, value in rows:
                     fetched.append((code, series_id, name, unit, ref, value))
                     payload_rows.append(
                         {"code": code, "date": ref.isoformat(), "value": str(value)}
@@ -136,11 +167,20 @@ def ingest_bcb(
         run.records_normalized = inserted + updated + skipped
         finish_ingestion_run(run, status=IngestionRunStatus.SUCCEEDED)
         session.flush()
+        logger.info(
+            "bcb ingest date=%s inserted=%s updated=%s skipped=%s series_skipped=%s",
+            reference_date,
+            inserted,
+            updated,
+            skipped,
+            series_skipped,
+        )
         return {
             "run_id": str(run.id),
             "inserted": inserted,
             "updated": updated,
             "skipped": skipped,
+            "series_skipped": series_skipped,
             "status": run.status,
         }
     except Exception:
@@ -181,7 +221,20 @@ def _chunk_observations(
     chunk_end: date,
 ) -> list[tuple]:
     if observations is None:
-        rows = provider.fetch_series(series_id, start=chunk_start, end=chunk_end)
+        try:
+            rows = provider.fetch_series(series_id, start=chunk_start, end=chunk_end)
+        except Exception as exc:
+            if not is_missing_sgs_values(exc):
+                raise
+            logger.info(
+                "bcb skip missing SGS series code=%s id=%s start=%s end=%s: %s",
+                code,
+                series_id,
+                chunk_start,
+                chunk_end,
+                exc,
+            )
+            return []
         return [(code, series_id, name, unit, ref, value) for ref, value in rows]
     return [row for row in observations if row[0] == code and chunk_start <= row[4] <= chunk_end]
 

@@ -18,6 +18,11 @@ Daily ingest and range backfill cover these five SGS series:
 
 History queries use `chunk_date_range(..., years=10)`: each SGS call spans **at most 10 years**. A 26-year window is three (or so) chunked requests **per series**, not one HTTP call per calendar day.
 
+A missing SGS series or date (`SGSError: Value(s) not found`, empty window) skips
+that code, logs it, and does not fail the job. Daily ingest succeeds if any
+series was stored or if every series was skipped, with `series_skipped` in the
+summary.
+
 ## Ingest (one calendar day)
 
 ```bash

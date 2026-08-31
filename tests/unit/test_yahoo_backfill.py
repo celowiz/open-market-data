@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from marketdata.config import get_settings
 from marketdata.domain.enums import PriceType, RedistributionPolicy
 from marketdata.ingestion.checkpoint import load_checkpoint
-from marketdata.ingestion.yahoo import DEFAULT_YAHOO_SYMBOLS, backfill_yahoo
+from marketdata.ingestion.yahoo import backfill_yahoo
 from marketdata.providers.yahoo import YahooQuoteRecord, parse_yahoo_history
 from marketdata.storage.database import create_db_engine, create_session_factory
 from marketdata.storage.models import Base, InstrumentQuoteRow, SourceRow
@@ -220,7 +220,7 @@ def test_backfill_yahoo_enables_public_api_and_checkpoints(db_session, tmp_path)
         db_session,
         start=START,
         end=END,
-        symbols=None,
+        symbols=["AAPL"],
         storage=storage,
         provider=FakeYahooProvider(),
     )
@@ -240,7 +240,7 @@ def test_backfill_yahoo_enables_public_api_and_checkpoints(db_session, tmp_path)
     assert checkpoint.start == START.isoformat()
     assert checkpoint.end == END.isoformat()
     assert checkpoint.status == "succeeded"
-    assert checkpoint.last_completed == DEFAULT_YAHOO_SYMBOLS[-1]
+    assert checkpoint.last_completed == "AAPL"
 
     assert result["status"]
     raw_path = (

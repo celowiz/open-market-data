@@ -1,5 +1,7 @@
 import json
 from datetime import date, timedelta
+from logging import getLogger
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,10 @@ from marketdata.domain.enums import (
     RedistributionPolicy,
 )
 from marketdata.ingestion.checkpoint import BackfillCheckpoint, save_checkpoint
+from marketdata.ingestion.yahoo_universe import (
+    default_yahoo_universe_path,
+    load_yahoo_universe_symbols,
+)
 from marketdata.providers.yahoo import YahooProvider, YahooQuoteRecord
 from marketdata.storage.object_store import LocalFileObjectStorage, build_object_storage
 from marketdata.storage.repositories import (
@@ -23,9 +29,40 @@ from marketdata.storage.repositories import (
     upsert_quote,
 )
 
-DEFAULT_YAHOO_SYMBOLS = ["AAPL"]
 YAHOO_HOMEPAGE = "https://finance.yahoo.com/"
 _UPSERT_FLUSH_EVERY = 1000
+logger = getLogger(__name__)
+
+
+def _requested_yahoo_symbols(
+    symbols: list[str] | None,
+    universe_path: Path | None = None,
+) -> tuple[list[str], int]:
+    if symbols:
+        return list(symbols), 0
+    selection = load_yahoo_universe_symbols(universe_path or default_yahoo_universe_path())
+    logger.info(
+        "yahoo universe symbols=%s skipped_futures=%s path=%s",
+        len(selection.symbols),
+        selection.skipped_futures,
+        universe_path or default_yahoo_universe_path(),
+    )
+    return list(selection.symbols), selection.skipped_futures
+
+
+def _payload_row(record: YahooQuoteRecord) -> dict[str, str]:
+    row = {
+        "symbol": record.symbol,
+        "date": record.reference_date.isoformat(),
+        "value": str(record.value),
+        "price_type": record.price_type.value,
+        "source_field": record.source_field,
+    }
+    if record.price_type is PriceType.CLOSE:
+        row["close"] = str(record.value)
+    elif record.price_type is PriceType.ADJUSTED_CLOSE:
+        row["adj_close"] = str(record.value)
+    return row
 
 
 def ingest_yahoo(
@@ -36,10 +73,11 @@ def ingest_yahoo(
     storage: LocalFileObjectStorage | None = None,
     provider: YahooProvider | None = None,
     history_rows: list[YahooQuoteRecord] | None = None,
+    universe_path: Path | None = None,
 ) -> dict[str, int | str]:
     yahoo = provider or YahooProvider()
     object_store = storage or build_object_storage()
-    requested = list(symbols) if symbols else list(DEFAULT_YAHOO_SYMBOLS)
+    requested, skipped_futures = _requested_yahoo_symbols(symbols, universe_path)
     source = _yahoo_source(session)
     run = start_ingestion_run(
         session, provider=yahoo.name, source_id=source.id, reference_date=reference_date
@@ -47,34 +85,35 @@ def ingest_yahoo(
     inserted = updated = skipped = 0
     artifacts = 0
     parsed = 0
+    symbols_skipped = 0
     try:
         for symbol in requested:
-            if history_rows is not None:
-                records = [
-                    row
-                    for row in history_rows
-                    if row.symbol == symbol and row.reference_date == reference_date
-                ]
-            else:
-                records = [
-                    row
-                    for row in yahoo.fetch_history(
-                        symbol,
-                        start=reference_date,
-                        end=reference_date + timedelta(days=1),
-                    )
-                    if row.reference_date == reference_date
-                ]
-            if not records:
+            try:
+                if history_rows is not None:
+                    records = [
+                        row
+                        for row in history_rows
+                        if row.symbol == symbol and row.reference_date == reference_date
+                    ]
+                else:
+                    records = [
+                        row
+                        for row in yahoo.fetch_history(
+                            symbol,
+                            start=reference_date,
+                            end=reference_date + timedelta(days=1),
+                        )
+                        if row.reference_date == reference_date
+                    ]
+            except Exception as exc:
+                logger.warning("yahoo skip missing symbol=%s: %s", symbol, exc)
+                symbols_skipped += 1
                 continue
-            payload_rows = [
-                {
-                    "symbol": record.symbol,
-                    "date": record.reference_date.isoformat(),
-                    "close": str(record.value),
-                }
-                for record in records
-            ]
+            if not records:
+                logger.info("yahoo skip empty history symbol=%s date=%s", symbol, reference_date)
+                symbols_skipped += 1
+                continue
+            payload_rows = [_payload_row(record) for record in records]
             payload = json.dumps(payload_rows, indent=None).encode("utf-8")
             key = (
                 f"raw/yahoo/year={reference_date.year:04d}/"
@@ -98,50 +137,17 @@ def ingest_yahoo(
             )
             artifacts += 1
             parsed += len(records)
-            for record in records:
-                instrument = get_or_create_instrument_by_key(
-                    session,
-                    source_id=source.id,
-                    source_key=record.symbol,
-                    asset_class=AssetClass.EQUITY,
-                    instrument_type="equity",
-                    name=record.symbol,
-                    currency=record.currency,
-                )
-                attach_identifier(
-                    session,
-                    instrument_id=instrument.id,
-                    identifier_type=IdentifierType.YAHOO_SYMBOL,
-                    identifier_value=record.symbol,
-                    source_id=source.id,
-                )
-                attach_identifier(
-                    session,
-                    instrument_id=instrument.id,
-                    identifier_type=IdentifierType.TICKER,
-                    identifier_value=record.symbol,
-                    source_id=source.id,
-                )
-                action = upsert_quote(
-                    session,
-                    instrument_id=instrument.id,
-                    source_id=source.id,
-                    reference_date=record.reference_date,
-                    value=record.value,
-                    price_type=PriceType.CLOSE,
-                    artifact=artifact,
-                    ingestion_run_id=run.id,
-                    currency=record.currency,
-                    unit=record.currency,
-                    extra={"source_field": record.source_field, "yahoo_symbol": record.symbol},
-                    is_official=False,
-                )
-                if action == "inserted":
-                    inserted += 1
-                elif action == "updated":
-                    updated += 1
-                else:
-                    skipped += 1
+            add_ins, add_upd, add_skip, _pending = _persist_yahoo_records(
+                session,
+                records=records,
+                source=source,
+                artifact=artifact,
+                run_id=run.id,
+                pending=0,
+            )
+            inserted += add_ins
+            updated += add_upd
+            skipped += add_skip
         run.artifacts_downloaded = artifacts
         run.records_parsed = parsed
         run.records_inserted = inserted
@@ -149,12 +155,25 @@ def ingest_yahoo(
         run.records_normalized = inserted + updated + skipped
         finish_ingestion_run(run, status=IngestionRunStatus.SUCCEEDED)
         session.flush()
+        logger.info(
+            "yahoo ingest date=%s symbols=%s skipped_futures=%s symbols_skipped=%s "
+            "inserted=%s updated=%s skipped=%s",
+            reference_date,
+            len(requested),
+            skipped_futures,
+            symbols_skipped,
+            inserted,
+            updated,
+            skipped,
+        )
         return {
             "run_id": str(run.id),
             "inserted": inserted,
             "updated": updated,
             "skipped": skipped,
             "artifacts": artifacts,
+            "skipped_futures": skipped_futures,
+            "symbols_skipped": symbols_skipped,
             "status": run.status,
         }
     except Exception:
@@ -212,6 +231,7 @@ def _persist_yahoo_records(
     flush_every: int = _UPSERT_FLUSH_EVERY,
 ) -> tuple[int, int, int, int]:
     inserted = updated = skipped = 0
+    identified: set[object] = set()
     for record in records:
         instrument = get_or_create_instrument_by_key(
             session,
@@ -222,27 +242,29 @@ def _persist_yahoo_records(
             name=record.symbol,
             currency=record.currency,
         )
-        attach_identifier(
-            session,
-            instrument_id=instrument.id,
-            identifier_type=IdentifierType.YAHOO_SYMBOL,
-            identifier_value=record.symbol,
-            source_id=source.id,
-        )
-        attach_identifier(
-            session,
-            instrument_id=instrument.id,
-            identifier_type=IdentifierType.TICKER,
-            identifier_value=record.symbol,
-            source_id=source.id,
-        )
+        if instrument.id not in identified:
+            attach_identifier(
+                session,
+                instrument_id=instrument.id,
+                identifier_type=IdentifierType.YAHOO_SYMBOL,
+                identifier_value=record.symbol,
+                source_id=source.id,
+            )
+            attach_identifier(
+                session,
+                instrument_id=instrument.id,
+                identifier_type=IdentifierType.TICKER,
+                identifier_value=record.symbol,
+                source_id=source.id,
+            )
+            identified.add(instrument.id)
         action = upsert_quote(
             session,
             instrument_id=instrument.id,
             source_id=source.id,
             reference_date=record.reference_date,
             value=record.value,
-            price_type=PriceType.CLOSE,
+            price_type=record.price_type,
             artifact=artifact,
             ingestion_run_id=run_id,
             currency=record.currency,
@@ -275,7 +297,7 @@ def backfill_yahoo(
 ) -> dict[str, int | str]:
     yahoo = provider or YahooProvider()
     object_store = storage or build_object_storage()
-    requested = list(symbols) if symbols else list(DEFAULT_YAHOO_SYMBOLS)
+    requested, _skipped_futures = _requested_yahoo_symbols(symbols)
     source = _yahoo_source(session)
     run = start_ingestion_run(session, provider=yahoo.name, source_id=source.id, reference_date=end)
     inserted = updated = skipped = 0
@@ -305,14 +327,7 @@ def backfill_yahoo(
                 history_rows=history_rows,
             )
             if records:
-                payload_rows = [
-                    {
-                        "symbol": record.symbol,
-                        "date": record.reference_date.isoformat(),
-                        "close": str(record.value),
-                    }
-                    for record in records
-                ]
+                payload_rows = [_payload_row(record) for record in records]
                 payload = json.dumps(payload_rows, indent=None).encode("utf-8")
                 key = f"raw/yahoo/backfill/{symbol}/{range_start}_{range_end}.json"
                 uri = object_store.store(key, payload, content_type="application/json")

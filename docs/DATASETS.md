@@ -47,8 +47,12 @@ public/manifests/{name}-latest.json
 ```
 
 `latest` is JSON only. Never write Parquet to a `latest` key. Hive partitions
-are deferred to a later `schema_version` after Phase 12. Cloudflare R2 is not
-required; Phase 11 may add an S3-compatible backend behind the same interface.
+are deferred to a later `schema_version` after Phase 12.
+
+GitHub Actions `publish-datasets.yml` **succeeds with skip** when
+`OBJECT_STORAGE_BACKEND` is local, unset, or not `s3` (R2 is not configured).
+The Python CLI does the same unless `--dry-run` is set. Local S3-compatible
+use (`OBJECT_STORAGE_BACKEND=s3` plus bucket) still publishes.
 
 ## CLI
 

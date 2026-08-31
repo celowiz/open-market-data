@@ -30,6 +30,7 @@ metadata or a non-price field, never as `FUND_NAV`.
 | `LAST_TRADE` | Alias reserved only if a source truly distinguishes last trade from `LAST`. Prefer `LAST` for new mappings |
 | `OFFICIAL_SETTLEMENT` | Exchange official settlement / ajuste |
 | `ADJUSTMENT` | Corporate-action or contract adjustment factor (out of MVP scope) |
+| `ADJUSTED_CLOSE` | Vendor-supplied split/dividend-adjusted close (Yahoo `Adj Close` column). Not a recomputed series |
 | `PU_BASE` | Tesouro Direto official base PU for the day |
 | `FUND_NAV` | Fund unit value / cota (`VL_QUOTA`) |
 | `INDICATIVE` | Indicative quote that is not an official close or settlement |
@@ -129,8 +130,9 @@ Never annualize daily Selic/CDI silently.
 
 ### Yahoo Finance
 
-- History `Close` → `CLOSE`
-- Do not use `Adj Close` for daily valuation
+- History `Close` → `CLOSE` (session close; daily valuation)
+- History `Adj Close` → `ADJUSTED_CLOSE` (Yahoo's column as published; do not rebuild from dividends)
+- `auto_adjust=False` on the history call
 - `is_official = false`
 
 ---

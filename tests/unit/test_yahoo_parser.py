@@ -23,8 +23,10 @@ def test_parse_yahoo_history_uses_close_not_adj_close() -> None:
         ],
         currency="USD",
     )
-    assert len(records) == 1
-    record = records[0]
+    closes = [row for row in records if row.price_type is PriceType.CLOSE]
+    adjusted = [row for row in records if row.price_type is PriceType.ADJUSTED_CLOSE]
+    assert len(closes) == 1
+    record = closes[0]
     assert record.symbol == "AAPL"
     assert record.reference_date == date(2026, 8, 21)
     assert record.value == Decimal("185.64")
@@ -32,18 +34,39 @@ def test_parse_yahoo_history_uses_close_not_adj_close() -> None:
     assert record.price_type is PriceType.CLOSE
     assert record.source_field == "Close"
     assert record.currency == "USD"
+    assert len(adjusted) == 1
+    assert adjusted[0].value == Decimal("180.00")
+    assert adjusted[0].source_field == "Adj Close"
+    assert adjusted[0].price_type is PriceType.ADJUSTED_CLOSE
 
 
 def test_parse_yahoo_history_skips_missing_close() -> None:
     records = parse_yahoo_history(
         "AAPL",
         [
-            {"date": date(2026, 8, 22), "Adj Close": "180.00"},
-            {"date": date(2026, 8, 23), "Close": None, "Adj Close": "181.00"},
             {"date": date(2026, 8, 24), "Close": "nan"},
         ],
     )
-    assert records == []
+    assert [row.price_type for row in records] == []
+
+
+def test_parse_yahoo_history_adj_close_is_yahoo_column_not_recomputed() -> None:
+    records = parse_yahoo_history(
+        "PETR4.SA",
+        [
+            {
+                "date": date(2026, 8, 21),
+                "Close": "42.11",
+                "Adj Close": "40.00",
+                "Dividends": "1.50",
+                "Stock Splits": "0.0",
+            }
+        ],
+    )
+    adjusted = next(row for row in records if row.price_type is PriceType.ADJUSTED_CLOSE)
+    assert adjusted.value == Decimal("40.00")
+    assert adjusted.value != Decimal("42.11")
+    assert adjusted.source_field == "Adj Close"
 
 
 def test_yfinance_is_isolated_to_yahoo_provider() -> None:

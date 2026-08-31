@@ -10,6 +10,7 @@ const TWO_DIGIT_PRICE_TYPES = new Set([
   "LAST",
   "LAST_TRADE",
   "CLOSE",
+  "ADJUSTED_CLOSE",
   "OFFICIAL_SETTLEMENT",
   "FUND_NAV",
 ]);

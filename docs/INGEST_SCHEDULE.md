@@ -63,7 +63,7 @@ run Monday–Friday **evening BRT** must therefore list **Tuesday–Saturday UTC
 | `ingest-tesouro.yml` | 10:30 weekdays | `30 13 * * 1-5` | `marketdata ingest tesouro --date` |
 | `ingest-bcb.yml` | 16:30 weekdays | `30 19 * * 1-5` | `marketdata ingest bcb --date` |
 | `ingest-b3.yml` | 21:00 weekdays | `0 0 * * 2-6` | `marketdata ingest b3 --date` (BRT trading date; see below) |
-| `ingest-yahoo.yml` | none (POC) | **no schedule** | `marketdata ingest yahoo --date` |
+| `ingest-yahoo.yml` | 00:00 nightly | `0 3 * * *` | `marketdata ingest yahoo --date` |
 | `ingest-all.yml` | none (dispatch only) | **no schedule** | `marketdata ingest all --date` |
 | `publish-datasets.yml` | 22:30 weekdays | `30 1 * * 2-6` | `marketdata publish datasets --date` |
 | `backfill.yml` | never daily | **no schedule** | `marketdata backfill <provider> --start --end` |
@@ -71,8 +71,9 @@ run Monday–Friday **evening BRT** must therefore list **Tuesday–Saturday UTC
 All ingest/publish workflows also have `workflow_dispatch` with optional
 `date` (`YYYY-MM-DD`). When `date` is omitted:
 
-- CVM / Tesouro / BCB / Yahoo: **today UTC** (Tesouro and BCB crons still fall
+- CVM / Tesouro / BCB: **today UTC** (Tesouro and BCB crons still fall
   on the same BRT calendar day; CVM is dispatch-only and class-filtered).
+- Yahoo: **yesterday in America/Sao_Paulo** (completed session after 00:00 BRT).
 - B3: America/Sao_Paulo trading-date helper (below).
 - ingest-all / publish: **today in America/Sao_Paulo**. Publish still runs
   after 00:00 UTC (BRT evening of the previous UTC date). ingest-all is
@@ -99,19 +100,26 @@ Official ingest/backfill jobs that can run provider `all` or Yahoo
 (`ingest-all.yml`, `backfill.yml`) set `YAHOO_PROVIDER_ENABLED=false` in job
 `env:`. The same flag is set on the official per-provider workflows (CVM, B3,
 Tesouro, BCB) as a shared env baseline. Python defaults `yahoo_provider_enabled`
-to true, so without this Actions env `ingest all` / `backfill all` would still
-pull Yahoo.
+to false.
 
-`ingest-yahoo.yml` stays dispatch-only (ADR-0013) and does **not** set
-`YAHOO_PROVIDER_ENABLED=false`, so an explicit Yahoo dispatch still ingests.
-Do not add a Yahoo cron. Yahoo is currently visible on the public API; it is
-still not published as Parquet.
+`ingest-yahoo.yml` is the exception: it sets `YAHOO_PROVIDER_ENABLED=true` and
+runs nightly at `0 3 * * *` (00:00 America/Sao_Paulo, UTC−3). Default `--date`
+is yesterday in America/Sao_Paulo so the job persists the session that just
+finished, not an in-progress bar. `workflow_dispatch` may still pass an explicit
+date. Symbols come from `config/instruments.scratch.csv`: 150 B3 equities as
+`{TICKER}.SA` (PETR4 → PETR4.SA). Futures (`WIN*` / `IND*` / `WDO*` / `DOL*` /
+`DI1*`) are skipped with a count in the run log. One missing Yahoo symbol is
+logged and skipped; it does not fail the job. Yahoo remains unofficial POC
+(ADR-0013): `public_dataset_enabled` stays false. Official B3 quotes stay the
+Explorer default for PETR4 (`PETR4.SA` is a distinct Yahoo identifier).
 
 `publish-datasets.yml` requires the Actions variable
 `PUBLIC_DATASET_PUBLICATION_ENABLED=true`. Leave that variable unset or
 `false` unless publication is an explicit operator choice. Parquet publication
 still honors source flags: B3 is `API_ONLY` (no public dataset), Yahoo is not
-redistributable.
+redistributable. If `OBJECT_STORAGE_BACKEND` is local, unset, or not `s3`, the
+workflow **succeeds with skip** (R2 is not configured) instead of failing. Local
+S3-compatible backends (`OBJECT_STORAGE_BACKEND=s3`) still publish.
 
 `backfill.yml` must **never** gain a `schedule:` block. Range loads are
 operator-triggered. GitHub-hosted jobs cap at 6 hours; a full CVM HIST span
