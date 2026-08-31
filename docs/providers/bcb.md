@@ -30,7 +30,7 @@ uv run marketdata ingest bcb --date 2026-08-21
 uv run marketdata backfill bcb --start 2000-01-01 --end 2026-08-24
 ```
 
-`--start` and `--end` are inclusive. Resume is on by default: completed date windows whose `chunk_end` is at or before `state/backfill/bcb.json` `last_completed` are skipped. Raw JSON is stored per series and chunk at `raw/bcb/backfill/{code}/{chunk_start}_{chunk_end}.json`, with `:` in the series code replaced by `_` so local filesystem storage works on Windows (for example `BCB_CDI_DAILY`).
+`--start` and `--end` are inclusive. Resume is on by default: completed date windows whose `chunk_end` is at or before `state/backfill/bcb.json` `last_completed` are skipped. Raw JSON is stored per series and chunk at `raw/bcb/backfill/{code}/{chunk_start}_{chunk_end}.json`, with `:` in the series code replaced by `_` so local filesystem storage works on Windows (for example `BCB_CDI_DAILY`). Postgres `COMMIT`s after each 10-year chunk so a cancelled job keeps completed windows. The runner `./data` checkpoint does not survive between GitHub Actions jobs.
 
 ```text
 GET /v1/series/BCB:CDI_DAILY/observations

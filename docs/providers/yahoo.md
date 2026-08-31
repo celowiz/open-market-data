@@ -71,7 +71,9 @@ Behavior:
 - Raw JSON: `raw/yahoo/backfill/{symbol}/{start}_{end}.json` with `close` stored
   as a decimal string (not a binary float).
 - Object-storage checkpoint: `state/backfill/yahoo.json` (`provider="yahoo"`),
-  updated after each symbol and marked `succeeded` at the end.
+  updated after each symbol and marked `succeeded` at the end. Postgres
+  `COMMIT`s after each symbol. The runner `./data` checkpoint does not survive
+  between GitHub Actions jobs.
 - Database upserts flush every 1000 quotes.
 
 Tests inject `history_rows` to stay offline (no Yahoo HTTP).

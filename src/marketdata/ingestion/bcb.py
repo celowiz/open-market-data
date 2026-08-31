@@ -295,6 +295,7 @@ def backfill_bcb(
                         session.flush()
                         pending_upserts = 0
             completed_through = chunk_end
+            session.commit()
             _save_bcb_checkpoint(
                 object_store,
                 start=start,
@@ -308,6 +309,7 @@ def backfill_bcb(
         run.records_updated = updated
         run.records_normalized = inserted + updated + skipped
         finish_ingestion_run(run, status=IngestionRunStatus.SUCCEEDED)
+        session.commit()
         _save_bcb_checkpoint(
             object_store,
             start=start,
@@ -315,7 +317,6 @@ def backfill_bcb(
             last_completed=end,
             status="succeeded",
         )
-        session.flush()
         return {
             "run_id": str(run.id),
             "inserted": inserted,
@@ -324,7 +325,7 @@ def backfill_bcb(
             "status": run.status,
         }
     except Exception:
-        finish_ingestion_run(run, status=IngestionRunStatus.FAILED)
+        session.rollback()
         _save_bcb_checkpoint(
             object_store,
             start=start,
@@ -332,5 +333,4 @@ def backfill_bcb(
             last_completed=completed_through,
             status="failed",
         )
-        session.flush()
         raise

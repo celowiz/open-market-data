@@ -523,6 +523,7 @@ def backfill_cvm(
                 rejected += 1
                 last_completed = token
                 processed += 1
+                session.commit()
                 _save_cvm_checkpoint(
                     object_store,
                     start=start,
@@ -556,6 +557,7 @@ def backfill_cvm(
                 rejected += rej
             last_completed = token
             processed += 1
+            session.commit()
             _save_cvm_checkpoint(
                 object_store,
                 start=start,
@@ -579,7 +581,7 @@ def backfill_cvm(
         run.records_rejected = rejected
         run.records_normalized = inserted + updated + skipped
         finish_ingestion_run(run, status=run_status)
-        session.flush()
+        session.commit()
         return {
             "run_id": str(run.id),
             "artifacts": artifacts,
@@ -598,6 +600,5 @@ def backfill_cvm(
             last_completed=last_completed,
             status="failed",
         )
-        finish_ingestion_run(run, status=IngestionRunStatus.FAILED)
-        session.flush()
+        session.rollback()
         raise

@@ -18,6 +18,18 @@ class _FakeProvider:
     name = "b3"
 
 
+class _RecordingSession:
+    def __init__(self) -> None:
+        self.commits = 0
+        self.rollbacks = 0
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+
 def _ok_day(**_kwargs) -> dict[str, int | str]:
     return {
         "run_id": "test",
@@ -80,9 +92,10 @@ def test_backfill_skips_empty_zip_without_failing(tmp_path, monkeypatch) -> None
         raise B3ParseError("B3 response is not a usable ZIP")
 
     monkeypatch.setattr("marketdata.ingestion.b3._ingest_b3_day", fake_day)
+    session = _RecordingSession()
     storage = LocalFileObjectStorage(tmp_path)
     result = backfill_b3(
-        MagicMock(),
+        session,
         start=date(2026, 8, 21),
         end=date(2026, 8, 21),
         storage=storage,
@@ -91,6 +104,8 @@ def test_backfill_skips_empty_zip_without_failing(tmp_path, monkeypatch) -> None
     )
     assert result["status"] == "succeeded"
     assert result["empty_days"] == 1
+    assert session.rollbacks == 1
+    assert session.commits == 1
     checkpoint = load_checkpoint(storage, "b3")
     assert checkpoint is not None
     assert checkpoint.last_completed == "2026-08-21"
@@ -165,6 +180,37 @@ def test_backfill_without_cotahist_does_not_fetch_annual_file(tmp_path, monkeypa
         include_cotahist=False,
     )
     assert result["status"] == "succeeded"
+
+
+def test_backfill_commits_completed_days_if_a_later_day_fails(tmp_path, monkeypatch) -> None:
+    ingested: list[date] = []
+
+    def fake_day(session, *, reference_date, **kwargs):
+        ingested.append(reference_date)
+        if reference_date == date(2026, 8, 24):
+            raise RuntimeError("day 2 failed")
+        return _ok_day()
+
+    monkeypatch.setattr("marketdata.ingestion.b3._ingest_b3_day", fake_day)
+    session = _RecordingSession()
+    storage = LocalFileObjectStorage(tmp_path)
+    with pytest.raises(RuntimeError, match="day 2 failed"):
+        backfill_b3(
+            session,
+            start=date(2026, 8, 21),
+            end=date(2026, 8, 24),
+            storage=storage,
+            provider=_FakeProvider(),
+        )
+
+    assert ingested == [date(2026, 8, 21), date(2026, 8, 24)]
+    # Friday ingest plus Saturday/Sunday skips must COMMIT before Monday raises.
+    assert session.commits == 3
+    assert session.rollbacks == 1
+    checkpoint = load_checkpoint(storage, "b3")
+    assert checkpoint is not None
+    assert checkpoint.status == "failed"
+    assert checkpoint.last_completed == "2026-08-23"
 
 
 def test_backfill_hard_error_does_not_checkpoint_failed_day(tmp_path, monkeypatch) -> None:

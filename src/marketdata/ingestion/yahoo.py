@@ -344,6 +344,7 @@ def backfill_yahoo(
                 updated += add_upd
                 skipped += add_skip
             completed = symbol
+            session.commit()
             save_checkpoint(
                 object_store,
                 BackfillCheckpoint(
@@ -370,7 +371,7 @@ def backfill_yahoo(
         run.records_updated = updated
         run.records_normalized = inserted + updated + skipped
         finish_ingestion_run(run, status=IngestionRunStatus.SUCCEEDED)
-        session.flush()
+        session.commit()
         return {
             "run_id": str(run.id),
             "inserted": inserted,
@@ -390,6 +391,5 @@ def backfill_yahoo(
                 status="failed",
             ),
         )
-        finish_ingestion_run(run, status=IngestionRunStatus.FAILED)
-        session.flush()
+        session.rollback()
         raise
