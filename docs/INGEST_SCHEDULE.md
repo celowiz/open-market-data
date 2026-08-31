@@ -103,7 +103,9 @@ redistributable.
 
 `backfill.yml` must **never** gain a `schedule:` block. Range loads are
 operator-triggered. GitHub-hosted jobs cap at 6 hours; a full CVM HIST span
-should run locally or on a self-hosted runner.
+should run locally or on a self-hosted runner. After a 6-hour kill, re-dispatch
+the same provider and start/end — B3 resumes from the restored checkpoint or
+Neon `max(instrument_quotes.reference_date)` in that range, not a new `--start`.
 
 Tesouro daily ingest (`ingest-tesouro.yml`) and Tesouro backfill both honor
 `TESOURO_CURRENT_TITLES_ONLY` (default `true`): only titles present on the

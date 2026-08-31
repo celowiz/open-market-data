@@ -1,15 +1,23 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
+from marketdata.domain.enums import QualityStatus, RedistributionPolicy
 from marketdata.ingestion.bcb import backfill_bcb
 from marketdata.ingestion.checkpoint import BackfillCheckpoint, save_checkpoint
 from marketdata.providers.bcb import SGS_SERIES, chunk_date_range
-from marketdata.storage.models import Base, InstrumentQuoteRow, MarketSeriesObservationRow
+from marketdata.storage.models import (
+    Base,
+    InstrumentQuoteRow,
+    MarketSeriesObservationRow,
+    MarketSeriesRow,
+)
 from marketdata.storage.object_store import LocalFileObjectStorage
+from marketdata.storage.repositories import get_or_create_source
 
 BACKFILL_START = date(2000, 1, 1)
 BACKFILL_END = date(2026, 1, 1)
@@ -209,6 +217,58 @@ def test_backfill_bcb_resume_skips_chunks_through_last_completed(tmp_path) -> No
     remaining = chunks[1:]
     assert len(provider.calls) == len(SGS_SERIES) * len(remaining)
     assert all(chunk_end > first_end for _series_id, _start, chunk_end in provider.calls)
+
+
+def test_backfill_bcb_recent_observation_does_not_skip_earlier_chunks(tmp_path) -> None:
+    """Daily ingest writes a recent date; that must not skip historical chunks."""
+    session = _sqlite_session()
+    storage = LocalFileObjectStorage(tmp_path)
+    chunks = chunk_date_range(BACKFILL_START, BACKFILL_END, years=10)
+    source = get_or_create_source(
+        session,
+        name="bcb",
+        display_name="BCB",
+        official=True,
+        homepage="https://www.bcb.gov.br/",
+        documentation_url="https://www.bcb.gov.br/",
+        data_license="UNKNOWN",
+        redistribution_policy=RedistributionPolicy.PUBLIC,
+        public_api_enabled=True,
+        public_dataset_enabled=True,
+    )
+    series = MarketSeriesRow(
+        id=uuid4(),
+        code="BCB:CDI_DAILY",
+        source_series_id="12",
+        name="CDI",
+        source_id=source.id,
+        unit="percent_per_day",
+    )
+    session.add(series)
+    session.flush()
+    session.add(
+        MarketSeriesObservationRow(
+            id=uuid4(),
+            series_id=series.id,
+            reference_date=BACKFILL_END,
+            value=Decimal("0.05"),
+            source_id=source.id,
+            retrieved_at=datetime.now(UTC),
+            revision=1,
+            quality_status=QualityStatus.OK.value,
+        )
+    )
+    session.commit()
+    provider = FakeBcbProvider()
+    backfill_bcb(
+        session,
+        start=BACKFILL_START,
+        end=BACKFILL_END,
+        storage=storage,
+        provider=provider,
+        resume=True,
+    )
+    assert len(provider.calls) == len(SGS_SERIES) * len(chunks)
 
 
 def test_backfill_bcb_commits_completed_chunk_if_later_chunk_fails(tmp_path) -> None:

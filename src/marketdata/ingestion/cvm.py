@@ -12,9 +12,9 @@ from marketdata.config import get_settings
 from marketdata.domain.enums import IngestionRunStatus, PriceType
 from marketdata.ingestion.checkpoint import (
     BackfillCheckpoint,
+    effective_last_completed,
     load_checkpoint,
     save_checkpoint,
-    should_resume,
 )
 from marketdata.providers.cvm import (
     CvmCadastroClass,
@@ -410,8 +410,9 @@ def backfill_cvm(
     object_store = storage or build_object_storage()
     window_as_of = as_of or date.today()
     existing = load_checkpoint(object_store, CVM_CHECKPOINT_PROVIDER)
-    resuming = should_resume(existing, start, end, resume=resume)
-    last_completed = existing.last_completed if resuming and existing is not None else None
+    # Day-level Neon max() is B3-only. CVM months are not atomic (commits every
+    # 1000 rows) and a later month from ingest-cvm must not skip earlier HIST.
+    last_completed = effective_last_completed(existing, start, end, None, resume=resume)
     _save_cvm_checkpoint(
         object_store,
         start=start,

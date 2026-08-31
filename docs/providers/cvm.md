@@ -94,7 +94,10 @@ Historical backfill (`--lookback-days` does **not** apply). Months inside the
 live 12-month `DADOS/` window use monthly ZIPs; older months use that year's
 HIST ZIP **once**, stored at `raw/cvm/hist/inf_diario_fi_{YYYY}.zip`. Progress
 is checkpointed after each month (`last_completed=YYYY-MM`) and that month is
-`COMMIT`ted to Postgres so a cancelled job keeps completed months. Optional
+`COMMIT`ted to Postgres so a cancelled job keeps completed months. GitHub Actions
+restores that checkpoint file best-effort. Unlike B3, CVM does not treat
+`max(quote date)` as a month cursor (a partial month or a later ingest-cvm
+month must not skip earlier HIST). Optional
 `--max-months` is a safety cap (default unlimited).
 
 ```bash

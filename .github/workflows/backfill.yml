@@ -30,6 +30,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   backfill:
@@ -96,9 +97,66 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --no-dev
 
+      # Runner ./data is ephemeral. Cache/artifact restore is best-effort: a hard
+      # 6h timeout can skip post steps. The CLI also resumes from
+      # max(instrument_quotes.reference_date) (or series observations for BCB).
+      - name: Ensure checkpoint directory
+        run: mkdir -p data/state/backfill
+
+      - name: Restore backfill checkpoint cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/state/backfill
+          key: backfill-${{ inputs.provider }}-${{ inputs.start }}-${{ inputs.end }}-${{ github.run_id }}
+          restore-keys: |
+            backfill-${{ inputs.provider }}-${{ inputs.start }}-${{ inputs.end }}-
+
+      - name: Restore backfill checkpoint artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVIDER: ${{ inputs.provider }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p data/state/backfill
+          NAME="backfill-checkpoint-${PROVIDER}-${START}-${END}"
+          ARTIFACT_ID="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${NAME}&per_page=1" \
+            --jq '.artifacts[0].id // empty' || true)"
+          if [ -z "${ARTIFACT_ID}" ]; then
+            echo "No previous checkpoint artifact named ${NAME}"
+            exit 0
+          fi
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            > /tmp/backfill-checkpoint.zip
+          unzip -o -q /tmp/backfill-checkpoint.zip -d data/state/backfill
+          echo "Restored checkpoint artifact id=${ARTIFACT_ID}"
+
       - name: Backfill
         env:
           PROVIDER: ${{ inputs.provider }}
           START: ${{ inputs.start }}
           END: ${{ inputs.end }}
         run: uv run marketdata backfill "$PROVIDER" --start "$START" --end "$END"
+
+      - name: Save backfill checkpoint cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/state/backfill
+          key: backfill-${{ inputs.provider }}-${{ inputs.start }}-${{ inputs.end }}-${{ github.run_id }}
+
+      - name: Upload backfill checkpoint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backfill-checkpoint-${{ inputs.provider }}-${{ inputs.start }}-${{ inputs.end }}
+          path: data/state/backfill/
+          if-no-files-found: ignore
+          retention-days: 30

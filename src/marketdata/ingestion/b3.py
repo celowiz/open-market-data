@@ -16,9 +16,9 @@ from marketdata.domain.enums import (
 )
 from marketdata.ingestion.checkpoint import (
     BackfillCheckpoint,
+    effective_last_completed,
     load_checkpoint,
     save_checkpoint,
-    should_resume,
 )
 from marketdata.ingestion.universe import (
     b3_equity_allowlist,
@@ -58,6 +58,7 @@ from marketdata.storage.repositories import (
     get_or_create_instrument_by_key,
     get_or_create_source,
     load_quote_keys,
+    max_quote_reference_date,
     record_quality_event,
     start_ingestion_run,
     store_raw_artifact,
@@ -909,10 +910,22 @@ def backfill_b3(
     object_store = storage or build_object_storage()
     effective_delay = 0.0 if provider is not None else delay_seconds
     checkpoint = load_checkpoint(object_store, "b3")
-    resume_after: date | None = None
-    if should_resume(checkpoint, start, end, resume=resume) and checkpoint is not None:
-        if checkpoint.last_completed:
-            resume_after = date.fromisoformat(checkpoint.last_completed)
+    db_last = None
+    if resume:
+        # Each B3 calendar day is one COMMIT. max(quote date) in [start, end]
+        # is the last finished day for this slice (scratch rows included).
+        # Do not copy this onto BCB/CVM: daily ingest dates are not a prefix.
+        db_last = max_quote_reference_date(session, "b3", start=start, end=end)
+    token = effective_last_completed(checkpoint, start, end, db_last, resume=resume)
+    resume_after = date.fromisoformat(token) if token else None
+    logger.info(
+        "b3 backfill start=%s end=%s resume_after=%s checkpoint=%s db_max=%s",
+        start,
+        end,
+        resume_after,
+        checkpoint.last_completed if checkpoint is not None else None,
+        db_last,
+    )
     inserted = updated = skipped = rejected = artifacts = empty_days = 0
     last_completed: date | None = resume_after
     try:

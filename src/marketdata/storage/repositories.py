@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from hashlib import sha256
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from marketdata.domain.enums import (
@@ -402,6 +402,54 @@ def attach_identifier(
             source_id=source_id,
         )
     )
+
+
+def max_quote_reference_date(
+    session: Session,
+    source_name: str,
+    *,
+    start: date,
+    end: date,
+) -> date | None:
+    """Return ``max(instrument_quotes.reference_date)`` for ``sources.name``.
+
+    Restricted to ``[start, end]``. Used when a backfill checkpoint file is
+    missing (ephemeral GitHub-hosted ``./data``). Scratch-universe rows still
+    count: they are ordinary quotes for source ``b3``. Non-date scalars
+    (including MagicMock test sessions) are treated as empty.
+    """
+    stmt = (
+        select(func.max(InstrumentQuoteRow.reference_date))
+        .join(SourceRow, SourceRow.id == InstrumentQuoteRow.source_id)
+        .where(
+            SourceRow.name == source_name,
+            InstrumentQuoteRow.reference_date >= start,
+            InstrumentQuoteRow.reference_date <= end,
+        )
+    )
+    value = session.scalar(stmt)
+    return value if isinstance(value, date) else None
+
+
+def max_observation_reference_date(
+    session: Session,
+    source_name: str,
+    *,
+    start: date,
+    end: date,
+) -> date | None:
+    """Return ``max(market_series_observations.reference_date)`` for a source."""
+    stmt = (
+        select(func.max(MarketSeriesObservationRow.reference_date))
+        .join(SourceRow, SourceRow.id == MarketSeriesObservationRow.source_id)
+        .where(
+            SourceRow.name == source_name,
+            MarketSeriesObservationRow.reference_date >= start,
+            MarketSeriesObservationRow.reference_date <= end,
+        )
+    )
+    value = session.scalar(stmt)
+    return value if isinstance(value, date) else None
 
 
 def load_quote_keys(

@@ -28,3 +28,18 @@ def test_b3_ingest_workflows_unbuffer_python_and_do_not_raise_job_cap() -> None:
         assert "PYTHONUNBUFFERED:" in text, (
             f"{path.name} must set PYTHONUNBUFFERED so stage logs flush"
         )
+
+
+def test_backfill_workflow_restores_and_uploads_checkpoint_without_scheduling() -> None:
+    text = (WORKFLOWS / "backfill.yml").read_text(encoding="utf-8")
+    assert "cancel-in-progress: false" in text
+    assert "timeout-minutes: 360" in text
+    assert "data/state/backfill" in text
+    assert "actions/cache/restore@" in text
+    assert "actions/cache/save@" in text
+    assert "actions/upload-artifact@" in text
+    assert "if: always()" in text
+    assert "path: data/state/backfill/" in text
+    on_block = text.split("\njobs:", 1)[0]
+    assert "workflow_dispatch:" in on_block
+    assert "schedule:" not in on_block
