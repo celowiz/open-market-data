@@ -10,8 +10,9 @@ on:
         description: "Reference date YYYY-MM-DD (defaults to today UTC)"
         required: false
 
+# Shared with backfill and other ingest workflows so only one Neon writer runs at a time.
 concurrency:
-  group: ingest-yahoo
+  group: neon-writes
   cancel-in-progress: false
 
 permissions:
