@@ -179,7 +179,9 @@ Rules:
   (`marketdata backfill … --start --end`) are different commands.
   Backfill checkpoints, rate-limits, and uses source-specific history files
   (CVM `HIST/` yearly ZIPs, Tesouro full CSV, BCB 10-year chunks, optional
-  B3 COTAHIST). `backfill.yml` is `workflow_dispatch` only.
+  B3 COTAHIST). Postgres commits after each B3 day, CVM month, BCB 10-year
+  chunk, and Yahoo symbol so a cancelled job keeps completed units.
+  `backfill.yml` is `workflow_dispatch` only.
 
 ---
 

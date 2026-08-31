@@ -3,7 +3,8 @@ from decimal import Decimal
 from json import loads
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session
 
 from marketdata.config import get_settings
 from marketdata.domain.enums import PriceType, RedistributionPolicy
@@ -11,7 +12,7 @@ from marketdata.ingestion.checkpoint import load_checkpoint
 from marketdata.ingestion.yahoo import DEFAULT_YAHOO_SYMBOLS, backfill_yahoo
 from marketdata.providers.yahoo import YahooQuoteRecord, parse_yahoo_history
 from marketdata.storage.database import create_db_engine, create_session_factory
-from marketdata.storage.models import InstrumentQuoteRow, SourceRow
+from marketdata.storage.models import Base, InstrumentQuoteRow, SourceRow
 from marketdata.storage.object_store import LocalFileObjectStorage
 from marketdata.storage.repositories import resolve_instrument_id
 
@@ -283,3 +284,36 @@ def test_backfill_yahoo_second_run_is_idempotent(db_session, tmp_path) -> None:
     assert int(second["skipped"]) >= 1
     quotes = _close_quotes(db_session, "AAPL")
     assert Decimal(quotes[0].value) == CLOSE
+
+
+def test_backfill_yahoo_commits_completed_symbol_if_later_symbol_fails(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'yahoo.db'}", future=True)
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+
+    class BoomOnSecond:
+        name = "yahoo"
+
+        def fetch_history(self, symbol: str, *, start: date, end: date) -> list[YahooQuoteRecord]:
+            if symbol == "MSFT":
+                raise RuntimeError("symbol 2 failed")
+            return [_history_row(symbol)]
+
+    with pytest.raises(RuntimeError, match="symbol 2 failed"):
+        backfill_yahoo(
+            session,
+            start=START,
+            end=END,
+            symbols=["AAPL", "MSFT"],
+            storage=LocalFileObjectStorage(tmp_path),
+            provider=BoomOnSecond(),
+        )
+
+    other = Session(engine)
+    try:
+        count = other.scalar(select(func.count()).select_from(InstrumentQuoteRow))
+        assert count >= 1
+    finally:
+        other.close()
+        session.close()
+        engine.dispose()

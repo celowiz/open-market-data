@@ -921,6 +921,7 @@ def backfill_b3(
                 continue
             if day.weekday() >= 5:
                 last_completed = day
+                session.commit()
                 _save_b3_checkpoint(object_store, start, end, last_completed=day, status="running")
                 continue
             try:
@@ -933,6 +934,7 @@ def backfill_b3(
             except B3ParseError as exc:
                 if not _is_empty_b3_day_error(exc):
                     raise
+                session.rollback()
                 empty_days += 1
             else:
                 inserted += int(day_result["inserted"])
@@ -941,6 +943,7 @@ def backfill_b3(
                 rejected += int(day_result["rejected"])
                 artifacts += int(day_result.get("artifacts", 0))
             last_completed = day
+            session.commit()
             _save_b3_checkpoint(object_store, start, end, last_completed=day, status="running")
             if effective_delay > 0 and day < end:
                 time.sleep(effective_delay)
@@ -959,6 +962,7 @@ def backfill_b3(
                 skipped += int(year_result["skipped"])
                 rejected += int(year_result["rejected"])
                 artifacts += 1
+                session.commit()
                 if effective_delay > 0 and index < len(years) - 1:
                     time.sleep(effective_delay)
         completed = last_completed or end
@@ -973,6 +977,7 @@ def backfill_b3(
             "artifacts": artifacts,
         }
     except Exception:
+        session.rollback()
         _save_b3_checkpoint(
             object_store, start, end, last_completed=last_completed, status="failed"
         )

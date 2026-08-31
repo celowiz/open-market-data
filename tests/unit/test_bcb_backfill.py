@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
@@ -208,3 +209,37 @@ def test_backfill_bcb_resume_skips_chunks_through_last_completed(tmp_path) -> No
     remaining = chunks[1:]
     assert len(provider.calls) == len(SGS_SERIES) * len(remaining)
     assert all(chunk_end > first_end for _series_id, _start, chunk_end in provider.calls)
+
+
+def test_backfill_bcb_commits_completed_chunk_if_later_chunk_fails(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'bcb.db'}", future=True)
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    chunks = chunk_date_range(BACKFILL_START, BACKFILL_END, years=10)
+    first_end = chunks[0][1]
+
+    class BoomAfterFirstChunk:
+        name = "bcb"
+
+        def fetch_series(self, source_series_id: str, *, start: date, end: date) -> list:
+            if start > first_end:
+                raise RuntimeError("chunk 2 failed")
+            return [(start, Decimal("0.051660"))]
+
+    with pytest.raises(RuntimeError, match="chunk 2 failed"):
+        backfill_bcb(
+            session,
+            start=BACKFILL_START,
+            end=BACKFILL_END,
+            storage=LocalFileObjectStorage(tmp_path),
+            provider=BoomAfterFirstChunk(),
+        )
+
+    other = Session(engine)
+    try:
+        count = other.scalar(select(func.count()).select_from(MarketSeriesObservationRow))
+        assert count == len(SGS_SERIES)
+    finally:
+        other.close()
+        session.close()
+        engine.dispose()
