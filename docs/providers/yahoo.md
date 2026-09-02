@@ -52,11 +52,17 @@ uv run marketdata ingest yahoo --date 2026-08-21 --symbol PETR4.SA --symbol VALE
 ```
 
 `--date` is required. `--symbol` is repeatable; when omitted, ingest uses the
-scratch equity universe (`{TICKER}.SA`). GitHub Actions `ingest-yahoo.yml` runs
-nightly at 00:00 America/Sao_Paulo and defaults `--date` to yesterday BRT.
+scratch equity universe (`{TICKER}.SA`). `B3_EQUITY_UNIVERSE_PATH` wins when
+set; `INGEST_UNIVERSE=scratch` uses the same CSV as B3 scratch ingest; an empty
+`INGEST_UNIVERSE` still reads `config/instruments.scratch.csv` (Yahoo never
+falls back to AAPL). GitHub Actions `ingest-yahoo.yml` runs nightly at 00:00
+America/Sao_Paulo and defaults `--date` to yesterday BRT, walking backward
+across Saturday/Sunday so Monday 00:00 ingests Friday.
 
-Empty history (weekend, holiday, or a missing Yahoo symbol) skips that symbol
-and does not fail the job or fabricate a close.
+Empty history for one symbol (weekend, holiday, or a missing Yahoo name) skips
+that symbol and does not fail the job or fabricate a close. If mapped equities
+are greater than zero and nothing is fetched/persisted on a weekday, the job
+fails. The same empty persist on Saturday/Sunday logs a warning and succeeds.
 
 ## Historical backfill (local / POC)
 
@@ -99,6 +105,11 @@ GET /v1/quotes/AAPL?source=yahoo → 200
 ```
 
 There is no `/v1/yahoo` route.
+
+`GET /v1/coverage/span` lists official B3 names from the CSV and, for B3
+equities, a companion Yahoo row as `{TICKER}.SA` so `PETR4.SA` is visible
+without colliding with official `PETR4`. `source=b3` hides the companions.
+`source=yahoo` shows `PETR4.SA` instead of `PETR4`.
 
 Local `marketdata coverage` and `GET /v1/coverage` may count Yahoo `CLOSE` as
 priced while `public_api_enabled` is true. See [`COVERAGE.md`](../COVERAGE.md).

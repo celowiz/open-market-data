@@ -31,8 +31,11 @@ route.
 `GET /v1/coverage/span` is a cheap `min`/`max`/`count` aggregate of quotes
 already stored for that universe. It does **not** run the date-by-date
 coverage engine (which is too slow to use as a backfill progress bar).
-Optional `source=b3` filters the aggregate. The Explorer coverage page
-loads span for the summary and only calls `/v1/coverage?date=` on demand.
+Optional `source=b3` filters the aggregate. For B3 equity rows the span also
+emits a Yahoo companion ticker `{TICKER}.SA` (`PETR4` stays official B3;
+`PETR4.SA` is the Yahoo instrument). `source=yahoo` shows the `.SA` name
+instead of the B3 ticker. The Explorer coverage page loads span for the
+summary and only calls `/v1/coverage?date=` on demand.
 
 The API always uses **public** mode. The CLI defaults to **local** mode.
 `--public` applies the same gate as the API (`public_api_enabled`).

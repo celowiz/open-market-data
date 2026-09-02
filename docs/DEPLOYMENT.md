@@ -472,18 +472,19 @@ until that secret exists.
 | `PUBLIC_DATASET_PUBLICATION_ENABLED` | variable | `PUBLIC_DATASET_PUBLICATION_ENABLED` | **Yes = `true`** for `publish-datasets.yml` |
 | `PUBLIC_DATA_BASE_URL` | variable | `PUBLIC_DATA_BASE_URL` | Recommended when publishing |
 | `CVM_CLASSES` | variable | `CVM_CLASSES` | No (CVM jobs default `Multimercado,Ações`) |
-| `INGEST_UNIVERSE` | variable | `INGEST_UNIVERSE` | No. Empty = persist full B3 BVBG.186. `scratch` filters 186 LAST to `config/instruments.scratch.csv`. Wired on `ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml`. |
-| `B3_EQUITY_UNIVERSE_PATH` | variable | `B3_EQUITY_UNIVERSE_PATH` | No. Empty is fine. When set, wins over `INGEST_UNIVERSE`. Same three B3 jobs. |
+| `INGEST_UNIVERSE` | variable | `INGEST_UNIVERSE` | No. Empty = persist full B3 BVBG.186. `scratch` filters 186 LAST to `config/instruments.scratch.csv`. Wired on `ingest-b3.yml`, `ingest-all.yml`, `backfill.yml`, and `ingest-yahoo.yml`. Yahoo still reads the scratch CSV when the var is empty. |
+| `B3_EQUITY_UNIVERSE_PATH` | variable | `B3_EQUITY_UNIVERSE_PATH` | No. Empty is fine. When set, wins over `INGEST_UNIVERSE`. Same jobs as `INGEST_UNIVERSE`. |
 
 Do not put secret values in workflow YAML. Do not commit `.env`.
 
 `ingest-cvm.yml` and `ingest-all.yml` are **workflow_dispatch only** (no daily
 cron). CVM persist is filtered by `CVM_CLASSES`. Daily scheduled ingest is the
-per-provider crons (BCB, B3, Tesouro). Do not enable an `ingest-all.yml`
+per-provider crons (BCB, B3, Tesouro, Yahoo). Do not enable an `ingest-all.yml`
 schedule together with those crons.
 
-`ingest-yahoo.yml` is **workflow_dispatch only** (no cron). `backfill.yml` is
-**workflow_dispatch only** (no daily cron).
+`ingest-yahoo.yml` runs nightly at `0 3 * * *` (00:00 America/Sao_Paulo) with
+`YAHOO_PROVIDER_ENABLED=true`. `backfill.yml` is **workflow_dispatch only**
+(no daily cron).
 
 `ingest-all.yml` calls `marketdata ingest all` when dispatched. `backfill.yml`
 calls `marketdata backfill <provider> --start --end`. GitHub-hosted jobs cap

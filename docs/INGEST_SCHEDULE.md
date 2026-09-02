@@ -73,7 +73,8 @@ All ingest/publish workflows also have `workflow_dispatch` with optional
 
 - CVM / Tesouro / BCB: **today UTC** (Tesouro and BCB crons still fall
   on the same BRT calendar day; CVM is dispatch-only and class-filtered).
-- Yahoo: **yesterday in America/Sao_Paulo** (completed session after 00:00 BRT).
+- Yahoo: **yesterday in America/Sao_Paulo**, walking back across Saturday/Sunday
+  (completed session after 00:00 BRT; Monday 00:00 ingests Friday).
 - B3: America/Sao_Paulo trading-date helper (below).
 - ingest-all / publish: **today in America/Sao_Paulo**. Publish still runs
   after 00:00 UTC (BRT evening of the previous UTC date). ingest-all is
@@ -105,13 +106,17 @@ to false.
 `ingest-yahoo.yml` is the exception: it sets `YAHOO_PROVIDER_ENABLED=true` and
 runs nightly at `0 3 * * *` (00:00 America/Sao_Paulo, UTC−3). Default `--date`
 is yesterday in America/Sao_Paulo so the job persists the session that just
-finished, not an in-progress bar. `workflow_dispatch` may still pass an explicit
+finished, not an in-progress bar. The helper walks back across Saturday/Sunday
+(Monday 00:00 BRT → Friday). `workflow_dispatch` may still pass an explicit
 date. Symbols come from `config/instruments.scratch.csv`: 150 B3 equities as
-`{TICKER}.SA` (PETR4 → PETR4.SA). Futures (`WIN*` / `IND*` / `WDO*` / `DOL*` /
-`DI1*`) are skipped with a count in the run log. One missing Yahoo symbol is
-logged and skipped; it does not fail the job. Yahoo remains unofficial POC
-(ADR-0013): `public_dataset_enabled` stays false. Official B3 quotes stay the
-Explorer default for PETR4 (`PETR4.SA` is a distinct Yahoo identifier).
+`{TICKER}.SA` (PETR4 → PETR4.SA). `ingest-yahoo.yml` forwards
+`INGEST_UNIVERSE` and `B3_EQUITY_UNIVERSE_PATH` like the B3 jobs; Yahoo still
+reads the scratch CSV when those vars are empty. Futures (`WIN*` / `IND*` /
+`WDO*` / `DOL*` / `DI1*`) are skipped with a count in the run log. One missing
+Yahoo symbol is logged and skipped; it does not fail the job. Mapping equities
+and persisting zero quotes on a weekday fails the run. Yahoo remains unofficial
+POC (ADR-0013): `public_dataset_enabled` stays false. Official B3 quotes stay
+the Explorer default for PETR4 (`PETR4.SA` is a distinct Yahoo identifier).
 
 `publish-datasets.yml` requires the Actions variable
 `PUBLIC_DATASET_PUBLICATION_ENABLED=true`. Leave that variable unset or
@@ -207,11 +212,12 @@ for tickers persisted from 186/187 — ingest does not issue one Neon lookup per
 master instrument. Stage timing logs go to stderr; B3 workflows set
 `PYTHONUNBUFFERED=1`.
 
-`ingest-b3.yml`, `ingest-all.yml`, and `backfill.yml` pass both variables from
-repository Actions variables (`vars.INGEST_UNIVERSE`,
-`vars.B3_EQUITY_UNIVERSE_PATH`). Unset/empty keeps default full-file persist.
-The Python default is unchanged: empty `INGEST_UNIVERSE` still persists the
-full BVBG.186. Do not enable COTAHIST. `ingest-cvm.yml` stays dispatch-only.
+`ingest-b3.yml`, `ingest-all.yml`, `backfill.yml`, and `ingest-yahoo.yml` pass
+both variables from repository Actions variables (`vars.INGEST_UNIVERSE`,
+`vars.B3_EQUITY_UNIVERSE_PATH`). Unset/empty keeps B3 full-file persist. Yahoo
+still reads `config/instruments.scratch.csv` when the vars are empty. The Python
+default for B3 is unchanged: empty `INGEST_UNIVERSE` still persists the full
+BVBG.186. Do not enable COTAHIST. `ingest-cvm.yml` stays dispatch-only.
 
 For a $0-scratch / Neon Free run:
 

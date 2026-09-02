@@ -15,6 +15,8 @@ def test_ingest_yahoo_workflow_enables_provider_midnight_brt_cron_and_neon_write
     assert "cancel-in-progress: false" in text
     assert "date -u" not in text
     assert "yahoo_ingest_reference_date" in text
+    assert "INGEST_UNIVERSE: ${{ vars.INGEST_UNIVERSE }}" in text
+    assert "B3_EQUITY_UNIVERSE_PATH: ${{ vars.B3_EQUITY_UNIVERSE_PATH }}" in text
 
 
 def test_official_ingest_and_backfill_keep_yahoo_disabled() -> None:
