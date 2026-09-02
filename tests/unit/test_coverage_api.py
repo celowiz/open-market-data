@@ -5,9 +5,12 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from typer.testing import CliRunner
 
+from marketdata.api.deps import get_db
 from marketdata.api.main import create_app
 from marketdata.api.routes.coverage import get_coverage_config_dir
 from marketdata.cli.main import app as cli_app
@@ -20,7 +23,7 @@ from marketdata.domain.enums import (
     RedistributionPolicy,
 )
 from marketdata.storage.database import create_db_engine, create_session_factory
-from marketdata.storage.models import InstrumentQuoteRow
+from marketdata.storage.models import Base, InstrumentQuoteRow, SourceRow
 from marketdata.storage.repositories import (
     attach_identifier,
     get_or_create_instrument_by_key,
@@ -361,17 +364,27 @@ def test_coverage_span_scratch_returns_min_max_count(db_session, tmp_path: Path)
     assert response.status_code == 200
     body = response.json()
     assert body["universe"] == "scratch"
-    assert body["universe_size"] == 5
+    assert body["universe_size"] == 7
     assert body["instruments_with_quotes"] == 3
     assert body["min_date"] == REF.isoformat()
     assert body["max_date"] == REF.isoformat()
     assert body["quote_count"] == 3
     by_ticker = {row["ticker"]: row for row in body["results"]}
-    assert set(by_ticker) == {"PETR4", "DI1F27", "AAPL", "UNKNOWN1", "CVMSTUB"}
+    assert set(by_ticker) == {
+        "PETR4",
+        "PETR4.SA",
+        "DI1F27",
+        "AAPL",
+        "UNKNOWN1",
+        "UNKNOWN1.SA",
+        "CVMSTUB",
+    }
     assert by_ticker["PETR4"]["source"] == "b3"
     assert by_ticker["PETR4"]["min_date"] == REF.isoformat()
     assert by_ticker["PETR4"]["quote_count"] == 1
     assert by_ticker["PETR4"]["instrument_id"]
+    assert by_ticker["PETR4.SA"]["source"] == "yahoo"
+    assert by_ticker["PETR4.SA"]["quote_count"] == 0
     assert by_ticker["UNKNOWN1"]["quote_count"] == 0
     assert by_ticker["UNKNOWN1"]["min_date"] is None
     assert by_ticker["CVMSTUB"]["quote_count"] == 0
@@ -394,11 +407,85 @@ def test_coverage_span_source_filter_hides_other_providers(db_session, tmp_path:
     assert response.status_code == 200
     body = response.json()
     assert body["source"] == "b3"
+    assert body["universe_size"] == 5
     assert body["instruments_with_quotes"] == 2
     by_ticker = {row["ticker"]: row for row in body["results"]}
+    assert set(by_ticker) == {"PETR4", "DI1F27", "AAPL", "UNKNOWN1", "CVMSTUB"}
     assert by_ticker["PETR4"]["quote_count"] == 1
     assert by_ticker["DI1F27"]["quote_count"] == 1
     assert by_ticker["AAPL"]["quote_count"] == 0
+    assert "PETR4.SA" not in by_ticker
+
+
+@pytest.mark.db
+def test_coverage_span_shows_yahoo_sa_without_colliding_with_b3_petr4(
+    db_session, tmp_path: Path
+) -> None:
+    _seed_quotes(db_session)
+    yahoo = db_session.scalar(select(SourceRow).where(SourceRow.name == "yahoo"))
+    assert yahoo is not None
+    petr_sa = get_or_create_instrument_by_key(
+        db_session,
+        source_id=yahoo.id,
+        source_key="PETR4.SA",
+        asset_class=AssetClass.EQUITY,
+        instrument_type="equity",
+        name="PETR4.SA",
+        currency="BRL",
+    )
+    attach_identifier(
+        db_session,
+        instrument_id=petr_sa.id,
+        identifier_type=IdentifierType.YAHOO_SYMBOL,
+        identifier_value="PETR4.SA",
+        source_id=yahoo.id,
+    )
+    attach_identifier(
+        db_session,
+        instrument_id=petr_sa.id,
+        identifier_type=IdentifierType.TICKER,
+        identifier_value="PETR4.SA",
+        source_id=yahoo.id,
+    )
+    _ensure_quote(
+        db_session,
+        instrument_id=petr_sa.id,
+        source_id=yahoo.id,
+        price_type=PriceType.CLOSE,
+        value=Decimal("45.02"),
+    )
+    db_session.commit()
+
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "instruments.scratch.csv").write_text(
+        TINY.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    client = _client(tmp_path)
+    response = client.get("/v1/coverage/span", params={"universe": "scratch"})
+    assert response.status_code == 200
+    body = response.json()
+    by_ticker = {row["ticker"]: row for row in body["results"]}
+    assert by_ticker["PETR4"]["source"] == "b3"
+    assert by_ticker["PETR4"]["quote_count"] == 1
+    assert by_ticker["PETR4"]["instrument_id"] != str(petr_sa.id)
+    assert by_ticker["PETR4.SA"]["source"] == "yahoo"
+    assert by_ticker["PETR4.SA"]["quote_count"] == 1
+    assert by_ticker["PETR4.SA"]["instrument_id"] == str(petr_sa.id)
+    assert body["instruments_with_quotes"] == 4
+
+    yahoo_only = client.get(
+        "/v1/coverage/span",
+        params={"universe": "scratch", "source": "yahoo"},
+    )
+    assert yahoo_only.status_code == 200
+    yahoo_body = yahoo_only.json()
+    yahoo_tickers = {row["ticker"]: row for row in yahoo_body["results"]}
+    assert "PETR4" not in yahoo_tickers
+    assert yahoo_tickers["PETR4.SA"]["source"] == "yahoo"
+    assert yahoo_tickers["PETR4.SA"]["quote_count"] == 1
+    assert yahoo_tickers["AAPL"]["quote_count"] == 1
 
 
 @pytest.mark.db
@@ -408,3 +495,86 @@ def test_coverage_span_scratch_missing_is_404(db_session, tmp_path: Path) -> Non
     response = client.get("/v1/coverage/span", params={"universe": "scratch"})
     assert response.status_code == 404
     assert response.json()["detail"] == "universe not found"
+
+
+def test_coverage_span_sqlite_lists_yahoo_sa_beside_b3_petr4(tmp_path: Path) -> None:
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'span.db'}",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    session = factory()
+    try:
+        _seed_quotes(session)
+        yahoo = session.scalar(select(SourceRow).where(SourceRow.name == "yahoo"))
+        assert yahoo is not None
+        petr_sa = get_or_create_instrument_by_key(
+            session,
+            source_id=yahoo.id,
+            source_key="PETR4.SA",
+            asset_class=AssetClass.EQUITY,
+            instrument_type="equity",
+            name="PETR4.SA",
+            currency="BRL",
+        )
+        attach_identifier(
+            session,
+            instrument_id=petr_sa.id,
+            identifier_type=IdentifierType.YAHOO_SYMBOL,
+            identifier_value="PETR4.SA",
+            source_id=yahoo.id,
+        )
+        attach_identifier(
+            session,
+            instrument_id=petr_sa.id,
+            identifier_type=IdentifierType.TICKER,
+            identifier_value="PETR4.SA",
+            source_id=yahoo.id,
+        )
+        _ensure_quote(
+            session,
+            instrument_id=petr_sa.id,
+            source_id=yahoo.id,
+            price_type=PriceType.CLOSE,
+            value=Decimal("45.02"),
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    def override_db():
+        db = factory()
+        try:
+            yield db
+            db.commit()
+        finally:
+            db.close()
+
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "instruments.scratch.csv").write_text(
+        TINY.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    app = create_app()
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_coverage_config_dir] = lambda: tmp_path
+    client = TestClient(app)
+    body = client.get("/v1/coverage/span", params={"universe": "scratch"}).json()
+    by_ticker = {row["ticker"]: row for row in body["results"]}
+    assert by_ticker["PETR4"]["source"] == "b3"
+    assert by_ticker["PETR4"]["quote_count"] == 1
+    assert by_ticker["PETR4.SA"]["source"] == "yahoo"
+    assert by_ticker["PETR4.SA"]["quote_count"] == 1
+    assert by_ticker["PETR4"]["instrument_id"] != by_ticker["PETR4.SA"]["instrument_id"]
+    yahoo_body = client.get(
+        "/v1/coverage/span",
+        params={"universe": "scratch", "source": "yahoo"},
+    ).json()
+    yahoo_tickers = {row["ticker"]: row for row in yahoo_body["results"]}
+    assert "PETR4" not in yahoo_tickers
+    assert yahoo_tickers["PETR4.SA"]["quote_count"] == 1
+    engine.dispose()

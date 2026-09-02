@@ -1,10 +1,14 @@
 from pathlib import Path
 
+from marketdata.config import Settings
+from marketdata.coverage.csv import UniverseRow
 from marketdata.ingestion.yahoo_universe import (
     YAHOO_FUTURE_PREFIXES,
     default_yahoo_symbols,
+    default_yahoo_universe_path,
     load_yahoo_universe_symbols,
     to_yahoo_symbol,
+    yahoo_span_alias,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -59,3 +63,76 @@ def test_scratch_csv_has_150_sa_equities_and_skips_listed_futures() -> None:
     defaults = default_yahoo_symbols()
     assert defaults == selection.symbols
     assert defaults[0] != "AAPL"
+
+
+def test_yahoo_span_alias_maps_b3_equity_only() -> None:
+    petr = UniverseRow(
+        instrument_id=None,
+        asset_class="equity",
+        ticker="PETR4",
+        isin=None,
+        cnpj_fundo_classe=None,
+        title_type=None,
+        maturity_date=None,
+        exchange="B3",
+        currency="BRL",
+        preferred_provider="b3",
+        universe="ibov",
+    )
+    aapl = UniverseRow(
+        instrument_id=None,
+        asset_class="equity",
+        ticker="AAPL",
+        isin=None,
+        cnpj_fundo_classe=None,
+        title_type=None,
+        maturity_date=None,
+        exchange="NASDAQ",
+        currency="USD",
+        preferred_provider="yahoo",
+        universe="djia",
+    )
+    future = UniverseRow(
+        instrument_id=None,
+        asset_class="future",
+        ticker="WINV26",
+        isin=None,
+        cnpj_fundo_classe=None,
+        title_type=None,
+        maturity_date=None,
+        exchange="B3",
+        currency="BRL",
+        preferred_provider="b3",
+        universe="b3_futures",
+    )
+    assert yahoo_span_alias(petr) == "PETR4.SA"
+    assert yahoo_span_alias(aapl) is None
+    assert yahoo_span_alias(future) is None
+
+
+def test_default_yahoo_universe_stays_scratch_when_ingest_universe_unset(tmp_path: Path) -> None:
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "instruments.scratch.csv").write_text(
+        UNIVERSE_HEADER + ",equity,PETR4,,,,,B3,BRL,b3,ibov\n",
+        encoding="utf-8",
+    )
+    settings = Settings(_env_file=None, coverage_config_dir=str(tmp_path), ingest_universe="")
+    path = default_yahoo_universe_path(settings)
+    assert path.name == "instruments.scratch.csv"
+    assert load_yahoo_universe_symbols(path).symbols == ["PETR4.SA"]
+
+
+def test_default_yahoo_universe_honors_explicit_b3_equity_path(tmp_path: Path) -> None:
+    csv_path = tmp_path / "custom.csv"
+    csv_path.write_text(
+        UNIVERSE_HEADER + ",equity,VALE3,,,,,B3,BRL,b3,ibov\n",
+        encoding="utf-8",
+    )
+    settings = Settings(
+        _env_file=None,
+        ingest_universe="scratch",
+        b3_equity_universe_path=str(csv_path),
+    )
+    path = default_yahoo_universe_path(settings)
+    assert path == csv_path
+    assert load_yahoo_universe_symbols(path).symbols == ["VALE3.SA"]

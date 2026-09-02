@@ -12,6 +12,7 @@ from marketdata.api.span import (
     QuoteSpan,
     load_instrument_source_spans,
     resolve_universe_instrument_ids,
+    resolve_yahoo_span_aliases,
 )
 from marketdata.config import get_settings
 from marketdata.coverage.csv import UniverseRow, load_universe
@@ -19,6 +20,7 @@ from marketdata.coverage.engine import CoverageMode, evaluate_coverage
 from marketdata.coverage.paths import named_universe_path
 from marketdata.coverage.store import SessionCoverageStore
 from marketdata.domain.errors import decimal_json
+from marketdata.ingestion.yahoo_universe import yahoo_span_alias
 
 router = APIRouter()
 
@@ -162,10 +164,29 @@ def coverage_span(
     rows = load_universe(csv_path)
     source_name = _optional_text(source)
     resolved = resolve_universe_instrument_ids(session, rows, source_name=source_name)
+    aliases = {} if source_name == "b3" else resolve_yahoo_span_aliases(session, rows)
     instrument_ids = [instrument_id for instrument_id in resolved if instrument_id is not None]
+    instrument_ids.extend(
+        instrument_id for instrument_id in aliases.values() if instrument_id is not None
+    )
     spans = load_instrument_source_spans(session, instrument_ids, source_name=source_name)
     results: list[CoverageSpanItem] = []
     for row, instrument_id in zip(rows, resolved, strict=True):
+        alias = None if source_name == "b3" else yahoo_span_alias(row)
+        if source_name == "yahoo" and alias is not None:
+            yahoo_id = aliases.get(alias)
+            span = _span_for_row(instrument_id=yahoo_id, source="yahoo", spans=spans)
+            results.append(
+                CoverageSpanItem(
+                    ticker=alias,
+                    instrument_id=str(yahoo_id) if yahoo_id is not None else None,
+                    source="yahoo",
+                    min_date=span.min_date if span is not None else None,
+                    max_date=span.max_date if span is not None else None,
+                    quote_count=span.quote_count if span is not None else 0,
+                )
+            )
+            continue
         item_source = _span_source(row, source_name)
         span = _span_for_row(instrument_id=instrument_id, source=item_source, spans=spans)
         results.append(
@@ -178,6 +199,19 @@ def coverage_span(
                 quote_count=span.quote_count if span is not None else 0,
             )
         )
+        if source_name is None and alias is not None:
+            yahoo_id = aliases.get(alias)
+            yahoo_span = _span_for_row(instrument_id=yahoo_id, source="yahoo", spans=spans)
+            results.append(
+                CoverageSpanItem(
+                    ticker=alias,
+                    instrument_id=str(yahoo_id) if yahoo_id is not None else None,
+                    source="yahoo",
+                    min_date=yahoo_span.min_date if yahoo_span is not None else None,
+                    max_date=yahoo_span.max_date if yahoo_span is not None else None,
+                    quote_count=yahoo_span.quote_count if yahoo_span is not None else 0,
+                )
+            )
     min_dates = [item.min_date for item in results if item.min_date is not None]
     max_dates = [item.max_date for item in results if item.max_date is not None]
     return CoverageSpanResponse(

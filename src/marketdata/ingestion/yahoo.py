@@ -148,6 +148,15 @@ def ingest_yahoo(
             inserted += add_ins
             updated += add_upd
             skipped += add_skip
+        persisted = inserted + updated + skipped
+        _reject_empty_yahoo_persist(
+            reference_date=reference_date,
+            mapped=len(requested),
+            skipped_futures=skipped_futures,
+            fetched=artifacts,
+            persisted=persisted,
+            symbols_skipped=symbols_skipped,
+        )
         run.artifacts_downloaded = artifacts
         run.records_parsed = parsed
         run.records_inserted = inserted
@@ -156,11 +165,13 @@ def ingest_yahoo(
         finish_ingestion_run(run, status=IngestionRunStatus.SUCCEEDED)
         session.flush()
         logger.info(
-            "yahoo ingest date=%s symbols=%s skipped_futures=%s symbols_skipped=%s "
-            "inserted=%s updated=%s skipped=%s",
+            "yahoo ingest date=%s mapped=%s skipped_futures=%s fetched=%s persisted=%s "
+            "symbols_skipped=%s inserted=%s updated=%s skipped=%s",
             reference_date,
             len(requested),
             skipped_futures,
+            artifacts,
+            persisted,
             symbols_skipped,
             inserted,
             updated,
@@ -174,6 +185,9 @@ def ingest_yahoo(
             "artifacts": artifacts,
             "skipped_futures": skipped_futures,
             "symbols_skipped": symbols_skipped,
+            "mapped": len(requested),
+            "fetched": artifacts,
+            "persisted": persisted,
             "status": run.status,
         }
     except Exception:
@@ -201,6 +215,47 @@ def _yahoo_source(session: Session):
     source.public_dataset_enabled = False
     source.ingestion_enabled = True
     return source
+
+
+def _empty_yahoo_persist_message(
+    *,
+    reference_date: date,
+    mapped: int,
+    skipped_futures: int,
+    fetched: int,
+    persisted: int,
+    symbols_skipped: int,
+) -> str:
+    return (
+        f"yahoo ingest mapped {mapped} equities but persisted {persisted} quotes "
+        f"for {reference_date.isoformat()} (fetched={fetched}, "
+        f"skipped_futures={skipped_futures}, symbols_skipped={symbols_skipped})"
+    )
+
+
+def _reject_empty_yahoo_persist(
+    *,
+    reference_date: date,
+    mapped: int,
+    skipped_futures: int,
+    fetched: int,
+    persisted: int,
+    symbols_skipped: int,
+) -> None:
+    if mapped <= 0 or persisted > 0 or fetched > 0:
+        return
+    message = _empty_yahoo_persist_message(
+        reference_date=reference_date,
+        mapped=mapped,
+        skipped_futures=skipped_futures,
+        fetched=fetched,
+        persisted=persisted,
+        symbols_skipped=symbols_skipped,
+    )
+    if reference_date.weekday() >= 5:
+        logger.warning(message)
+        return
+    raise RuntimeError(message)
 
 
 def _records_for_symbol(

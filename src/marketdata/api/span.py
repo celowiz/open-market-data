@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from marketdata.coverage.csv import UniverseRow
 from marketdata.domain.enums import IdentifierType
+from marketdata.ingestion.yahoo_universe import yahoo_span_alias
 from marketdata.storage.models import (
     InstrumentIdentifierRow,
     InstrumentQuoteRow,
@@ -22,6 +23,7 @@ _LOOKUP_TYPES = (
     IdentifierType.B3_SECURITY_ID.value,
 )
 _SPAN_IDENTIFIER_TYPES = (*_LOOKUP_TYPES, IdentifierType.ISIN.value)
+_YAHOO_SOURCE = "yahoo"
 
 
 @dataclass(frozen=True)
@@ -214,3 +216,38 @@ def _resolve_row(
         source_name=source,
     )
     return ticker_ids[0] if len(ticker_ids) == 1 else None
+
+
+def resolve_yahoo_span_aliases(
+    session: Session,
+    rows: Sequence[UniverseRow],
+) -> dict[str, UUID | None]:
+    aliases: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        alias = yahoo_span_alias(row)
+        if alias and alias not in seen:
+            seen.add(alias)
+            aliases.append(alias)
+    if not aliases:
+        return {}
+    stmt = (
+        select(
+            InstrumentIdentifierRow.identifier_value,
+            InstrumentIdentifierRow.instrument_id,
+        )
+        .join(SourceRow, SourceRow.id == InstrumentIdentifierRow.source_id)
+        .where(
+            InstrumentIdentifierRow.identifier_value.in_(aliases),
+            InstrumentIdentifierRow.identifier_type.in_(_LOOKUP_TYPES),
+            SourceRow.name == _YAHOO_SOURCE,
+        )
+    )
+    hits: dict[str, list[UUID]] = {}
+    for value, instrument_id in session.execute(stmt):
+        hits.setdefault(value, []).append(instrument_id)
+    resolved: dict[str, UUID | None] = {}
+    for alias in aliases:
+        ids = _unique_ids(hits.get(alias, []))
+        resolved[alias] = ids[0] if len(ids) == 1 else None
+    return resolved

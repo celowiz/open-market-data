@@ -276,8 +276,64 @@ def test_ingest_yahoo_missing_symbol_does_not_fail_sqlite_job(tmp_path) -> None:
         session.commit()
         assert int(result["inserted"]) >= 2
         assert int(result["symbols_skipped"]) >= 1
+        assert int(result["mapped"]) == 2
+        assert int(result["fetched"]) == 1
+        assert int(result["persisted"]) >= 2
         count = session.scalar(select(func.count()).select_from(InstrumentQuoteRow))
         assert count >= 2
+    finally:
+        session.close()
+        engine.dispose()
+
+
+class _EmptyYahooProvider:
+    name = "yahoo"
+
+    def fetch_history(self, symbol: str, *, start, end):
+        del symbol, start, end
+        return []
+
+
+def test_yahoo_ingest_fails_when_mapped_equities_persist_nothing_on_weekday(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'yahoo-empty.db'}", future=True)
+    Base.metadata.create_all(engine)
+    session = Session(engine, autoflush=False)
+    try:
+        with pytest.raises(RuntimeError, match="mapped 2 equities but persisted 0"):
+            ingest_yahoo(
+                session,
+                reference_date=date(2026, 8, 31),
+                symbols=["PETR4.SA", "VALE3.SA"],
+                storage=LocalFileObjectStorage(tmp_path),
+                provider=_EmptyYahooProvider(),
+            )
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_yahoo_ingest_warns_but_succeeds_when_weekend_history_is_empty(
+    tmp_path, caplog: pytest.LogCaptureFixture
+) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'yahoo-weekend.db'}", future=True)
+    Base.metadata.create_all(engine)
+    session = Session(engine, autoflush=False)
+    try:
+        with caplog.at_level("WARNING"):
+            result = ingest_yahoo(
+                session,
+                reference_date=date(2026, 8, 30),
+                symbols=["PETR4.SA", "VALE3.SA"],
+                storage=LocalFileObjectStorage(tmp_path),
+                provider=_EmptyYahooProvider(),
+            )
+        session.commit()
+        assert result["status"]
+        assert int(result["mapped"]) == 2
+        assert int(result["fetched"]) == 0
+        assert int(result["persisted"]) == 0
+        assert int(result["symbols_skipped"]) == 2
+        assert "persisted 0" in caplog.text
     finally:
         session.close()
         engine.dispose()

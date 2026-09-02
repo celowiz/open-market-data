@@ -76,6 +76,9 @@ _RESULT_KEYS = (
     "series_skipped",
     "skipped_futures",
     "symbols_skipped",
+    "mapped",
+    "fetched",
+    "persisted",
 )
 
 
@@ -281,7 +284,9 @@ def ingest_yahoo_command(
         f"run={result['run_id']} artifacts={result['artifacts']} "
         f"inserted={result['inserted']} updated={result['updated']} "
         f"skipped={result['skipped']} skipped_futures={result.get('skipped_futures', 0)} "
-        f"symbols_skipped={result.get('symbols_skipped', 0)}"
+        f"symbols_skipped={result.get('symbols_skipped', 0)} "
+        f"mapped={result.get('mapped', 0)} fetched={result.get('fetched', 0)} "
+        f"persisted={result.get('persisted', 0)}"
     )
 
 
