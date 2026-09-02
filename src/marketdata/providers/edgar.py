@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from logging import getLogger
+from typing import TypedDict
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -14,10 +15,16 @@ from marketdata.domain.errors import InvalidFinancialValueError, exact_decimal
 from marketdata.ingestion.config_tables import load_scratch_cusip_map
 
 SEC_CURRENT_13F_ATOM = (
-    "https://www.sec.gov/cgi-bin/browse-edgar"
-    "?action=getcurrent&type=13F-HR&count=20&output=atom"
+    "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=13F-HR&count=20&output=atom"
 )
 logger = getLogger(__name__)
+
+
+class ThirteenFAtomFiling(TypedDict):
+    name: str
+    cik: str
+    href: str
+    report_date: date
 
 
 @dataclass(frozen=True)
@@ -82,7 +89,7 @@ class EdgarProvider:
             filings = parse_13f_atom(response.content)
             holdings: list[ThirteenFHolding] = []
             for filing in filings[:10]:
-                table_url = filing.get("href")
+                table_url = filing["href"]
                 if not table_url:
                     continue
                 try:
@@ -106,18 +113,22 @@ class EdgarProvider:
                 http_client.close()
 
 
-def parse_13f_atom(payload: bytes) -> list[dict[str, object]]:
+def parse_13f_atom(payload: bytes) -> list[ThirteenFAtomFiling]:
     root = ET.fromstring(payload)
     ns = {"atom": "http://www.w3.org/2005/Atom"}
-    filings: list[dict[str, object]] = []
+    filings: list[ThirteenFAtomFiling] = []
     for entry in root.findall("atom:entry", ns) or root.findall("entry"):
-        title = (entry.findtext("atom:title", default="", namespaces=ns) or entry.findtext("title") or "")
+        title = (
+            entry.findtext("atom:title", default="", namespaces=ns) or entry.findtext("title") or ""
+        )
         link = entry.find("atom:link", ns)
         if link is None:
             link = entry.find("link")
         href = link.get("href") if link is not None else ""
         updated = (
-            entry.findtext("atom:updated", default="", namespaces=ns) or entry.findtext("updated") or ""
+            entry.findtext("atom:updated", default="", namespaces=ns)
+            or entry.findtext("updated")
+            or ""
         )
         try:
             report_date = date.fromisoformat(updated[:10])
@@ -128,7 +139,7 @@ def parse_13f_atom(payload: bytes) -> list[dict[str, object]]:
             {
                 "name": title.split("(")[0].strip() or "unknown",
                 "cik": cik.zfill(10),
-                "href": href,
+                "href": href or "",
                 "report_date": report_date,
             }
         )

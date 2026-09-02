@@ -85,9 +85,7 @@ def ingest_fred(
                     continue
             else:
                 rows = [
-                    row
-                    for row in observations
-                    if getattr(row, "series_id", None) == spec.series_id
+                    row for row in observations if getattr(row, "series_id", None) == spec.series_id
                 ]
             if not rows:
                 logger.info("fred skip empty series=%s date=%s", spec.series_id, reference_date)

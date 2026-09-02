@@ -16,7 +16,11 @@ from marketdata.providers.fred import FredObservation
 from marketdata.providers.ibge import parse_sidra_observations
 from marketdata.storage.database import create_db_engine, create_session_factory
 from marketdata.storage.models import EventRow, InstrumentQuoteRow, LendingSnapshotRow
-from marketdata.storage.repositories import get_or_create_source, upsert_event, upsert_lending_snapshot
+from marketdata.storage.repositories import (
+    get_or_create_source,
+    upsert_event,
+    upsert_lending_snapshot,
+)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -73,9 +77,7 @@ def test_fred_ingest_persists_reference_quotes(db_session) -> None:
     observations = [
         FredObservation(series_id="DGS10", reference_date=date(2026, 8, 21), value=Decimal("4.05"))
     ]
-    result = ingest_fred(
-        db_session, reference_date=date(2026, 8, 21), observations=observations
-    )
+    result = ingest_fred(db_session, reference_date=date(2026, 8, 21), observations=observations)
     assert result["inserted"] >= 1
     quote = db_session.scalar(select(InstrumentQuoteRow))
     assert quote is not None
@@ -113,7 +115,7 @@ def test_cvm_events_ingest_headlines_only(db_session) -> None:
     assert event is not None
     assert event.ticker == "PETR4"
     assert event.event_type == "fato_relevante"
-    assert "pré-sal" in event.headline
+    assert "pre-sal" in event.headline
     assert event.extra.get("body") is None
 
 
@@ -138,8 +140,9 @@ def test_cftc_and_13f_filtered_ingest(db_session) -> None:
 
 @pytest.mark.db
 def test_lending_events_macro_and_news_hook_api(db_session, monkeypatch) -> None:
-    from marketdata.storage.models import RawArtifactRow
     from uuid import uuid4
+
+    from marketdata.storage.models import RawArtifactRow
 
     source = get_or_create_source(
         db_session,
@@ -205,16 +208,19 @@ def test_lending_events_macro_and_news_hook_api(db_session, monkeypatch) -> None
 
     monkeypatch.setattr(
         "marketdata.api.routes.hooks.get_settings",
-        lambda: Settings(_env_file=None, news_hook_token="secret-token", database_url=get_settings().database_url),
+        lambda: Settings(
+            _env_file=None,
+            news_hook_token="secret-token",
+            database_url=get_settings().database_url,
+        ),
     )
 
     client = TestClient(create_app())
     lending = client.get("/v1/lending/PETR4")
     assert lending.status_code == 200
     body = lending.json()
-    assert body["snapshots"][0]["qty"] == "12000000.0000000000000000" or body["snapshots"][0]["qty"].startswith(
-        "12000000"
-    )
+    qty = body["snapshots"][0]["qty"]
+    assert qty is not None and qty.startswith("12000000")
     events = client.get("/v1/events/PETR4")
     assert events.status_code == 200
     assert events.json()["events"][0]["headline"] == "Aumento de produção"

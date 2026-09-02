@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import Session
 
 from marketdata.api.deps import get_db
@@ -48,20 +48,18 @@ def list_lending(
 ) -> LendingResponse:
     ticker = identifier.strip().upper()
     instrument_id = resolve_instrument_id(session, identifier)
-    filters = [SourceRow.public_api_enabled.is_(True)]
+    identity: ColumnElement[bool]
     if instrument_id is not None:
-        filters.append(
-            or_(
-                LendingSnapshotRow.instrument_id == instrument_id,
-                LendingSnapshotRow.ticker == ticker,
-            )
+        identity = or_(
+            LendingSnapshotRow.instrument_id == instrument_id,
+            LendingSnapshotRow.ticker == ticker,
         )
     else:
-        filters.append(LendingSnapshotRow.ticker == ticker)
+        identity = LendingSnapshotRow.ticker == ticker
     stmt = (
         select(LendingSnapshotRow, SourceRow.name)
         .join(SourceRow, SourceRow.id == LendingSnapshotRow.source_id)
-        .where(*filters)
+        .where(SourceRow.public_api_enabled.is_(True), identity)
         .order_by(
             LendingSnapshotRow.reference_date.desc(),
             LendingSnapshotRow.snapshot_type.asc(),

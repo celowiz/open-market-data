@@ -73,9 +73,7 @@ def parse_fato_relevante_csv(payload: bytes, *, issuers: dict[str, str]) -> list
         headline = (row.get("ASSUNTO") or row.get("CATEGORIA_DOC") or "").strip()
         if not headline:
             continue
-        occurred = _parse_cvm_datetime(
-            row.get("DT_ENTREGA") or row.get("DT_REFER") or ""
-        )
+        occurred = _parse_cvm_datetime(row.get("DT_ENTREGA") or row.get("DT_REFER") or "")
         protocol = (row.get("PROTOCOLO") or row.get("LINK_DOC") or headline).strip()
         records.append(
             CvmFatoRecord(

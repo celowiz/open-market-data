@@ -38,9 +38,7 @@ def list_events(
     instrument_id = resolve_instrument_id(session, identifier)
     stmt = select(EventRow).order_by(EventRow.occurred_at.desc()).limit(limit)
     if instrument_id is not None:
-        stmt = stmt.where(
-            or_(EventRow.instrument_id == instrument_id, EventRow.ticker == ticker)
-        )
+        stmt = stmt.where(or_(EventRow.instrument_id == instrument_id, EventRow.ticker == ticker))
     else:
         stmt = stmt.where(EventRow.ticker == ticker)
     if event_type:

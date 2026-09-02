@@ -2,7 +2,11 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from marketdata.ingestion.config_tables import load_cot_contracts, load_scratch_cusip_map, load_scratch_issuers
+from marketdata.ingestion.config_tables import (
+    load_cot_contracts,
+    load_scratch_cusip_map,
+    load_scratch_issuers,
+)
 from marketdata.providers.b3_lending import (
     LENDING_OPEN_POSITION,
     LENDING_REGISTERED,
@@ -84,7 +88,7 @@ def test_parse_fato_relevante_filters_scratch_cnpj() -> None:
     rows = parse_fato_relevante_csv(payload, issuers=issuers)
     assert len(rows) == 1
     assert rows[0].ticker == "PETR4"
-    assert "pré-sal" in rows[0].headline
+    assert "pre-sal" in rows[0].headline
     assert rows[0].url is not None
     assert "body" not in rows[0].headline.lower()
 

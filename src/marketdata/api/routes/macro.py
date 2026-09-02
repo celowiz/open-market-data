@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 from marketdata.api.access import source_row_allows_public_api
 from marketdata.api.deps import get_db
 from marketdata.ingestion.config_tables import load_fred_series
-from marketdata.storage.models import InstrumentIdentifierRow, InstrumentRow, MarketSeriesRow, SourceRow
+from marketdata.storage.models import (
+    InstrumentIdentifierRow,
+    InstrumentRow,
+    MarketSeriesRow,
+    SourceRow,
+)
 
 router = APIRouter()
 
@@ -85,7 +90,9 @@ def list_macro(session: Session = Depends(get_db)) -> MacroSeriesResponse:
                     name=instrument.name,
                     source="fred",
                     kind="instrument",
-                    unit=instrument.extra.get("unit") if isinstance(instrument.extra, dict) else None,
+                    unit=(
+                        instrument.extra.get("unit") if isinstance(instrument.extra, dict) else None
+                    ),
                     identifier=ident.identifier_value,
                 )
             )
