@@ -12,7 +12,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { ChartSkeleton, EmptyState, RowSkeleton } from "@/components/Status";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { PriceChart } from "@/components/PriceChart";
-import { RangeChips, rangeFromKey, type RangeKey } from "@/components/RangeChips";
+import { RangeChips, type RangeKey } from "@/components/RangeChips";
 import { useSearchQuery } from "@/components/SearchQueryProvider";
 import {
   exampleFromIdentifier,
@@ -24,6 +24,7 @@ import {
 import { formatApiError, isNotFoundError, lookupInstrumentName, searchInstruments } from "@/lib/api";
 import { copy } from "@/lib/copy";
 import { formatDisplayValue } from "@/lib/format-display-value";
+import { DEFAULT_HISTORY_RANGE_KEY, rangeFromKey } from "@/lib/dates";
 import { BRAZIL_HOME_EXAMPLES, DEFAULT_HERO_EXAMPLES, type ExampleKind, type HomeExample } from "@/lib/examples";
 import { formatQuoteSpan, pickInstrumentMatch } from "@/lib/span";
 import { hrefForInstrument } from "@/lib/links";
@@ -40,8 +41,7 @@ export function HomeTradingView() {
   const apiReady = api.status === "ok";
   const selectedId = searchParams.get("id")?.trim() ?? "";
   const selectedKind = (searchParams.get("kind") as ExampleKind | null) ?? undefined;
-  const [rangeKey, setRangeKey] = useState<RangeKey>("1A");
-  const range = useMemo(() => rangeFromKey(rangeKey), [rangeKey]);
+  const [rangeKey, setRangeKey] = useState<RangeKey>(DEFAULT_HISTORY_RANGE_KEY);
   const [probed, setProbed] = useState(false);
 
   useEffect(() => {
@@ -96,7 +96,6 @@ export function HomeTradingView() {
           <HomeHero
             example={selected}
             rangeKey={rangeKey}
-            range={range}
             onRange={(key) => setRangeKey(key)}
           />
         ) : apiReady && !probed ? (
@@ -137,16 +136,25 @@ export function HomeTradingView() {
 function HomeHero({
   example,
   rangeKey,
-  range,
   onRange,
 }: {
   example: HomeExample;
   rangeKey: RangeKey;
-  range: { start: string; end: string };
   onRange: (key: RangeKey) => void;
 }) {
   const api = useApiStatus();
   const apiReady = api.status === "ok";
+  const catalog = useClientFetch(
+    `hero-span:${example.identifier}`,
+    () => searchInstruments(example.identifier, 5),
+    { enabled: apiReady },
+  );
+  const match =
+    catalog.status === "success"
+      ? pickInstrumentMatch(catalog.data.instruments, example.identifier)
+      : null;
+  const range = useMemo(() => rangeFromKey(rangeKey, match), [match, rangeKey]);
+  const waitingForSpan = rangeKey === "max" && catalog.status === "loading";
   const history = useHistoryPages({
     key: JSON.stringify({
       id: example.identifier,
@@ -154,7 +162,7 @@ function HomeHero({
       start: range.start,
       end: range.end,
     }),
-    enabled: apiReady && Boolean(example.identifier),
+    enabled: apiReady && Boolean(example.identifier) && !waitingForSpan,
     fetchPage: (cursor, signal) =>
       loadHistoryPage(
         example.kind,
@@ -170,20 +178,11 @@ function HomeHero({
     () => lookupInstrumentName(example.identifier),
     { enabled: apiReady },
   );
-  const catalog = useClientFetch(
-    `hero-span:${example.identifier}`,
-    () => searchInstruments(example.identifier, 5),
-    { enabled: apiReady },
-  );
   const points = history.items;
   const last = points.length > 0 ? points[points.length - 1] : null;
   const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
   const lastPoint = sorted[sorted.length - 1] ?? last;
   const delta = windowDeltaFromRows(sorted);
-  const match =
-    catalog.status === "success"
-      ? pickInstrumentMatch(catalog.data.instruments, example.identifier)
-      : null;
   const displayName =
     name.status === "success" && name.data && name.data !== example.identifier ? name.data : example.title;
 
@@ -221,7 +220,12 @@ function HomeHero({
       {match ? (
         <p className="font-mono text-xs text-muted">{formatQuoteSpan(match)}</p>
       ) : null}
-      <RangeChips value={rangeKey} disabled={!apiReady} onChange={(key) => onRange(key)} />
+      <RangeChips
+        value={rangeKey}
+        disabled={!apiReady}
+        span={match}
+        onChange={(key) => onRange(key)}
+      />
       {points.length > 0 ? (
         <div className="-mx-4 min-w-0 sm:mx-0">
           <PriceChart

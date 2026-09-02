@@ -4,7 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import { useApiStatus } from "@/components/ApiStatusProvider";
-import { DateRangeForm, type DateRangeValue } from "@/components/DateRangeForm";
+import { DateRangeForm, type DateRangeValue, type RangeKey } from "@/components/DateRangeForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { LatestHeadline } from "@/components/LatestHeadline";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
@@ -14,9 +14,9 @@ import { PriceTypeFilters } from "@/components/PriceTypeFilters";
 import { ProvenanceStrip } from "@/components/ProvenanceStrip";
 import { QuotesTable } from "@/components/QuotesTable";
 import { EmptyState, LoadingState } from "@/components/Status";
-import { fetchQuoteHistory } from "@/lib/api";
+import { fetchQuoteHistory, searchInstruments } from "@/lib/api";
 import { copy } from "@/lib/copy";
-import { defaultHistoryRange, routeParam } from "@/lib/dates";
+import { DEFAULT_HISTORY_RANGE_KEY, defaultChartRange, routeParam } from "@/lib/dates";
 import {
   FUTURE_PRICE_TYPES,
   TESOURO_PRICE_TYPES,
@@ -25,8 +25,9 @@ import {
   isTesouroIdentifier,
   tesouroCompanionPriceType,
 } from "@/lib/identifiers";
-import { formatQuoteSpan, hasQuoteSpan } from "@/lib/span";
+import { formatQuoteSpan, hasQuoteSpan, pickInstrumentMatch } from "@/lib/span";
 import { fieldClass } from "@/lib/ui";
+import { useClientFetch } from "@/lib/use-client-fetch";
 import { useHistoryPages } from "@/lib/use-history-pages";
 import { windowDeltaFromRows } from "@/lib/window-delta";
 import { DeltaBadge } from "@/components/DeltaBadge";
@@ -37,36 +38,65 @@ function QuoteHistoryPage() {
   const router = useRouter();
   const api = useApiStatus();
   const identifier = routeParam(params.identifier);
-  const defaults = useMemo(() => defaultHistoryRange(5), []);
+  const urlStart = searchParams.get("start");
+  const urlEnd = searchParams.get("end");
+  const urlHasRange = Boolean(urlStart || urlEnd);
+  const defaults = useMemo(() => defaultChartRange(), []);
   const tesouro = isTesouroIdentifier(identifier);
   const future = isB3FutureIdentifier(identifier);
   const initialPriceType = searchParams.get("price_type") ?? defaultPriceType(identifier);
 
-  const [start, setStart] = useState(searchParams.get("start") ?? defaults.start);
-  const [end, setEnd] = useState(searchParams.get("end") ?? defaults.end);
+  const [rangeKey, setRangeKey] = useState<RangeKey | undefined>(
+    urlHasRange ? undefined : DEFAULT_HISTORY_RANGE_KEY,
+  );
+  const [start, setStart] = useState(urlStart ?? defaults.start);
+  const [end, setEnd] = useState(urlEnd ?? defaults.end);
   const [priceType, setPriceType] = useState(initialPriceType);
   const [source, setSource] = useState(searchParams.get("source") ?? "");
   const [applied, setApplied] = useState({
-    start: searchParams.get("start") ?? defaults.start,
-    end: searchParams.get("end") ?? defaults.end,
+    start: urlStart ?? defaults.start,
+    end: urlEnd ?? defaults.end,
     price_type: initialPriceType,
     source: searchParams.get("source") ?? "",
   });
 
   const apiReady = api.status === "ok";
-  const key = JSON.stringify({ identifier, ...applied });
+  const catalog = useClientFetch(
+    `quote-span:${identifier}`,
+    () => searchInstruments(identifier, 5),
+    { enabled: apiReady && Boolean(identifier) },
+  );
+  const match =
+    catalog.status === "success"
+      ? pickInstrumentMatch(catalog.data.instruments, identifier)
+      : null;
+  const usingDefaultMax = rangeKey === "max" && !urlHasRange;
+  const queryRange = usingDefaultMax
+    ? defaultChartRange(match)
+    : { start: applied.start, end: applied.end };
+  const formStart = usingDefaultMax ? queryRange.start : start;
+  const formEnd = usingDefaultMax ? queryRange.end : end;
+  const waitingForSpan = usingDefaultMax && catalog.status === "loading";
+
+  const key = JSON.stringify({
+    identifier,
+    start: queryRange.start,
+    end: queryRange.end,
+    price_type: applied.price_type,
+    source: applied.source,
+  });
   const companionType = tesouro ? tesouroCompanionPriceType(applied.price_type || "PU_BASE") : null;
-  const companionKey = JSON.stringify({ identifier, ...applied, price_type: companionType });
+  const companionKey = JSON.stringify({ identifier, ...applied, ...queryRange, price_type: companionType });
 
   const history = useHistoryPages({
     key,
-    enabled: apiReady && Boolean(identifier),
+    enabled: apiReady && Boolean(identifier) && !waitingForSpan,
     fetchPage: (cursor, signal) =>
       fetchQuoteHistory(
         identifier,
         {
-          start: applied.start || undefined,
-          end: applied.end || undefined,
+          start: queryRange.start || undefined,
+          end: queryRange.end || undefined,
           price_type: applied.price_type || undefined,
           source: applied.source || undefined,
           cursor,
@@ -79,13 +109,13 @@ function QuoteHistoryPage() {
 
   const companion = useHistoryPages({
     key: companionKey,
-    enabled: apiReady && Boolean(identifier) && Boolean(companionType),
+    enabled: apiReady && Boolean(identifier) && Boolean(companionType) && !waitingForSpan,
     fetchPage: (cursor, signal) =>
       fetchQuoteHistory(
         identifier,
         {
-          start: applied.start || undefined,
-          end: applied.end || undefined,
+          start: queryRange.start || undefined,
+          end: queryRange.end || undefined,
           price_type: companionType ?? undefined,
           source: applied.source || undefined,
           cursor,
@@ -112,6 +142,11 @@ function QuoteHistoryPage() {
     if (next.price_type.trim()) qs.set("price_type", next.price_type.trim());
     if (next.source.trim()) qs.set("source", next.source.trim());
     router.replace(`/quotes/${encodeURIComponent(identifier)}?${qs.toString()}`);
+  }
+
+  function applyRangeKey(key: RangeKey, range: DateRangeValue) {
+    setRangeKey(key);
+    applyFilters(range);
   }
 
   const quotes = history.items;
@@ -163,12 +198,21 @@ function QuoteHistoryPage() {
       ) : null}
 
       <DateRangeForm
-        start={start}
-        end={end}
-        onStartChange={setStart}
-        onEndChange={setEnd}
+        start={formStart}
+        end={formEnd}
+        onStartChange={(value) => {
+          setRangeKey(undefined);
+          setStart(value);
+        }}
+        onEndChange={(value) => {
+          setRangeKey(undefined);
+          setEnd(value);
+        }}
         onSubmit={applyFilters}
         disabled={!apiReady}
+        activeRange={rangeKey}
+        onRangeKey={applyRangeKey}
+        span={match}
         extra={
           <>
             {tesouro || future ? null : (

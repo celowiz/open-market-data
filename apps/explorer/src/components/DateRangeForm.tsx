@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { RangeChips, type DateRangeValue, type RangeKey } from "@/components/RangeChips";
 import { copy, offlineFormHint } from "@/lib/copy";
+import type { QuoteSpanFields } from "@/lib/span";
 import { btnAccent, fieldClass } from "@/lib/ui";
 import { useLocalPageOrigin } from "@/lib/use-local-origin";
 
@@ -22,6 +23,7 @@ type DateRangeFormProps = {
   showShortcuts?: boolean;
   activeRange?: RangeKey;
   onRangeKey?: (key: RangeKey, range: DateRangeValue) => void;
+  span?: QuoteSpanFields | null;
 };
 
 export function DateRangeForm({
@@ -37,6 +39,7 @@ export function DateRangeForm({
   showShortcuts = true,
   activeRange,
   onRangeKey,
+  span,
 }: DateRangeFormProps) {
   const localOrigin = useLocalPageOrigin();
   const hint = disabledHint ?? (disabled ? offlineFormHint(localOrigin) : undefined);
@@ -55,6 +58,7 @@ export function DateRangeForm({
         <RangeChips
           value={activeRange}
           disabled={disabled}
+          span={span}
           onChange={(key, range) => {
             if (onRangeKey) {
               onRangeKey(key, range);
