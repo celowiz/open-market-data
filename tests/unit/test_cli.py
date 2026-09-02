@@ -35,12 +35,31 @@ def test_cli_providers_lists_defaults() -> None:
     assert "bcb" in result.output
     assert "b3" in result.output
     assert "yahoo" in result.output
+    assert "fred" in result.output
+    assert "ibge" in result.output
+    assert "cftc" in result.output
+    assert "edgar" in result.output
 
 
 def test_cli_ingest_help_includes_yahoo() -> None:
     result = runner.invoke(app, ["ingest", "--help"])
     assert result.exit_code == 0
     assert "yahoo" in result.output
+    assert "b3-lending" in result.output
+    assert "fred" in result.output
+    assert "cvm-events" in result.output
+
+
+def test_cli_ingest_fred_skips_without_api_key(monkeypatch) -> None:
+    from marketdata.config import Settings
+
+    monkeypatch.setattr(
+        "marketdata.cli.main.get_settings",
+        lambda: Settings(_env_file=None, fred_api_key="", fred_provider_enabled=True),
+    )
+    result = runner.invoke(app, ["ingest", "fred", "--date", "2026-08-21"])
+    assert result.exit_code == 0
+    assert "FRED_API_KEY" in result.output
 
 
 def test_cli_coverage_help() -> None:

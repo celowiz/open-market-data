@@ -268,3 +268,140 @@ class ProviderStatusRow(Base):
     last_reference_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     latest_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class EventRow(Base):
+    """Headline-only corporate/market events. Never store article bodies."""
+
+    __tablename__ = "events"
+    __table_args__ = (
+        UniqueConstraint("source", "external_id", name="uq_events_source_external_id"),
+        Index("ix_events_ticker_occurred", "ticker", "occurred_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    ticker: Mapped[str] = mapped_column(String(32), nullable=False)
+    instrument_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("instruments.id"), nullable=True, index=True
+    )
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    headline: Mapped[str] = mapped_column(String(512), nullable=False)
+    url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    external_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    raw_artifact_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("raw_artifacts.id"), nullable=True
+    )
+    ingestion_run_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("ingestion_runs.id"), nullable=True
+    )
+    extra: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+
+
+class LendingSnapshotRow(Base):
+    """Daily aggregated B3 securities-lending (BTC) snapshot per ticker.
+
+    ``snapshot_type`` is ``registered`` (D-1 aggregated loans) or
+    ``open_position``. Quantity, rate, and contract count do not fit a single
+    ``instrument_quotes.price_type`` without collapsing distinct semantics.
+    """
+
+    __tablename__ = "lending_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "ticker",
+            "reference_date",
+            "snapshot_type",
+            "source_id",
+            name="uq_lending_snapshots_identity",
+        ),
+        Index("ix_lending_snapshots_ticker_date", "ticker", "reference_date"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    ticker: Mapped[str] = mapped_column(String(32), nullable=False)
+    instrument_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("instruments.id"), nullable=True, index=True
+    )
+    reference_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    snapshot_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    qty: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    avg_rate: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    contracts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_price: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    balance_brl: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    market: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("sources.id"), nullable=False)
+    raw_artifact_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("raw_artifacts.id"), nullable=True
+    )
+    ingestion_run_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("ingestion_runs.id"), nullable=True
+    )
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    extra: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+
+
+class CotSnapshotRow(Base):
+    """Weekly CFTC COT snapshot for an allowlisted contract only."""
+
+    __tablename__ = "cot_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "contract_code",
+            "reference_date",
+            "source_id",
+            name="uq_cot_snapshots_identity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    contract_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    contract_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    reference_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    open_interest: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    long_spec: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    short_spec: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    source_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("sources.id"), nullable=False)
+    raw_artifact_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("raw_artifacts.id"), nullable=True
+    )
+    ingestion_run_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("ingestion_runs.id"), nullable=True
+    )
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    extra: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+
+
+class ThirteenFHoldingRow(Base):
+    """Latest-quarter 13F holding that maps to a scratch equity via CUSIP."""
+
+    __tablename__ = "thirteen_f_holdings"
+    __table_args__ = (
+        UniqueConstraint(
+            "filer_cik",
+            "report_date",
+            "cusip",
+            "source_id",
+            name="uq_thirteen_f_holdings_identity",
+        ),
+        Index("ix_thirteen_f_holdings_ticker_date", "ticker", "report_date"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    filer_cik: Mapped[str] = mapped_column(String(16), nullable=False)
+    filer_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    report_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    cusip: Mapped[str] = mapped_column(String(16), nullable=False)
+    ticker: Mapped[str] = mapped_column(String(32), nullable=False)
+    shares: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    value_usd: Mapped[Decimal | None] = mapped_column(Numeric(38, 16), nullable=True)
+    source_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("sources.id"), nullable=False)
+    raw_artifact_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("raw_artifacts.id"), nullable=True
+    )
+    ingestion_run_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("ingestion_runs.id"), nullable=True
+    )
+    extra: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)

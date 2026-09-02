@@ -8,8 +8,10 @@ UTC expressions here and in `.github/workflows/`.
 Workflows invoke the project CLI (ADR-0006). They do not reimplement downloads
 in YAML. Neon-writing workflows share one GitHub Actions concurrency group,
 `neon-writes`, with `cancel-in-progress: false`: `backfill.yml`,
-`ingest-all.yml`, `ingest-b3.yml`, `ingest-bcb.yml`, `ingest-cvm.yml`,
-`ingest-tesouro.yml`, and `ingest-yahoo.yml`. The group is repository-scoped,
+`ingest-all.yml`, `ingest-b3.yml`, `ingest-b3-lending.yml`, `ingest-bcb.yml`,
+`ingest-cvm.yml`, `ingest-cvm-events.yml`, `ingest-tesouro.yml`,
+`ingest-yahoo.yml`, `ingest-fred.yml`, `ingest-ibge.yml`, `ingest-cftc.yml`,
+and `ingest-13f.yml`. The group is repository-scoped,
 so a nightly B3 ingest waits behind an in-progress backfill instead of writing
 in parallel. An in-progress run is not cancelled. `ci.yml`, `explorer.yml`,
 and `publish-datasets.yml` are not in that group; they do not write to
@@ -63,7 +65,13 @@ run Monday–Friday **evening BRT** must therefore list **Tuesday–Saturday UTC
 | `ingest-tesouro.yml` | 10:30 weekdays | `30 13 * * 1-5` | `marketdata ingest tesouro --date` |
 | `ingest-bcb.yml` | 16:30 weekdays | `30 19 * * 1-5` | `marketdata ingest bcb --date` |
 | `ingest-b3.yml` | 21:00 weekdays | `0 0 * * 2-6` | `marketdata ingest b3 --date` (BRT trading date; see below) |
+| `ingest-b3-lending.yml` | 21:30 weekdays | `30 0 * * 2-6` | `marketdata ingest b3-lending --date` (after B3 EOD; D-1 registered loans) |
 | `ingest-yahoo.yml` | 00:00 nightly | `0 3 * * *` | `marketdata ingest yahoo --date` |
+| `ingest-fred.yml` | 09:00 weekdays | `0 12 * * 1-5` | `marketdata ingest fred --date` (skip-success if `FRED_API_KEY` unset) |
+| `ingest-ibge.yml` | 11:00 weekdays | `0 14 * * 1-5` | `marketdata ingest ibge --date` |
+| `ingest-cvm-events.yml` | 09:30 weekdays | `30 12 * * 1-5` | `marketdata ingest cvm-events --date` |
+| `ingest-cftc.yml` | Friday 18:00 | `0 21 * * 5` | `marketdata ingest cftc --date` |
+| `ingest-13f.yml` | Monday 12:00 | `0 15 * * 1` | `marketdata ingest 13f --date` |
 | `ingest-all.yml` | none (dispatch only) | **no schedule** | `marketdata ingest all --date` |
 | `publish-datasets.yml` | 22:30 weekdays | `30 1 * * 2-6` | `marketdata publish datasets --date` |
 | `backfill.yml` | never daily | **no schedule** | `marketdata backfill <provider> --start --end` |
@@ -109,14 +117,30 @@ is yesterday in America/Sao_Paulo so the job persists the session that just
 finished, not an in-progress bar. The helper walks back across Saturday/Sunday
 (Monday 00:00 BRT → Friday). `workflow_dispatch` may still pass an explicit
 date. Symbols come from `config/instruments.scratch.csv`: 150 B3 equities as
-`{TICKER}.SA` (PETR4 → PETR4.SA). `ingest-yahoo.yml` forwards
-`INGEST_UNIVERSE` and `B3_EQUITY_UNIVERSE_PATH` like the B3 jobs; Yahoo still
-reads the scratch CSV when those vars are empty. Futures (`WIN*` / `IND*` /
-`WDO*` / `DOL*` / `DI1*`) are skipped with a count in the run log. One missing
-Yahoo symbol is logged and skipped; it does not fail the job. Mapping equities
-and persisting zero quotes on a weekday fails the run. Yahoo remains unofficial
-POC (ADR-0013): `public_dataset_enabled` stays false. Official B3 quotes stay
-the Explorer default for PETR4 (`PETR4.SA` is a distinct Yahoo identifier).
+`{TICKER}.SA` (PETR4 → PETR4.SA), plus `config/yahoo_macro.csv` commodities/FX
+that are not B3 scratch. `ingest-yahoo.yml` forwards `INGEST_UNIVERSE` and
+`B3_EQUITY_UNIVERSE_PATH` like the B3 jobs; Yahoo still reads the scratch CSV
+when those vars are empty. Futures (`WIN*` / `IND*` / `WDO*` / `DOL*` /
+`DI1*`) are skipped with a count in the run log. One missing Yahoo symbol is
+logged and skipped; it does not fail the job. Mapping equities and persisting
+zero quotes on a weekday fails the run. Yahoo remains unofficial POC
+(ADR-0013): `public_dataset_enabled` stays false. Official B3 quotes stay the
+Explorer default for PETR4 (`PETR4.SA` is a distinct Yahoo identifier).
+
+`ingest-b3-lending.yml` runs 30 minutes after `ingest-b3.yml` (21:30 BRT /
+`30 0 * * 2-6` UTC). Registered loans are D-1. Default `--date` uses the same
+B3 trading-date helper as equities ingest. Persist is always scratch-filtered.
+Do not dispatch it while another `neon-writes` job (for example a B3 backfill)
+is running.
+
+`ingest-fred.yml` skips success when Actions secret `FRED_API_KEY` is unset.
+After merge, operators dispatch **Ingest B3 lending** and **Ingest FRED** from
+the Actions tab (`workflow_dispatch`, optional `date`). Do not enable FRED
+until that secret exists; the job will no-op rather than fail.
+
+`ingest all` does **not** run lending/FRED/IBGE/CFTC/13F/CVM events. Those
+stay on their own workflows so a Neon Free day does not stack extra writers
+on the same `ingest-all` dispatch.
 
 `publish-datasets.yml` requires the Actions variable
 `PUBLIC_DATASET_PUBLICATION_ENABLED=true`. Leave that variable unset or
@@ -177,6 +201,12 @@ uv run marketdata ingest tesouro --date YYYY-MM-DD
 uv run marketdata ingest bcb --date YYYY-MM-DD
 uv run marketdata ingest b3 --date YYYY-MM-DD
 uv run marketdata ingest yahoo --date YYYY-MM-DD
+uv run marketdata ingest b3-lending --date YYYY-MM-DD
+uv run marketdata ingest fred --date YYYY-MM-DD
+uv run marketdata ingest ibge --date YYYY-MM-DD
+uv run marketdata ingest cvm-events --date YYYY-MM-DD
+uv run marketdata ingest cftc --date YYYY-MM-DD
+uv run marketdata ingest 13f --date YYYY-MM-DD
 uv run marketdata ingest all --date YYYY-MM-DD
 uv run marketdata publish datasets --date YYYY-MM-DD
 uv run marketdata backfill <cvm|tesouro|bcb|b3|yahoo|all> --start YYYY-MM-DD --end YYYY-MM-DD

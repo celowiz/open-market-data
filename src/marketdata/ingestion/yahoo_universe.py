@@ -6,6 +6,7 @@ from pathlib import Path
 from marketdata.config import Settings, get_settings
 from marketdata.coverage.csv import UniverseRow, load_universe
 from marketdata.coverage.paths import SCRATCH_UNIVERSE, named_universe_path
+from marketdata.ingestion.config_tables import load_yahoo_macro_symbols
 from marketdata.ingestion.universe import resolve_b3_equity_universe_path
 
 YAHOO_FUTURE_PREFIXES = ("WIN", "IND", "WDO", "DOL", "DI1")
@@ -82,4 +83,10 @@ def default_yahoo_universe_path(settings: Settings | None = None) -> Path:
 
 def default_yahoo_symbols(path: Path | None = None) -> list[str]:
     csv_path = path if path is not None else default_yahoo_universe_path()
-    return load_yahoo_universe_symbols(csv_path).symbols
+    symbols = list(load_yahoo_universe_symbols(csv_path).symbols)
+    seen = set(symbols)
+    for row in load_yahoo_macro_symbols():
+        if row.symbol not in seen:
+            seen.add(row.symbol)
+            symbols.append(row.symbol)
+    return symbols

@@ -128,6 +128,24 @@ PYield `tpf.taxas()` fetches ANBIMA, not this CSV. Do not mix those series.
 
 Never annualize daily Selic/CDI silently.
 
+### FRED
+
+Allowlisted series in `config/fred_series.csv` → `REFERENCE` on an instrument
+(`source=fred`). Units stay on the quote (`percent`, `index`, `USD_per_barrel`,
+…). Do not convert a Treasury yield into a price or mix FRED WTI with Yahoo
+`CL=F`.
+
+### IBGE SIDRA
+
+IPCA monthly / 12-month → market series observations (`source=ibge`), not
+instrument quotes. Unit is `percent`. PIB is not ingested.
+
+### B3 securities lending
+
+Not a `price_type`. Daily aggregated qty / avg_rate / contracts live in
+`lending_snapshots` (`registered` vs `open_position`). Do not write loan
+quantity into `instrument_quotes.value`.
+
 ### Yahoo Finance
 
 - History `Close` → `CLOSE` (session close; daily valuation)

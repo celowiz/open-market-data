@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     bcb_provider_enabled: bool = True
     yahoo_provider_enabled: bool = False
     anbima_provider_enabled: bool = False
+    fred_provider_enabled: bool = True
+    fred_api_key: str = ""
+    ibge_provider_enabled: bool = True
+    cftc_provider_enabled: bool = True
+    edgar_provider_enabled: bool = True
+    news_hook_token: str = ""
 
 
 @lru_cache

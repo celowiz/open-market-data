@@ -61,7 +61,13 @@ def test_scratch_csv_has_150_sa_equities_and_skips_listed_futures() -> None:
         symbol.split(".", 1)[0].startswith(YAHOO_FUTURE_PREFIXES) for symbol in selection.symbols
     )
     defaults = default_yahoo_symbols()
-    assert defaults == selection.symbols
+    assert defaults[: len(selection.symbols)] == selection.symbols
+    assert "CL=F" in defaults
+    assert "GC=F" in defaults
+    assert "HG=F" in defaults
+    assert "DX-Y.NYB" in defaults
+    assert "BRL=X" in defaults
+    assert "AAPL" not in defaults
     assert defaults[0] != "AAPL"
 
 

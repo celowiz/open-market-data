@@ -157,3 +157,36 @@ export type CoverageSpanQuery = {
   universe?: CoverageUniverse;
   source?: string;
 };
+
+export type LendingSnapshotResponse = {
+  ticker: string;
+  date: string;
+  snapshot_type: string;
+  qty: string | null;
+  avg_rate: string | null;
+  contracts: number | null;
+  avg_price: string | null;
+  balance_brl: string | null;
+  market: string | null;
+  source: string;
+};
+
+export type LendingResponse = {
+  identifier: string;
+  snapshots: LendingSnapshotResponse[];
+};
+
+export type EventResponse = {
+  ticker: string;
+  source: string;
+  event_type: string;
+  occurred_at: string;
+  headline: string;
+  url: string | null;
+  external_id: string;
+};
+
+export type EventsResponse = {
+  identifier: string;
+  events: EventResponse[];
+};

@@ -13,6 +13,7 @@ from marketdata.domain.enums import (
     RedistributionPolicy,
 )
 from marketdata.ingestion.checkpoint import BackfillCheckpoint, save_checkpoint
+from marketdata.ingestion.config_tables import load_yahoo_macro_symbols
 from marketdata.ingestion.yahoo_universe import (
     default_yahoo_universe_path,
     load_yahoo_universe_symbols,
@@ -40,14 +41,18 @@ def _requested_yahoo_symbols(
 ) -> tuple[list[str], int]:
     if symbols:
         return list(symbols), 0
+    from marketdata.ingestion.yahoo_universe import default_yahoo_symbols
+
     selection = load_yahoo_universe_symbols(universe_path or default_yahoo_universe_path())
+    requested = default_yahoo_symbols(universe_path)
     logger.info(
-        "yahoo universe symbols=%s skipped_futures=%s path=%s",
+        "yahoo universe symbols=%s skipped_futures=%s macros=%s path=%s",
         len(selection.symbols),
         selection.skipped_futures,
+        len(requested) - len(selection.symbols),
         universe_path or default_yahoo_universe_path(),
     )
-    return list(selection.symbols), selection.skipped_futures
+    return requested, selection.skipped_futures
 
 
 def _payload_row(record: YahooQuoteRecord) -> dict[str, str]:
@@ -287,15 +292,28 @@ def _persist_yahoo_records(
 ) -> tuple[int, int, int, int]:
     inserted = updated = skipped = 0
     identified: set[object] = set()
+    macro = {row.symbol: row for row in load_yahoo_macro_symbols()}
     for record in records:
+        spec = macro.get(record.symbol)
+        if spec is not None:
+            try:
+                asset_class = AssetClass(spec.asset_class)
+            except ValueError:
+                asset_class = AssetClass.OTHER
+            instrument_type = spec.asset_class
+            name = spec.name
+        else:
+            asset_class = AssetClass.EQUITY
+            instrument_type = "equity"
+            name = record.symbol
         instrument = get_or_create_instrument_by_key(
             session,
             source_id=source.id,
             source_key=record.symbol,
-            asset_class=AssetClass.EQUITY,
-            instrument_type="equity",
-            name=record.symbol,
-            currency=record.currency,
+            asset_class=asset_class,
+            instrument_type=instrument_type,
+            name=name,
+            currency=record.currency or (spec.currency if spec is not None else None),
         )
         if instrument.id not in identified:
             attach_identifier(

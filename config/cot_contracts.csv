@@ -1,0 +1,12 @@
+# CFTC COT allowlist. Match is case-insensitive substring against contract_market_name.
+# Equity index, USD, rates, oil, copper, gold, BRL. Weekly. Tiny.
+code,name_contains,kind
+SPX,E-MINI S&P 500,equity_index
+NDX,NASDAQ-100,equity_index
+DX,USD INDEX,usd
+US10Y,10-YEAR U.S. TREASURY NOTES,rates
+US2Y,2-YEAR U.S. TREASURY NOTES,rates
+CL,"CRUDE OIL, LIGHT SWEET",oil
+HG,COPPER-GRADE,copper
+GC,GOLD,gold
+BRL,BRAZILIAN REAL,brl

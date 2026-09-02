@@ -1,0 +1,23 @@
+[
+  {
+    "contract_market_name": "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE",
+    "report_date": "2026-08-18T00:00:00.000",
+    "open_interest_all": "2100000",
+    "noncomm_positions_long_all": "400000",
+    "noncomm_positions_short_all": "350000"
+  },
+  {
+    "contract_market_name": "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE",
+    "report_date": "2026-08-18T00:00:00.000",
+    "open_interest_all": "1800000",
+    "noncomm_positions_long_all": "250000",
+    "noncomm_positions_short_all": "220000"
+  },
+  {
+    "contract_market_name": "CORN - CHICAGO BOARD OF TRADE",
+    "report_date": "2026-08-18T00:00:00.000",
+    "open_interest_all": "999999",
+    "noncomm_positions_long_all": "1",
+    "noncomm_positions_short_all": "1"
+  }
+]

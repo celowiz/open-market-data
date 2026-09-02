@@ -27,6 +27,12 @@ def test_official_ingest_and_backfill_keep_yahoo_disabled() -> None:
         "ingest-tesouro.yml",
         "ingest-all.yml",
         "backfill.yml",
+        "ingest-b3-lending.yml",
+        "ingest-fred.yml",
+        "ingest-ibge.yml",
+        "ingest-cvm-events.yml",
+        "ingest-cftc.yml",
+        "ingest-13f.yml",
     ):
         text = (WORKFLOWS / name).read_text(encoding="utf-8")
         assert 'YAHOO_PROVIDER_ENABLED: "false"' in text, name

@@ -1,0 +1,9 @@
+# Yahoo symbols that are NOT B3 scratch equities. Unofficial (ADR-0013).
+# Distinct identifiers from B3 PETR4 and Yahoo PETR4.SA. Do not add AAPL.
+# CL=F / GC=F / HG=F are CME futures; DX-Y.NYB is ICE Dollar Index; BRL=X is USD/BRL.
+symbol,name,asset_class,currency
+CL=F,WTI Crude Oil futures,future,USD
+GC=F,Gold futures,future,USD
+HG=F,Copper futures,future,USD
+DX-Y.NYB,US Dollar Index,fx,USD
+BRL=X,USD/BRL,fx,BRL

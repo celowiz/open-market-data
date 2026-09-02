@@ -107,7 +107,16 @@ Validated August 2026 against official portals. This is not legal advice.
   `public_dataset_enabled=false`. Re-run `marketdata ingest b3` to update an
   existing `sources` row.
 - See [`adr/0014-b3-redistribution.md`](adr/0014-b3-redistribution.md). Bulk
-  Parquet remains blocked until a license is confirmed.
+  Parquet remains blocked until a license is confirmed. Lending snapshots follow
+  the same `API_ONLY` source flags as B3 quotes. NEGOCIOSBTB parquet is not
+  published unless object storage is `s3`.
+
+### FRED / IBGE / CFTC / SEC 13F
+
+- FRED: official public API; attribution required; allowlist only.
+- IBGE SIDRA: CC-BY; IPCA only in this milestone.
+- CFTC public reporting: public domain / attribution; allowlisted contracts.
+- SEC 13F: public EDGAR; persist only CUSIP-mapped scratch holdings.
 
 ### Yahoo Finance via yfinance
 

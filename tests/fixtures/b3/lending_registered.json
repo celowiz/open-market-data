@@ -1,0 +1,15 @@
+{
+  "name": "BTBLendingRegistered",
+  "columns": [
+    {"name": "DT_REF"},
+    {"name": "TCKR_SYMB"},
+    {"name": "Quantidade"},
+    {"name": "TaxaMedia"},
+    {"name": "QtdNegocios"},
+    {"name": "Mercado"}
+  ],
+  "values": [
+    ["2026-08-21", "PETR4", "1500000", "0.12", "42", "Neg. Eletrônica D+0"],
+    ["2026-08-21", "VALE3", "900000", "0.08", "18", "Registro"]
+  ]
+}

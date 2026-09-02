@@ -14,6 +14,10 @@ def test_quotes_and_series_are_separate_tables() -> None:
     assert "ingestion_runs" in tables
     assert "sources" in tables
     assert "curve_points" not in tables
+    assert "events" in tables
+    assert "lending_snapshots" in tables
+    assert "cot_snapshots" in tables
+    assert "thirteen_f_holdings" in tables
     assert InstrumentQuoteRow.__tablename__ != MarketSeriesObservationRow.__tablename__
 
 

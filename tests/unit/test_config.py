@@ -12,6 +12,12 @@ def test_settings_defaults_are_local_first() -> None:
     assert settings.bcb_provider_enabled is True
     assert settings.yahoo_provider_enabled is False
     assert settings.anbima_provider_enabled is False
+    assert settings.fred_provider_enabled is True
+    assert settings.fred_api_key == ""
+    assert settings.ibge_provider_enabled is True
+    assert settings.cftc_provider_enabled is True
+    assert settings.edgar_provider_enabled is True
+    assert settings.news_hook_token == ""
     assert settings.ingest_universe == ""
     assert settings.b3_equity_universe_path == ""
     assert settings.public_dataset_publication_enabled is False

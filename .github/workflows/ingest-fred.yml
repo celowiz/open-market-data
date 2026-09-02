@@ -1,0 +1,89 @@
+# FRED allowlisted macro series — weekdays 09:00 America/Sao_Paulo.
+# UTC: 0 12 * * 1-5. Skips success when FRED_API_KEY is unset.
+name: Ingest FRED
+
+on:
+  schedule:
+    - cron: "0 12 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Reference date YYYY-MM-DD (defaults to today UTC)"
+        required: false
+
+concurrency:
+  group: neon-writes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_ENV: production
+      APP_TIMEZONE: America/Sao_Paulo
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OBJECT_STORAGE_BACKEND: ${{ vars.OBJECT_STORAGE_BACKEND || 'local' }}
+      LOCAL_STORAGE_PATH: ${{ vars.LOCAL_STORAGE_PATH || './data' }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      FRED_PROVIDER_ENABLED: ${{ vars.FRED_PROVIDER_ENABLED || 'true' }}
+      YAHOO_PROVIDER_ENABLED: "false"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Skip when FRED_API_KEY is unset
+        id: fredkey
+        run: |
+          set -euo pipefail
+          if [ -z "${FRED_API_KEY:-}" ]; then
+            echo "FRED ingest skipped: FRED_API_KEY is not set."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.fredkey.outputs.skip != 'true'
+        with:
+          persist-credentials: false
+
+      - name: Require DATABASE_URL
+        if: steps.fredkey.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is not set. Refusing to ingest — results would not be persisted to PostgreSQL."
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v7
+        if: steps.fredkey.outputs.skip != 'true'
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        if: steps.fredkey.outputs.skip != 'true'
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        if: steps.fredkey.outputs.skip != 'true'
+        run: uv sync --frozen --no-dev
+
+      - name: Resolve reference date
+        if: steps.fredkey.outputs.skip != 'true'
+        id: refdate
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_DATE:-}" ]; then
+            printf 'date=%s\n' "$INPUT_DATE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf 'date=%s\n' "$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Ingest FRED
+        if: steps.fredkey.outputs.skip != 'true'
+        run: uv run marketdata ingest fred --date "${{ steps.refdate.outputs.date }}"
