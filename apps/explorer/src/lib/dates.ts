@@ -1,3 +1,5 @@
+import type { QuoteSpanFields } from "./span";
+
 export function formatLocalIso(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -53,3 +55,40 @@ export function routeParam(value: string | string[] | undefined): string {
   }
   return safeDecode(value ?? "");
 }
+
+export type DateRangeValue = {
+  start: string;
+  end: string;
+};
+
+export type RangeKey = "1M" | "1A" | "5A" | "max";
+
+export const DEFAULT_HISTORY_RANGE_KEY: RangeKey = "max";
+
+export function rangeFromQuoteSpan(span?: QuoteSpanFields | null): DateRangeValue | null {
+  const start = span?.first_quote_date?.trim() || "";
+  const end = span?.last_quote_date?.trim() || "";
+  if (!start && !end) {
+    return null;
+  }
+  return { start, end: end || todayIso() };
+}
+
+export function rangeFromKey(key: RangeKey, span?: QuoteSpanFields | null): DateRangeValue {
+  const today = todayIso();
+  if (key === "1M") {
+    return { start: addUtcMonths(today, -1), end: today };
+  }
+  if (key === "1A") {
+    return { start: addUtcYears(today, -1), end: today };
+  }
+  if (key === "5A") {
+    return { start: defaultHistoryRange(5).start, end: today };
+  }
+  return rangeFromQuoteSpan(span) ?? { start: "", end: today };
+}
+
+export function defaultChartRange(span?: QuoteSpanFields | null): DateRangeValue {
+  return rangeFromKey(DEFAULT_HISTORY_RANGE_KEY, span);
+}
+
