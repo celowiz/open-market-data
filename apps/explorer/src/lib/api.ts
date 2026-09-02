@@ -9,6 +9,8 @@ import type {
   HealthResponse,
   HistoryQuery,
   InstrumentsResponse,
+  LendingResponse,
+  EventsResponse,
   QuoteResponse,
   QuotesResponse,
   SeriesHistoryResponse,
@@ -362,6 +364,23 @@ export function fetchCoverageSpan(
       universe: params.universe,
       source: params.source,
     },
+    signal,
+  });
+}
+
+export function fetchLending(
+  identifier: string,
+  signal?: AbortSignal,
+): Promise<LendingResponse> {
+  return apiFetch<LendingResponse>(`/v1/lending/${encodePathSegment(identifier)}`, { signal });
+}
+
+export function fetchEvents(
+  identifier: string,
+  signal?: AbortSignal,
+): Promise<EventsResponse> {
+  return apiFetch<EventsResponse>(`/v1/events/${encodePathSegment(identifier)}`, {
+    query: { limit: 20 },
     signal,
   });
 }

@@ -91,6 +91,9 @@ flowchart TB
     B3[B3]
     Tesouro[Tesouro]
     BCB[BCB]
+    FRED[FRED]
+    IBGE[IBGE]
+    CFTC[CFTC]
     Yahoo[Yahoo]
   end
 
@@ -144,7 +147,8 @@ not the system of record for the API.
 ### SERVING
 
 PostgreSQL holds the data required for the public API: instruments, identifiers,
-quotes, series observations, provenance metadata, ingestion runs, and quality events.
+quotes, series observations, lending snapshots, headline-only events, filtered
+COT/13F rows, provenance metadata, ingestion runs, and quality events.
 
 Large files never live in PostgreSQL.
 

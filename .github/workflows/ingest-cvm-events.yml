@@ -1,0 +1,69 @@
+# CVM Fatos Relevantes headlines for scratch issuers. Skip-success if the CSV is down.
+name: Ingest CVM events
+
+on:
+  schedule:
+    - cron: "30 12 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Reference date YYYY-MM-DD (defaults to today UTC)"
+        required: false
+
+concurrency:
+  group: neon-writes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      APP_TIMEZONE: America/Sao_Paulo
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OBJECT_STORAGE_BACKEND: ${{ vars.OBJECT_STORAGE_BACKEND || 'local' }}
+      LOCAL_STORAGE_PATH: ${{ vars.LOCAL_STORAGE_PATH || './data' }}
+      CVM_PROVIDER_ENABLED: ${{ vars.CVM_PROVIDER_ENABLED || 'true' }}
+      YAHOO_PROVIDER_ENABLED: "false"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Require DATABASE_URL
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is not set. Refusing to ingest — results would not be persisted to PostgreSQL."
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Resolve reference date
+        id: refdate
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_DATE:-}" ]; then
+            printf 'date=%s\n' "$INPUT_DATE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf 'date=%s\n' "$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Ingest CVM events
+        run: uv run marketdata ingest cvm-events --date "${{ steps.refdate.outputs.date }}"

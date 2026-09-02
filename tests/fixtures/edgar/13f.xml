@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<informationTable>
+  <infoTable>
+    <nameOfIssuer>Petroleo Brasileiro</nameOfIssuer>
+    <cusip>71654V408</cusip>
+    <value>125000</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>1000000</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>Apple Inc</nameOfIssuer>
+    <cusip>037833100</cusip>
+    <value>5000000</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>2000000</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+  </infoTable>
+</informationTable>

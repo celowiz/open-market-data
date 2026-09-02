@@ -1,0 +1,19 @@
+{
+  "name": "BTBLendingOpenPosition",
+  "columns": [
+    {"name": "DT_REF"},
+    {"name": "TCKR_SYMB"},
+    {"name": "ISIN"},
+    {"name": "COMPANY"},
+    {"name": "TYPE"},
+    {"name": "MARKET"},
+    {"name": "STOCK_BALANCE"},
+    {"name": "AVG_PRIC"},
+    {"name": "BALANCE"}
+  ],
+  "values": [
+    ["2026-08-21", "PETR4", "BRPETRACNPR6", "PETROBRAS", "PN", "Neg. Eletrônica D+0", "12000000", "38.50", "462000000"],
+    ["2026-08-21", "VALE3", "BRVALEACNOR0", "VALE", "ON", "Registro", "8000000", "62.10", "496800000"],
+    ["2026-08-21", "OUTR4", "BROUTRACNPR0", "OUTROS", "PN", "Registro", "100", "1.00", "100"]
+  ]
+}

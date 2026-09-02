@@ -24,8 +24,8 @@ GET headers when the source provides ETag / Last-Modified.
 5. Open-source adapters
 6. Non-official aggregators
 
-Initial providers: **CVM, B3, Tesouro Nacional, BCB, Yahoo**.
-ANBIMA is a disabled stub.
+Initial providers: **CVM, B3, Tesouro Nacional, BCB, FRED, IBGE, CFTC**,
+plus filtered EDGAR 13F and unofficial Yahoo. ANBIMA is a disabled stub.
 
 Custodian prices are out of scope.
 
@@ -205,6 +205,8 @@ not ingest it as `LAST`.
 | BVBG.087.01 | Index / BDR / IOPV |
 | BDI `ConsolidatedRecords` | OTC credit prints (DEB / CRI / CRA Último Preço) |
 | BDI `InstrumentRegistration` | OTC cadastro for the CREDIT universe |
+| BDI `BTBLendingOpenPosition` | Securities-lending open position (aggregated) |
+| BDI registered-loan aliases | Aggregated D-1 registered loans; see [`providers/b3.md`](providers/b3.md) |
 | COTAHIST | Equities historical backfill (`backfill b3 --cotahist`); price-correction flag; no derivative settlement |
 
 Format: XML inside nested ZIP (ISO 20022-style BVMF messages), except COTAHIST
@@ -242,6 +244,26 @@ identity lives in `FutrCtrctsInf` (ISIN, `XprtnDt`), not `EqtyInf`.
 
 Treat bulk/public dataset redistribution as denied until B3 license review.
 Public API currently serves B3 quotes as `API_ONLY` (no Parquet).
+
+### B3 securities lending / BTC (empréstimo de ativos)
+
+Public Boletim Diário tables (free, not UP2DATA). Persist **daily aggregated**
+rows for scratch equities only into `lending_snapshots`. Do **not** persist the
+negócio-a-negócio `NEGOCIOSBTB` tape in Neon.
+
+| Snapshot | BDI table / URL |
+|---|---|
+| Open position | `POST https://arquivos.b3.com.br/bdi/table/export` `Name=BTBLendingOpenPosition` |
+| Registered loans (D-1) | Same POST; try `BTBLendingRegistered`, `BTBRegisteredLending`, `LoanRegistered`, `SecuritiesLendingRegistered`, `BTBLendingSummary`. HTTP 400/404 skips that alias. |
+| NEGOCIOSBTB (optional object store) | `https://arquivos.b3.com.br/api/download/requestname?fileName=Trade_SecuritiesLending_TradeSecuritiesLendingFile&date={YYYY-MM-DD}` and Pesquisa por Pregão `{ddmmyyyy}_NEGOCIOSBTB.zip`. Stored as parquet only when `OBJECT_STORAGE_BACKEND=s3`; otherwise skip-success. |
+
+CLI: `marketdata ingest b3-lending --date YYYY-MM-DD`. Filter is always the
+scratch (or explicit) B3 equity universe — never the full B3 lending tape.
+API: `GET /v1/lending/{identifier}`.
+
+B3 HTML consultation pages change; ingest uses the BDI export POST and the
+documented file-name templates above, not a DOM scrape. Missing tables are
+skip-success, not a failed run.
 
 `mercados` currently uses COTAHIST, not full BVBG.186/187. Do not assume that
 library already solved B3 EOD.
@@ -323,8 +345,10 @@ License: ODbL 1.0.
 
 ## Yahoo Finance
 
-Unofficial. Used only for POC / local coverage of global equities and ETFs
-(AAPL, MSFT, SPY, ASML.AS, ...).
+Unofficial (ADR-0013). Daily ingest covers scratch B3 equities as `{TICKER}.SA`
+plus `config/yahoo_macro.csv` (CL=F, GC=F, HG=F, DX-Y.NYB, BRL=X). Do not
+default to AAPL. B3 scratch futures (`WIN*` / `IND*` / `WDO*` / `DOL*` / `DI1*`)
+are skipped. Yahoo `PETR4.SA` is a distinct identifier from official B3 `PETR4`.
 
 Adapter: `yfinance` behind `YahooProvider`.
 
@@ -332,6 +356,58 @@ Adapter: `yfinance` behind `YahooProvider`.
 - `is_official = false`
 - Public API is enabled (`public_api_enabled=true`); public datasets stay off.
   Range persist is `marketdata backfill yahoo`.
+
+---
+
+## FRED
+
+Allowlisted series only (`config/fred_series.csv`). Public API key
+`FRED_API_KEY`. Missing key → skip-success. Persist as instrument quotes,
+`price_type=REFERENCE`, `source=fred`. See [`providers/fred.md`](providers/fred.md).
+
+---
+
+## IBGE SIDRA
+
+IPCA monthly and 12-month series from table 1737. PIB is not ingested.
+`source=ibge`. See [`providers/ibge.md`](providers/ibge.md).
+
+---
+
+## CVM Fatos Relevantes (headlines)
+
+Yearly CSV:
+
+```text
+https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/FATO_RELEVANTE/DADOS/fato_relevante_cia_aberta_{YYYY}.csv
+```
+
+Latin-1, `;`. Filter by `config/scratch_issuers.csv` CNPJ. Persist
+`events` (ticker, source, event_type, occurred_at, headline, url, external_id).
+**No article body.** HTTP failure skip-success.
+
+```text
+GET /v1/events/PETR4
+POST /v1/hooks/news
+```
+
+News webhook: `POST /v1/hooks/news` with `NEWS_HOOK_TOKEN`
+(`X-News-Hook-Token` or `Authorization: Bearer`). CORS stays GET-only; this
+hook is server-to-server. Earnings calendars are out of scope (no paid Yahoo).
+
+---
+
+## CFTC COT
+
+Allowlisted contracts in `config/cot_contracts.csv`. Weekly. Tiny.
+See [`providers/cftc.md`](providers/cftc.md).
+
+---
+
+## SEC 13F (filtered)
+
+Latest filings only, holdings intersecting `config/scratch_cusip.csv`.
+Empty is OK. See [`providers/edgar.md`](providers/edgar.md).
 
 ---
 

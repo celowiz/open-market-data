@@ -1,0 +1,15 @@
+# CUSIP map from scratch B3 equities to US-listed ADRs for filtered 13F ingest.
+# Holdings whose CUSIP is not in this file are dropped. Empty intersection is OK.
+ticker,adr_ticker,cusip,name
+PETR4,PBR,71654V408,Petroleo Brasileiro S.A. Petrobras ADR
+VALE3,VALE,91912E105,Vale S.A. ADR
+ITUB4,ITUB,465562106,Itau Unibanco Holding S.A. ADR
+BBDC4,BBD,059460303,Banco Bradesco S.A. ADR
+ABEV3,ABEV,02319V103,Ambev S.A. ADR
+BBAS3,BDORY,059578104,Banco do Brasil S.A. ADR
+GGBR4,GGB,373737105,Gerdau S.A. ADR
+SID,SID,20440W105,Companhia Siderurgica Nacional ADR
+EMBR3,ERJ,29082A107,Embraer S.A. ADR
+VIVT3,VIV,87936R106,Telefonica Brasil S.A. ADR
+SANB11,BSBR,05967A107,Banco Santander Brasil S.A. ADR
+SUZB3,SUZ,86959K105,Suzano S.A. ADR

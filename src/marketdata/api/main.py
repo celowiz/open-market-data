@@ -8,9 +8,13 @@ from marketdata import __version__
 from marketdata.api.deps import bind_database, dispose_database
 from marketdata.api.routes.coverage import router as coverage_router
 from marketdata.api.routes.datasets import router as datasets_router
+from marketdata.api.routes.events import router as events_router
 from marketdata.api.routes.funds import router as funds_router
 from marketdata.api.routes.health import router as health_router
+from marketdata.api.routes.hooks import router as hooks_router
 from marketdata.api.routes.instruments import router as instruments_router
+from marketdata.api.routes.lending import router as lending_router
+from marketdata.api.routes.macro import router as macro_router
 from marketdata.api.routes.quotes import router as quotes_router
 from marketdata.api.routes.series import router as series_router
 from marketdata.api.routes.sources import router as sources_router
@@ -61,6 +65,10 @@ def create_app() -> FastAPI:
     app.include_router(coverage_router, prefix=settings.api_v1_prefix)
     app.include_router(datasets_router, prefix=settings.api_v1_prefix)
     app.include_router(instruments_router, prefix=settings.api_v1_prefix)
+    app.include_router(lending_router, prefix=settings.api_v1_prefix)
+    app.include_router(events_router, prefix=settings.api_v1_prefix)
+    app.include_router(macro_router, prefix=settings.api_v1_prefix)
+    app.include_router(hooks_router, prefix=settings.api_v1_prefix)
     bind_database(app)
     return app
 

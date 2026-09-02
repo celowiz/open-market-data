@@ -70,6 +70,19 @@ export const copy = {
     curatedEmptySearch:
       "Digite um nome ou identificador para buscar. Sem consulta, mostramos exemplos — a API exige q=.",
   },
+  lending: {
+    title: "Empréstimo de ativos",
+    registered: "Empréstimos registrados",
+    open: "Posição em aberto",
+    qty: "Quantidade",
+    rate: "Taxa média",
+    contracts: "Contratos",
+    empty: "Sem dados de empréstimo para este ativo.",
+  },
+  events: {
+    title: "Eventos",
+    empty: "Nenhum fato relevante ou evento para este ativo.",
+  },
   shortcuts: {
     oneMonth: "1M",
     oneYear: "1A",

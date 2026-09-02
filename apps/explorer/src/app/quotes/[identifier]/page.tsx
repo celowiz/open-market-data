@@ -31,6 +31,8 @@ import { useClientFetch } from "@/lib/use-client-fetch";
 import { useHistoryPages } from "@/lib/use-history-pages";
 import { windowDeltaFromRows } from "@/lib/window-delta";
 import { DeltaBadge } from "@/components/DeltaBadge";
+import { EventsList } from "@/components/EventsList";
+import { LendingPanel } from "@/components/LendingPanel";
 
 function QuoteHistoryPage() {
   const params = useParams<{ identifier: string }>();
@@ -163,6 +165,8 @@ function QuoteHistoryPage() {
           {identifier || "—"}
         </h1>
         <LatestHeadline kind="quote" identifier={identifier} priceType={applied.price_type} />
+        <LendingPanel identifier={identifier} />
+        <EventsList identifier={identifier} />
         {windowDelta ? (
           <p className="text-sm text-muted">
             {copy.common.windowChange}: <DeltaBadge delta={windowDelta} />

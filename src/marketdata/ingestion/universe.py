@@ -62,6 +62,21 @@ def b3_equity_allowlist(
     return load_b3_equity_tickers(path)
 
 
+def lending_equity_allowlist(
+    settings: Settings | None = None,
+    *,
+    base: Path | None = None,
+) -> frozenset[str]:
+    """Scratch (or explicit) B3 equities. Lending never persists the full B3 tape."""
+    allowlist = b3_equity_allowlist(settings, base=base)
+    if allowlist is not None:
+        return allowlist
+    cfg = settings if settings is not None else get_settings()
+    root = base if base is not None else Path(cfg.coverage_config_dir)
+    path = named_universe_path(SCRATCH_UNIVERSE, base=root)
+    return load_b3_equity_tickers(path)
+
+
 def should_persist_b3_equity_last(ticker: str, allowlist: frozenset[str] | None) -> bool:
     if allowlist is None:
         return True

@@ -79,6 +79,7 @@ _RESULT_KEYS = (
     "mapped",
     "fetched",
     "persisted",
+    "negociosbtb",
 )
 
 
@@ -288,6 +289,94 @@ def ingest_yahoo_command(
         f"mapped={result.get('mapped', 0)} fetched={result.get('fetched', 0)} "
         f"persisted={result.get('persisted', 0)}"
     )
+
+
+@ingest_app.command("b3-lending")
+def ingest_b3_lending_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest B3 aggregated securities lending (BTC) for scratch equities."""
+    from marketdata.ingestion.b3_lending import ingest_b3_lending
+
+    if _skip_disabled_provider("b3", "B3 lending ingest"):
+        return
+    reference = date.fromisoformat(date_value)
+    result = _with_session(lambda session: ingest_b3_lending(session, reference_date=reference))
+    _echo_result("B3 lending ingest", result)
+
+
+@ingest_app.command("fred")
+def ingest_fred_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest the FRED series allowlist. Skips success when FRED_API_KEY is unset."""
+    from marketdata.ingestion.fred import ingest_fred
+
+    if _skip_disabled_provider("fred", "FRED ingest"):
+        return
+    settings = get_settings()
+    if not settings.fred_api_key.strip():
+        typer.echo("FRED ingest skipped: FRED_API_KEY is not set.")
+        raise typer.Exit(code=0)
+    reference = date.fromisoformat(date_value)
+    result = _with_session(lambda session: ingest_fred(session, reference_date=reference))
+    _echo_result("FRED ingest", result)
+
+
+@ingest_app.command("ibge")
+def ingest_ibge_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest IBGE SIDRA IPCA series."""
+    from marketdata.ingestion.ibge import ingest_ibge
+
+    if _skip_disabled_provider("ibge", "IBGE ingest"):
+        return
+    reference = date.fromisoformat(date_value)
+    result = _with_session(lambda session: ingest_ibge(session, reference_date=reference))
+    _echo_result("IBGE ingest", result)
+
+
+@ingest_app.command("cvm-events")
+def ingest_cvm_events_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest CVM Fatos Relevantes headlines for scratch issuers."""
+    from marketdata.ingestion.cvm_events import ingest_cvm_events
+
+    if _skip_disabled_provider("cvm", "CVM events ingest"):
+        return
+    reference = date.fromisoformat(date_value)
+    result = _with_session(lambda session: ingest_cvm_events(session, reference_date=reference))
+    _echo_result("CVM events ingest", result)
+
+
+@ingest_app.command("cftc")
+def ingest_cftc_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest a filtered weekly CFTC COT snapshot."""
+    from marketdata.ingestion.cftc import ingest_cftc
+
+    if _skip_disabled_provider("cftc", "CFTC ingest"):
+        return
+    reference = date.fromisoformat(date_value)
+    result = _with_session(lambda session: ingest_cftc(session, reference_date=reference))
+    _echo_result("CFTC ingest", result)
+
+
+@ingest_app.command("13f")
+def ingest_13f_command(
+    date_value: str = typer.Option(..., "--date", help="Reference date YYYY-MM-DD"),
+) -> None:
+    """Ingest latest-quarter 13F holdings intersecting the scratch CUSIP map."""
+    from marketdata.ingestion.edgar import ingest_13f
+
+    if _skip_disabled_provider("edgar", "13F ingest"):
+        return
+    reference = date.fromisoformat(date_value)
+    result = _with_session(lambda session: ingest_13f(session, reference_date=reference))
+    _echo_result("13F ingest", result)
 
 
 @ingest_app.command("all")

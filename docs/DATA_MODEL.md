@@ -22,7 +22,7 @@ Metadata for each external origin.
 | Field | Notes |
 |---|---|
 | `id` | Stable internal key (UUID or short slug plus UUID) |
-| `name` | Machine name: `cvm`, `b3`, `tesouro`, `bcb`, `yahoo`, `anbima` |
+| `name` | Machine name: `cvm`, `b3`, `tesouro`, `bcb`, `fred`, `ibge`, `cftc`, `edgar`, `yahoo`, `anbima` |
 | `display_name` | Human label |
 | `official` | Boolean |
 | `homepage` | Official site |
@@ -206,6 +206,44 @@ A single bad fund row must not fail an entire CVM month.
 
 Latest health snapshot per provider: last success, last failure, last reference
 date, consecutive failures, latest error.
+
+### `events`
+
+Headline-only corporate/market events. Never store article bodies.
+
+| Field | Notes |
+|---|---|
+| `ticker` | Scratch ticker (e.g. PETR4) |
+| `source` | `cvm`, `webhook`, … |
+| `event_type` | `fato_relevante`, `news`, … |
+| `occurred_at` | Timezone-aware UTC |
+| `headline` | Max 512 chars |
+| `url` | Optional source link |
+| `external_id` | Unique with `source` |
+
+### `lending_snapshots`
+
+Daily aggregated B3 securities lending (BTC). Sibling of `instrument_quotes`
+because quantity, average rate, and contract count are distinct semantics.
+
+| Field | Notes |
+|---|---|
+| `ticker` | Scratch equity |
+| `reference_date` | Calendar date |
+| `snapshot_type` | `registered` (D-1 aggregated loans) or `open_position` |
+| `qty` / `avg_rate` / `contracts` | `NUMERIC` / int; any may be null |
+| `source_id` | FK to `sources` (`b3`) |
+
+Natural key: `(ticker, reference_date, snapshot_type, source_id)`.
+
+### `cot_snapshots`
+
+Weekly CFTC COT for allowlisted contracts only (`config/cot_contracts.csv`).
+
+### `thirteen_f_holdings`
+
+Latest-quarter 13F lines whose CUSIP maps to a scratch equity
+(`config/scratch_cusip.csv`). Empty intersection is OK.
 
 ### `dataset_publications`
 

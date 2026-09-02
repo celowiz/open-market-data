@@ -60,6 +60,9 @@ flowchart LR
   CVM[CVM]
   Tesouro[Tesouro Direto]
   BCB[BCB]
+  FRED[FRED]
+  IBGE[IBGE]
+  CFTC[CFTC]
   Yahoo[Yahoo Finance]
 
   Neon[(Neon Postgres)]
@@ -70,6 +73,9 @@ flowchart LR
   CVM --> Neon
   Tesouro --> Neon
   BCB --> Neon
+  FRED --> Neon
+  IBGE --> Neon
+  CFTC --> Neon
   Yahoo --> Neon
   Neon --> API
   API --> Explorer

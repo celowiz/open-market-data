@@ -16,8 +16,17 @@ The same files can opt-in filter B3 BVBG.186 LAST ingest:
 `INGEST_UNIVERSE=scratch` (operator file if present, else
 `instruments.scratch.csv`) or `B3_EQUITY_UNIVERSE_PATH`. Only B3 `equity`
 rows are used for the 186 filter. Scratch skips live OTC credit. Empty
-`INGEST_UNIVERSE` still means full 186 persist plus live credit. See
+`INGEST_UNIVERSE` still means full 186 persist plus live credit. B3 lending
+always uses the scratch (or explicit) equity list. See
 [`docs/INGEST_SCHEDULE.md`](../docs/INGEST_SCHEDULE.md).
+
+Companion allowlists (not coverage universes):
+
+- `yahoo_macro.csv` — unofficial Yahoo commodities/FX (not AAPL)
+- `fred_series.csv` — FRED series ids
+- `scratch_issuers.csv` — CNPJ → ticker for CVM fatos
+- `scratch_cusip.csv` — CUSIP → ticker for filtered 13F
+- `cot_contracts.csv` — CFTC contract name substrings
 
 ## Snapshot
 

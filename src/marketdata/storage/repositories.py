@@ -16,15 +16,19 @@ from marketdata.domain.enums import (
 )
 from marketdata.providers.cvm import CvmCadastroClass, CvmDailyRecord
 from marketdata.storage.models import (
+    CotSnapshotRow,
+    EventRow,
     IngestionRunRow,
     InstrumentIdentifierRow,
     InstrumentQuoteRow,
     InstrumentRow,
+    LendingSnapshotRow,
     MarketSeriesObservationRow,
     MarketSeriesRow,
     QualityEventRow,
     RawArtifactRow,
     SourceRow,
+    ThirteenFHoldingRow,
 )
 
 CVM_SOURCE_NAME = "cvm"
@@ -712,3 +716,204 @@ def upsert_series_observation(
         )
     )
     return action
+
+
+def upsert_lending_snapshot(
+    session: Session,
+    *,
+    ticker: str,
+    instrument_id: UUID | None,
+    reference_date: date,
+    snapshot_type: str,
+    source_id: UUID,
+    qty,
+    avg_rate,
+    contracts: int | None,
+    avg_price,
+    balance_brl,
+    market: str | None,
+    artifact: RawArtifactRow,
+    ingestion_run_id: UUID | None,
+    extra: dict | None = None,
+) -> str:
+    existing = session.scalar(
+        select(LendingSnapshotRow).where(
+            LendingSnapshotRow.ticker == ticker,
+            LendingSnapshotRow.reference_date == reference_date,
+            LendingSnapshotRow.snapshot_type == snapshot_type,
+            LendingSnapshotRow.source_id == source_id,
+        )
+    )
+    payload = extra or {}
+    if existing is not None:
+        existing.instrument_id = instrument_id or existing.instrument_id
+        existing.qty = qty
+        existing.avg_rate = avg_rate
+        existing.contracts = contracts
+        existing.avg_price = avg_price
+        existing.balance_brl = balance_brl
+        existing.market = market
+        existing.raw_artifact_id = artifact.id
+        existing.ingestion_run_id = ingestion_run_id
+        existing.retrieved_at = artifact.retrieved_at
+        existing.extra = payload
+        return "updated"
+    session.add(
+        LendingSnapshotRow(
+            id=uuid4(),
+            ticker=ticker,
+            instrument_id=instrument_id,
+            reference_date=reference_date,
+            snapshot_type=snapshot_type,
+            qty=qty,
+            avg_rate=avg_rate,
+            contracts=contracts,
+            avg_price=avg_price,
+            balance_brl=balance_brl,
+            market=market,
+            source_id=source_id,
+            raw_artifact_id=artifact.id,
+            ingestion_run_id=ingestion_run_id,
+            retrieved_at=artifact.retrieved_at,
+            extra=payload,
+        )
+    )
+    return "inserted"
+
+
+def upsert_event(
+    session: Session,
+    *,
+    ticker: str,
+    instrument_id: UUID | None,
+    source: str,
+    event_type: str,
+    occurred_at: datetime,
+    headline: str,
+    url: str | None,
+    external_id: str,
+    raw_artifact_id: UUID | None = None,
+    ingestion_run_id: UUID | None = None,
+    extra: dict | None = None,
+) -> str:
+    existing = session.scalar(
+        select(EventRow).where(
+            EventRow.source == source,
+            EventRow.external_id == external_id,
+        )
+    )
+    if existing is not None:
+        return "skipped"
+    session.add(
+        EventRow(
+            id=uuid4(),
+            ticker=ticker,
+            instrument_id=instrument_id,
+            source=source,
+            event_type=event_type,
+            occurred_at=occurred_at,
+            headline=headline[:512],
+            url=url,
+            external_id=external_id,
+            raw_artifact_id=raw_artifact_id,
+            ingestion_run_id=ingestion_run_id,
+            extra=extra or {},
+        )
+    )
+    return "inserted"
+
+
+def upsert_cot_snapshot(
+    session: Session,
+    *,
+    contract_code: str,
+    contract_name: str,
+    reference_date: date,
+    open_interest,
+    long_spec,
+    short_spec,
+    source_id: UUID,
+    artifact: RawArtifactRow,
+    ingestion_run_id: UUID,
+    extra: dict | None = None,
+) -> str:
+    existing = session.scalar(
+        select(CotSnapshotRow).where(
+            CotSnapshotRow.contract_code == contract_code,
+            CotSnapshotRow.reference_date == reference_date,
+            CotSnapshotRow.source_id == source_id,
+        )
+    )
+    payload = extra or {}
+    if existing is not None:
+        existing.contract_name = contract_name
+        existing.open_interest = open_interest
+        existing.long_spec = long_spec
+        existing.short_spec = short_spec
+        existing.raw_artifact_id = artifact.id
+        existing.ingestion_run_id = ingestion_run_id
+        existing.retrieved_at = artifact.retrieved_at
+        existing.extra = payload
+        return "updated"
+    session.add(
+        CotSnapshotRow(
+            id=uuid4(),
+            contract_code=contract_code,
+            contract_name=contract_name,
+            reference_date=reference_date,
+            open_interest=open_interest,
+            long_spec=long_spec,
+            short_spec=short_spec,
+            source_id=source_id,
+            raw_artifact_id=artifact.id,
+            ingestion_run_id=ingestion_run_id,
+            retrieved_at=artifact.retrieved_at,
+            extra=payload,
+        )
+    )
+    return "inserted"
+
+
+def upsert_thirteen_f_holding(
+    session: Session,
+    *,
+    filer_cik: str,
+    filer_name: str,
+    report_date: date,
+    cusip: str,
+    ticker: str,
+    shares,
+    value_usd,
+    source_id: UUID,
+    extra: dict | None = None,
+) -> str:
+    existing = session.scalar(
+        select(ThirteenFHoldingRow).where(
+            ThirteenFHoldingRow.filer_cik == filer_cik,
+            ThirteenFHoldingRow.report_date == report_date,
+            ThirteenFHoldingRow.cusip == cusip,
+            ThirteenFHoldingRow.source_id == source_id,
+        )
+    )
+    if existing is not None:
+        existing.filer_name = filer_name
+        existing.ticker = ticker
+        existing.shares = shares
+        existing.value_usd = value_usd
+        existing.extra = extra or {}
+        return "updated"
+    session.add(
+        ThirteenFHoldingRow(
+            id=uuid4(),
+            filer_cik=filer_cik,
+            filer_name=filer_name,
+            report_date=report_date,
+            cusip=cusip,
+            ticker=ticker,
+            shares=shares,
+            value_usd=value_usd,
+            source_id=source_id,
+            extra=extra or {},
+        )
+    )
+    return "inserted"
