@@ -376,13 +376,14 @@ IPCA monthly and 12-month series from table 1737. PIB is not ingested.
 
 ## CVM Fatos Relevantes (headlines)
 
-Yearly CSV:
+Yearly IPE dataset (zipped CSV; the old `FATO_RELEVANTE/DADOS/fato_relevante_cia_aberta_{YYYY}.csv`
+URL returns HTTP 404):
 
 ```text
-https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/FATO_RELEVANTE/DADOS/fato_relevante_cia_aberta_{YYYY}.csv
+https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS/ipe_cia_aberta_{YYYY}.zip
 ```
 
-Latin-1, `;`. Filter by `config/scratch_issuers.csv` CNPJ. Persist
+Latin-1, `;`. Keep `Categoria = "Fato Relevante"`. Filter by `config/scratch_issuers.csv` CNPJ. Persist
 `events` (ticker, source, event_type, occurred_at, headline, url, external_id).
 **No article body.** HTTP failure skip-success.
 
@@ -407,7 +408,9 @@ See [`providers/cftc.md`](providers/cftc.md).
 ## SEC 13F (filtered)
 
 Latest filings only, holdings intersecting `config/scratch_cusip.csv`.
-Empty is OK. See [`providers/edgar.md`](providers/edgar.md).
+Empty is OK. SEC requires a User-Agent with a contact e-mail (otherwise HTTP 403):
+set `SEC_USER_AGENT` (GitHub Actions variable), e.g. `open-market-data you@example.com`.
+See [`providers/edgar.md`](providers/edgar.md).
 
 ---
 

@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     object_storage_region: str = "auto"
 
     http_user_agent: str = "open-market-data"
+    # SEC EDGAR rejects (HTTP 403) requests whose User-Agent has no contact e-mail.
+    # Example: "open-market-data you@example.com". Empty = EDGAR live fetch stays skipped.
+    sec_user_agent: str = ""
     http_timeout_seconds: int = 30
     http_max_retries: int = 3
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -69,8 +70,11 @@ class BcbProvider:
         from bcb.exceptions import SGSError
 
         try:
-            frame: Any = sgs.get(
-                {source_series_id: int(source_series_id)},
+            # Use the raw JSON instead of ``sgs.get``: when SGS answers HTTP 200 with
+            # an empty list (value not published yet for the day), python-bcb 0.4.0
+            # crashes in ``_format_df`` with ``KeyError: "None of ['Date'] ..."``.
+            text: Any = sgs.get_json(
+                int(source_series_id),
                 start=start.isoformat(),
                 end=end.isoformat(),
             )
@@ -94,17 +98,36 @@ class BcbProvider:
                 exc,
             )
             return []
-        rows: list[tuple[date, Decimal]] = []
-        if frame is None or getattr(frame, "empty", True):
-            return rows
-        column = frame.columns[0]
-        for index, value in frame[column].items():
-            if value is None:
-                continue
-            try:
-                amount = exact_decimal(str(value))
-            except Exception:
-                continue
-            ref = index.date() if hasattr(index, "date") else date.fromisoformat(str(index)[:10])
-            rows.append((ref, amount))
-        return rows
+        return parse_sgs_json(text)
+
+
+def parse_sgs_json(payload: str | bytes | None) -> list[tuple[date, Decimal]]:
+    """Parse the SGS ``formato=json`` payload (``[{"data": "dd/mm/yyyy", "valor": "..."}]``).
+
+    An empty list, ``null`` or an ``{"erro": ...}`` object means no values for the window.
+    """
+    if payload is None:
+        return []
+    if isinstance(payload, bytes):
+        payload = payload.decode("utf-8")
+    text = payload.strip()
+    if not text:
+        return []
+    data = json.loads(text)
+    if not isinstance(data, list):
+        return []
+    rows: list[tuple[date, Decimal]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        raw_date = item.get("data")
+        raw_value = item.get("valor")
+        if not raw_date or raw_value is None or str(raw_value).strip() == "":
+            continue
+        try:
+            ref = parse_sgs_date(str(raw_date))
+            amount = exact_decimal(str(raw_value).strip())
+        except Exception:
+            continue
+        rows.append((ref, amount))
+    return rows
