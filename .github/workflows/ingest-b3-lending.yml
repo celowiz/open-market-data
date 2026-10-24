@@ -64,6 +64,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --no-dev
 
+      - name: Apply database migrations
+        # Idempotent (no-op when the DB is already at head). Jobs share the
+        # neon-writes concurrency group, so only one job migrates at a time.
+        run: uv run alembic upgrade head
+
       - name: Resolve B3 trading date
         id: refdate
         env:

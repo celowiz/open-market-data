@@ -51,7 +51,7 @@ class CftcProvider:
             for url in (CFTC_DISAGGREGATED_URL, CFTC_TFF_URL):
                 response = http_client.get(
                     url,
-                    params={"$limit": "400", "$order": "report_date DESC"},
+                    params={"$limit": "400", "$order": "report_date_as_yyyy_mm_dd DESC"},
                 )
                 response.raise_for_status()
                 records.extend(parse_cot_rows(response.content, specs))
@@ -80,7 +80,12 @@ def parse_cot_rows(payload: bytes, specs: list[CotContractSpec]) -> list[CotReco
         matched = _match_contract(name, specs)
         if matched is None:
             continue
-        raw_date = str(item.get("report_date") or item.get("Report_Date_as_YYYY-MM-DD") or "")
+        raw_date = str(
+            item.get("report_date_as_yyyy_mm_dd")
+            or item.get("report_date")
+            or item.get("Report_Date_as_YYYY-MM-DD")
+            or ""
+        )
         if not raw_date:
             continue
         try:
@@ -97,11 +102,15 @@ def parse_cot_rows(payload: bytes, specs: list[CotContractSpec]) -> list[CotReco
                 ),
                 long_spec=_cot_decimal(
                     item.get("noncomm_positions_long_all")
+                    or item.get("m_money_positions_long_all")
+                    or item.get("lev_money_positions_long")
                     or item.get("lev_money_positions_long_all")
                     or item.get("NonComm_Positions_Long_All")
                 ),
                 short_spec=_cot_decimal(
                     item.get("noncomm_positions_short_all")
+                    or item.get("m_money_positions_short_all")
+                    or item.get("lev_money_positions_short")
                     or item.get("lev_money_positions_short_all")
                     or item.get("NonComm_Positions_Short_All")
                 ),

@@ -78,7 +78,8 @@ class EdgarProvider:
     ) -> list[ThirteenFHolding]:
         settings = get_settings()
         headers = {
-            "User-Agent": f"{settings.http_user_agent}/{__version__} open-market-data",
+            "User-Agent": settings.sec_user_agent.strip()
+            or f"{settings.http_user_agent}/{__version__} open-market-data",
             "Accept": "application/atom+xml,application/xml,text/xml,*/*",
         }
         owns = client is None
